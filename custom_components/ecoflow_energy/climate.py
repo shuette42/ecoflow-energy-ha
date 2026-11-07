@@ -72,6 +72,12 @@ _MODE_TO_ACTION = {
 FAN_MODES = ["20", "40", "60", "80", "100"]
 PRESET_MODES = ["none", "normal", "max", "sleep", "eco"]
 
+# Home Assistant 2026.11 reads the climate temperatures from `native_*`
+# properties and warns about an entity that still defines the old names;
+# older versions (hacs.json allows 2025.1) only know the old names. Decided
+# once at import: the entity defines exactly one of the two sets (Ref #694).
+_NATIVE_TEMPERATURES = hasattr(ClimateEntity, "native_current_temperature")
+
 # The generic state keys the entity reads, compared as one tuple by the
 # write gate - a single-value gate would swallow changes on a multi-attribute
 # entity.
@@ -121,7 +127,14 @@ class EcoFlowWave3Climate(
 
     _attr_has_entity_name = True
     _attr_name = None
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    # Home Assistant 2026.11 deprecates the non-native names (gone in 2027.11) and
+    # declares them final: once the type-check environment moves to 2026.11 or
+    # newer, the legacy branch below needs a `# type: ignore[misc]`, and it goes
+    # away together with support for Home Assistant before 2026.11.
+    if _NATIVE_TEMPERATURES:
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_target_temperature_step = 0.5
     _attr_min_temp = 15.5
     _attr_max_temp = 30.0
@@ -174,8 +187,7 @@ class EcoFlowWave3Climate(
         data = self.coordinator.data
         return data.get(key) if data is not None else None
 
-    @property
-    def current_temperature(self) -> float | None:
+    def _ambient_temperature(self) -> float | None:
         """Return the ambient temperature."""
         return self._read("temp_ambient_c")
 
@@ -217,26 +229,34 @@ class EcoFlowWave3Climate(
             return None
         return _MODE_TO_ACTION.get(mode)
 
-    @property
-    def target_temperature(self) -> float | None:
+    def _single_setpoint(self) -> float | None:
         """Return the single setpoint, only meaningful in COOL/HEAT."""
         if self.hvac_mode in (HVACMode.COOL, HVACMode.HEAT):
             return self._read("target_temp_c")
         return None
 
-    @property
-    def target_temperature_low(self) -> float | None:
+    def _band_lower(self) -> float | None:
         """Return the band's lower limit, only meaningful in HEAT_COOL."""
         if self.hvac_mode == HVACMode.HEAT_COOL:
             return self._read("constant_temp_lower_limit_c")
         return None
 
-    @property
-    def target_temperature_high(self) -> float | None:
+    def _band_upper(self) -> float | None:
         """Return the band's upper limit, only meaningful in HEAT_COOL."""
         if self.hvac_mode == HVACMode.HEAT_COOL:
             return self._read("constant_temp_upper_limit_c")
         return None
+
+    if _NATIVE_TEMPERATURES:
+        native_current_temperature = property(_ambient_temperature)
+        native_target_temperature = property(_single_setpoint)
+        native_target_temperature_low = property(_band_lower)
+        native_target_temperature_high = property(_band_upper)
+    else:
+        current_temperature = property(_ambient_temperature)
+        target_temperature = property(_single_setpoint)
+        target_temperature_low = property(_band_lower)
+        target_temperature_high = property(_band_upper)
 
     @property
     def target_humidity(self) -> int | None:
