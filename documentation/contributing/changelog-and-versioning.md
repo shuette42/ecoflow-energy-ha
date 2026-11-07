@@ -31,7 +31,7 @@ The one file every contributor touches, and the one file you must leave alone. R
 
 ## Why versions work the way they do
 
-- A full release has the form `MAJOR.MINOR.PATCH`. A pre-release adds `-beta.N`, visible in HACS only with beta versions switched on.
+- A full release has the form `MAJOR.MINOR.PATCH`. A pre-release adds `-beta.N`, visible in the Marketplace (HACS before Home Assistant 2026.11) only after you switch on pre-releases for this repository.
 - During a pre-release cycle only the beta number goes up. The `MAJOR.MINOR.PATCH` part stays at the target version, `manifest.json` shows that target without the `-beta` suffix, and the changelog keeps one growing block for it (ADR-005 in the [decision register](../architecture/decisions.md)). Reason: a bump per fix creates versions that were never released.
 - The patch number increases only after a full release exists, for a fix to that release.
 
