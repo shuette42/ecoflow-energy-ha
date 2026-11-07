@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import struct
 import time
 from datetime import datetime, timedelta
 from typing import Any
@@ -68,6 +69,7 @@ from ..ecoflow.modbus_local import (
     ModbusExceptionResponse,
     ModbusLocalError,
     ModbusTransport,
+    decode_i32_ws,
 )
 from ..ecoflow.parsers.powerocean_modbus import (
     FAULT_BLOCKS,
@@ -120,7 +122,7 @@ BATTERY_SETPOINT_CAP_W = 5000
 BATTERY_MODES = frozenset({"automatic", "hold", "charge", "discharge"})
 _SETPOINT_MIN_W = 50
 _SETPOINT_DEFAULT_W = 500
-# The one value that reads the same in both word orders.
+# Reads the same in both word orders (as 0 does, which is no valid setpoint).
 _HOLD_SETPOINT_W = -1
 # Control method of the status word: 0 Automatic, 3 battery control.
 _METHOD_AUTOMATIC = 0
@@ -130,6 +132,8 @@ _METHOD_CONFIRM_S = 8.0
 # about 5 s; a value counts once two reads in a row decode to it.
 _SETPOINT_SETTLE_S = 15.0
 _SETPOINT_CONFIRM_READS = 2
+# Time the unit gets to process the -1 W that clears a stuck register.
+_SETPOINT_PROCESS_S = 5.0
 _READ_INTERVAL_S = 1.0
 _HOLD_BAND_W = 5
 # One link call may wait up to 12 s on the shared connection (see
@@ -143,6 +147,11 @@ _STATUS_BLOCK = ((0x0211, 2),)
 _SETPOINT_BLOCK = ((BATTERY_SETPOINT_OFFSET, 2),)
 # Seam for the waits between control steps, like ``_monotonic``.
 _sleep = asyncio.sleep
+
+
+def _written_form(watts: int) -> int:
+    """Return what ``watts`` decodes to while it is in the written word order."""
+    return decode_i32_ws(struct.pack(">i", watts))
 
 
 class _StepUnconfirmed(Exception):
@@ -832,36 +841,58 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.async_update_listeners()
 
     async def _write_setpoint(self, watts: int) -> None:
-        """Write the setpoint and wait until two reads in a row decode to it.
+        """Bring the setpoint register to ``watts``, confirmed by two reads.
 
+        The unit processes (and rewrites in its own word order) only a value
+        that differs from the one it processed last; an identical write stays
+        in the written form, which decodes swapped. So a register that already
+        holds ``watts`` is not written again, and one stuck in the written form
+        of ``watts`` is first moved to -1 W (the same in both word orders).
         Only these reads count: the poll drops its read while this runs.
         """
         self._settle_target = watts
         try:
+            held = await self._read_setpoint()
+            if held != watts and held == _written_form(watts):
+                # Shown only if the target confirms: the user never set -1 W.
+                await self._settle(_HOLD_SETPOINT_W, write=True, publish=False)
+                self._step()
+                await _sleep(_SETPOINT_PROCESS_S)
+                self._step()
+            await self._settle(watts, write=held != watts)
+        finally:
+            self._settle_target = None
+
+    async def _read_setpoint(self) -> int | None:
+        raw = await self._link.read_blocks(_SETPOINT_BLOCK)
+        value: int | None = parse_registers(raw).get("battery_setpoint_w")
+        return value
+
+    async def _settle(self, watts: int, write: bool, publish: bool = True) -> None:
+        """Write ``watts`` if asked, then wait until two reads in a row show it."""
+        if write:
             await self._link.write_registers32(
                 BATTERY_SETPOINT_OFFSET, watts, BATTERY_SETPOINT_CAP_W
             )
-            deadline = _monotonic() + _SETPOINT_SETTLE_S
-            hits = 0
-            while True:
-                await _sleep(_READ_INTERVAL_S)
-                raw = await self._link.read_blocks(_SETPOINT_BLOCK)
-                held = parse_registers(raw).get("battery_setpoint_w")
-                hits = hits + 1 if held == watts else 0
-                if hits >= _SETPOINT_CONFIRM_READS:
+        deadline = _monotonic() + _SETPOINT_SETTLE_S
+        # A register found holding the value counts as the first read.
+        hits = 0 if write else 1
+        while True:
+            await _sleep(_READ_INTERVAL_S)
+            held = await self._read_setpoint()
+            hits = hits + 1 if held == watts else 0
+            if hits >= _SETPOINT_CONFIRM_READS:
+                if publish:
                     self._device_data["battery_setpoint_w"] = held
-                    return
-                if _monotonic() >= deadline:
-                    _LOGGER.debug(
-                        "Local Modbus %s: battery setpoint reads %s W, %s W was "
-                        "written",
-                        self.device_tag,
-                        held,
-                        watts,
-                    )
-                    raise _StepUnconfirmed(f"setpoint {watts} W not read back")
-        finally:
-            self._settle_target = None
+                return
+            if _monotonic() >= deadline:
+                _LOGGER.debug(
+                    "Local Modbus %s: battery setpoint reads %s W, %s W was written",
+                    self.device_tag,
+                    held,
+                    watts,
+                )
+                raise _StepUnconfirmed(f"setpoint {watts} W not read back")
 
     def _publish_battery_mode(self) -> None:
         """Derive the battery mode from the data; unknown leaves no key."""
@@ -926,10 +957,17 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Unknown beats a list from an earlier poll that may be out of date.
             self._device_data.pop(FAULT_CODES_KEY, None)
         self._hold_counters(parsed)
+        polled_setpoint = parsed.get("battery_setpoint_w")
         if settling or self._settle_target is not None:
             # A setpoint still settling reads back swapped: the last confirmed
             # value stays; only the sequence's own reads confirm it.
             parsed.pop("battery_setpoint_w", None)
+        elif abs(polled_setpoint or 0) > BATTERY_SETPOINT_CAP_W:
+            # The written form of a value the unit did not process: unknown.
+            # A real setpoint above the cap set by another master shows as
+            # unknown too; the two cannot be told apart, and unknown is honest.
+            del parsed["battery_setpoint_w"]
+            self._device_data.pop("battery_setpoint_w", None)
         elif (
             _SETPOINT_MIN_W
             <= abs(parsed.get("battery_setpoint_w") or 0)
