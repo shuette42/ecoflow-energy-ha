@@ -1926,7 +1926,7 @@ Home Assistant 2026.9 added a shared Modbus connection to its `modbus` integrati
 3. Both registers are written high word first. The unit reads them back with the words swapped for a few seconds after a write, so a setpoint counts once two reads in a row decode to it.
 4. A change runs in one order: `0x0215 = 0`, wait until bits 7-10 read 0; write `0x023A` and confirm it twice; `0x0215 = 0x30`, wait until bits 7-10 read 3. A setpoint is never written while method 3 may be live. Hold is a setpoint of -1 W. Automatic writes `0x0215 = 0` only.
 5. The heartbeat of ADR-031 (`0x025F`, every 15 s) carries the control. Without it the unit falls back to Automatic by itself about a minute after the last beat, even though bits 7-10 keep reading 3. Bit 11 therefore decides first: with bit 11 clear the mode is Automatic.
-6. Turning Modbus Control off, unloading the entry and stopping Home Assistant write `0x0215 = 0` before the heartbeat stops.
+6. Turning Modbus Control off and unloading the entry write `0x0215 = 0` before the heartbeat stops. Stopping Home Assistant tries the same write, but on a stop the unit's own lapse (point 5) is the guarantee. Measured on the maintainer's unit (Home Assistant 2026.11.0, a restart during a 1000 W charge): the stop write failed with a connection error, and the unit returned to Automatic by itself about a minute after the last beat (VERIFIED). Likely cause: Home Assistant cancels the background tasks before it fires the stop event, and the shared Modbus connection is no longer usable by then (LIKELY, from reading the Home Assistant core stop sequence; one step is not read, namely how the Modbus connection library closes the shared connection). A failed write while Home Assistant stops is therefore logged at INFO, a failed write on turn-off or unload stays a WARNING, and no second connection is opened for the stop.
 7. The select is derived from the device on every poll: method 0 is Automatic, method 3 is Hold, Charge or Discharge by the setpoint read back, anything else is unknown. The number is the read-back of `0x023A`. There is no optimistic state.
 
 **Trade-offs:**
@@ -1935,7 +1935,7 @@ Home Assistant 2026.9 added a shared Modbus connection to its `modbus` integrati
 - (+) Every state shown is read from the device, so the select never claims a mode the unit has left
 - (-) The Backup Reserve still blocks a discharge while the battery charge is at or below it. The select says so in an attribute rather than overriding it
 - (-) A change passes through Automatic for a few seconds, in which the battery may serve the house load
-- (-) The range is ±5000 W and the device limits itself below that; only ±500 W has been measured, on one three-phase unit
+- (-) The range is ±5000 W and the device limits itself below that; ±1000, ±2500 and ±5000 W have been measured, on one three-phase unit only
 - (-) There are no export, import or limit modes
 
 **Alternatives considered:**

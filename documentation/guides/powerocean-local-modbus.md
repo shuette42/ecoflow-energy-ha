@@ -117,12 +117,12 @@ automation:
 
 - **A short pass through Automatic.** Every change goes through Automatic for a few seconds before the new mode or power takes hold. A command the inverter does not confirm shows the error "The battery command was not confirmed by the device. Check the connection and try again."
 - **Backup Reserve still applies.** While the battery charge is at or below Backup Reserve, the inverter does not discharge, whatever you ask. The select keeps showing Discharge. Its attribute `discharge_blocked_by_reserve` is true while the charge is at or below the reserve and a discharge is asked for.
-- **The return to Automatic.** The inverter returns to Automatic when you switch Modbus Control off, when the integration is unloaded and when Home Assistant stops. Home Assistant sends the keep-alive signal every 15 seconds. If it stops, the inverter returns to Automatic by itself about a minute after the last one.
+- **The return to Automatic.** The inverter does not stay in battery control without the keep-alive. It returns to Automatic when you switch Modbus Control off and when the integration is unloaded. The integration sends a keep-alive signal every 15 seconds. If it stops, the inverter returns to Automatic by itself about a minute after the last one. That is what covers a Home Assistant stop or restart: the integration tries to set Automatic, but by then the connection can no longer be used.
 - **Battery Mode can be unknown.** It shows unknown until the inverter has reported its state.
 
 ### What has been measured
 
-I measured only Hold, and Charge and Discharge at 500 W, on one three-phase PowerOcean (HJ31, firmware V5.1.37.13). Other power values and other units are untested. Start with small values and watch the battery power sensor before you rely on it.
+I measured this on one three-phase PowerOcean (HJ31, firmware V5.1.37.13), controlled from Home Assistant. Charge and Discharge at 1000, 2500 and 5000 W settled within a few watts of the setpoint. A 5000 W charge read 4994 to 5011 W over 150 seconds. A 2500 W discharge read 2497 to 2502 W. Hold kept the battery at 0 W. Sending the same value a second time worked, in about 3 seconds. Switching Modbus Control off or reloading the integration in the middle of a run returned the inverter to Automatic at once. A Home Assistant restart during a charge also ended in Automatic, through the inverter's own timeout. Other units are untested. On a unit that has not been tried yet, start with a small value and watch the battery power sensor before you rely on it.
 
 ## Sharing the inverter with another Modbus integration
 
