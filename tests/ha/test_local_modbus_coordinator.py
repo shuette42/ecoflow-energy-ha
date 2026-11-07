@@ -263,9 +263,13 @@ class FakeBattery:
     """Control registers as the unit answered on 2026-11-07.
 
     Control method (bits 7-10 of 0x0211) follows the last 0x0215 write after
-    two seconds; 0x023A reads back with its words swapped for five seconds
-    after a write. ``log`` holds every 32-bit write with the control method
-    the unit showed at that moment.
+    two seconds. 0x023A holds the words as written (high word first, so it
+    decodes swapped) until the unit processes the value, five seconds after a
+    write that changed it; only then does it count as processed. A write of
+    the value it already processed is never processed and stays in the
+    written form until the next changed write.
+    ``log`` holds every 32-bit write with the control method the unit showed
+    at that moment.
     """
 
     BLOCKS = (((0x0211, 2),), ((0x023A, 2),))
@@ -278,8 +282,18 @@ class FakeBattery:
         self.previous_method = method
         self.setpoint = setpoint
         self.setpoint_at = -100.0
+        # The value the unit last processed, and whether the register still
+        # holds an identical write in its written form.
+        self.processed = setpoint
+        self.pending: int | None = None
+        self.stuck = False
+        self.normalises = True
         self.ignore_battery_command = False
         self.log: list[tuple[int, int, int]] = []
+
+    def _process(self) -> None:
+        if self.pending is not None and self.clock.now - self.setpoint_at >= 5:
+            self.processed, self.pending = self.pending, None
 
     def method(self) -> int:
         if self.clock.now - self.command_at < 2:
@@ -292,6 +306,9 @@ class FakeBattery:
             self.previous_method = self.method()
             self.command, self.command_at = value, self.clock.now
         else:
+            self._process()
+            self.stuck = value == self.processed or not self.normalises
+            self.pending = None if self.stuck else value
             self.setpoint, self.setpoint_at = value, self.clock.now
 
     def _raw(self, offset: int) -> bytes:
@@ -299,7 +316,8 @@ class FakeBattery:
             raw = struct.pack(">I", (self.method() << 7) | (int(self.held) << 11))
         else:
             raw = struct.pack(">i", self.setpoint)
-            if self.clock.now - self.setpoint_at < 5:
+            self._process()
+            if self.stuck or self.pending is not None:
                 return raw  # high word first: decodes swapped
         return raw[2:4] + raw[0:2]
 
@@ -2012,7 +2030,7 @@ async def test_charge_ends_battery_control_before_the_setpoint_and_engages_after
 ) -> None:
     # The unit is already in battery control: the setpoint must wait for method 0.
     coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch, method=3)
-    await coordinator.async_set_battery_setpoint(800)
+    coordinator._battery_setpoint_w = 800
     await coordinator.async_set_battery_mode("charge")
 
     assert [(o, v) for o, v, _ in fake.log][-3:] == [
@@ -2029,6 +2047,7 @@ async def test_hold_writes_minus_one_and_discharge_the_negative_setpoint(
     hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    fake.setpoint = fake.processed = 200
     await coordinator.async_set_battery_mode("hold")
     assert (SETPOINT, -1) in stub.writes
     assert coordinator.data["battery_mode"] == "hold"
@@ -2573,3 +2592,100 @@ async def test_control_off_and_on_again_mid_sequence_aborts_the_mode_call(
     assert (COMMAND, 0x30) not in [(o, v) for o, v, _ in fake.log[off_at[0] :]]
     assert fake.command == 0
     await coordinator.async_set_control(False)
+
+
+def _setpoint_writes(fake: FakeBattery) -> list[int]:
+    return [value for offset, value, _ in fake.log if offset == SETPOINT]
+
+
+async def test_charge_with_the_value_the_register_already_holds_skips_the_write(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    await coordinator.async_set_battery_setpoint(1000)
+    await coordinator.async_set_battery_mode("charge")
+
+    assert _setpoint_writes(fake) == [1000]
+    assert fake.log[-1][:2] == (COMMAND, 0x30)
+    assert coordinator.data["battery_setpoint_w"] == 1000
+    assert coordinator.data["battery_mode"] == "charge"
+    assert _setpoint_writes_under_live_method(fake) == []
+
+
+async def test_a_register_stuck_in_the_written_form_is_cleared_with_minus_one(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    _stuck_at_1000(coordinator, fake)
+    await coordinator.async_set_battery_mode("charge")
+
+    assert _setpoint_writes(fake) == [-1, 1000]
+    assert _setpoint_writes_under_live_method(fake) == []
+    assert coordinator.data["battery_setpoint_w"] == 1000
+    assert coordinator.data["battery_mode"] == "charge"
+
+
+async def test_a_failed_setpoint_never_publishes_a_value_beyond_the_cap(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    fake.normalises = False
+    with pytest.raises(HomeAssistantError) as err:
+        await coordinator.async_set_battery_mode("charge")
+    assert err.value.translation_key == "battery_command_failed"
+    await coordinator.async_refresh()
+
+    # 500 W in the written form decodes to 32768000.
+    assert "battery_setpoint_w" not in coordinator.data
+    assert fake.command == 0
+
+
+def _stuck_at_1000(
+    coordinator: EcoFlowLocalModbusCoordinator, fake: FakeBattery
+) -> None:
+    """1000 W was written twice: the register keeps the words as written."""
+    fake.setpoint = fake.processed = 1000
+    fake.stuck = True
+    coordinator._battery_setpoint_w = 1000
+
+
+async def test_control_turned_off_while_a_stuck_register_is_cleared_writes_no_target(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator: EcoFlowLocalModbusCoordinator | None = None
+
+    async def off_during_the_clearing() -> None:
+        assert coordinator is not None
+        if _setpoint_writes(fake) == [-1] and coordinator.control_enabled:
+            coordinator.control_enabled = False
+
+    coordinator, stub, fake = await _battery_rig(
+        hass, clock, monkeypatch, on_sleep=off_during_the_clearing
+    )
+    _stuck_at_1000(coordinator, fake)
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_battery_mode("charge")
+
+    assert _setpoint_writes(fake) == [-1]
+    assert fake.log[-1][:2] == (COMMAND, 0)
+
+
+async def test_a_target_that_fails_after_the_clearing_does_not_show_minus_one(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator: EcoFlowLocalModbusCoordinator | None = None
+
+    async def unit_stops_processing() -> None:
+        if _setpoint_writes(fake) == [-1]:
+            fake.normalises = False
+
+    coordinator, stub, fake = await _battery_rig(
+        hass, clock, monkeypatch, on_sleep=unit_stops_processing
+    )
+    _stuck_at_1000(coordinator, fake)
+    before = coordinator.data.get("battery_setpoint_w")
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_battery_mode("charge")
+
+    assert _setpoint_writes(fake) == [-1, 1000]
+    assert coordinator.data.get("battery_setpoint_w") == before != -1
