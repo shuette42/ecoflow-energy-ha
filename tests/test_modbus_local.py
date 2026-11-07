@@ -10,20 +10,25 @@ from typing import Any
 import pytest
 from ecoflow_energy.ecoflow.modbus_local import (
     BACKUP_RATIO_OFFSET,
+    BATTERY_SETPOINT_OFFSET,
     BRIGHTNESS_OFFSET,
+    CONTROL_COMMAND_OFFSET,
     HEARTBEAT_OFFSET,
     WRITABLE_OFFSETS,
     ModbusConnectError,
     ModbusExceptionResponse,
     ModbusLocalClient,
+    ModbusLocalError,
     ModbusProtocolError,
     ModbusTimeoutError,
     ModbusTransport,
+    ModbusWriteRefused,
     decode_ascii,
     decode_f32_ws,
     decode_i32_ws,
     decode_u16,
     decode_u32_ws,
+    encode_write32,
 )
 
 # The HA test harness blocks sockets; these tests talk to a fake device on loopback.
@@ -615,3 +620,179 @@ def test_the_own_client_satisfies_the_transport_protocol() -> None:
 
     # The control: a link that cannot write is not a transport.
     assert not isinstance(ReadOnly(), ModbusTransport)
+
+
+# -- 32-bit control writes (function 0x10, two registers) ---------------------
+
+_WRITE32_REQUEST_LEN = 17  # MBAP (7) + fn + address + count + byte count + 4 bytes
+
+
+@pytest.mark.parametrize(
+    ("offset", "value", "words"),
+    [
+        (BATTERY_SETPOINT_OFFSET, 500, (0x0000, 0x01F4)),
+        (BATTERY_SETPOINT_OFFSET, -500, (0xFFFF, 0xFE0C)),
+        (BATTERY_SETPOINT_OFFSET, -1, (0xFFFF, 0xFFFF)),
+        (BATTERY_SETPOINT_OFFSET, 600, (0x0000, 0x0258)),
+        (CONTROL_COMMAND_OFFSET, 0x30, (0x0000, 0x0030)),
+        (CONTROL_COMMAND_OFFSET, 0, (0x0000, 0x0000)),
+    ],
+)
+def test_encode_write32_sends_the_high_word_first(offset, value, words):
+    # The unit takes the high word first on a write (measured in four runs),
+    # unlike the word-swapped order it uses on reads.
+    assert encode_write32(offset, value) == words
+
+
+@pytest.mark.parametrize(
+    ("offset", "value", "cap"),
+    [
+        (BATTERY_SETPOINT_OFFSET, 0, 600),
+        (BATTERY_SETPOINT_OFFSET, 601, 600),
+        (BATTERY_SETPOINT_OFFSET, -601, 600),
+        (BATTERY_SETPOINT_OFFSET, 300, 200),
+        (CONTROL_COMMAND_OFFSET, 0x31, 600),
+        (CONTROL_COMMAND_OFFSET, 0x20, 600),
+        (CONTROL_COMMAND_OFFSET, 0x3000_0000, 600),
+        (CONTROL_COMMAND_OFFSET, -1, 600),
+        (HEARTBEAT_OFFSET, 1, 600),
+        (BACKUP_RATIO_OFFSET, 1, 600),
+        (0x0216, 1, 600),
+    ],
+)
+def test_encode_write32_refuses_everything_outside_the_two_registers(
+    offset, value, cap
+):
+    with pytest.raises(ModbusWriteRefused):
+        encode_write32(offset, value, cap)
+
+
+def test_a_refused_32_bit_write_is_a_local_error_and_a_value_error():
+    # One family for the caller, and the same ValueError the 16-bit refusal raises.
+    assert issubclass(ModbusWriteRefused, ModbusLocalError)
+    assert issubclass(ModbusWriteRefused, ValueError)
+
+
+def test_the_16_bit_allowlist_still_refuses_the_two_control_registers():
+    assert CONTROL_COMMAND_OFFSET not in WRITABLE_OFFSETS
+    assert BATTERY_SETPOINT_OFFSET not in WRITABLE_OFFSETS
+
+
+def _write32_echo(request, *, address=None, count=None, function=None):
+    """The answer to a 0x10 request: function, address and count, optionally damaged."""
+    tid, _proto, _length, unit, fn, addr, cnt = struct.unpack(">HHHBBHH", request[:12])
+    return struct.pack(
+        ">HHHBBHH",
+        tid,
+        0,
+        6,
+        unit,
+        fn if function is None else function,
+        addr if address is None else address,
+        cnt if count is None else count,
+    )
+
+
+@pytest.mark.asyncio
+async def test_write_registers32_sends_function_10_with_two_registers_high_word_first():
+    requests: list[bytes] = []
+
+    async def handler(reader, writer):
+        request = await reader.readexactly(_WRITE32_REQUEST_LEN)
+        requests.append(request)
+        writer.write(_write32_echo(request))
+        await writer.drain()
+        await reader.read()
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, unit_id=1, timeout=2.0)
+        assert await client.write_registers32(BATTERY_SETPOINT_OFFSET, -500) is None
+
+    assert len(requests) == 1
+    # protocol 0, length 11, unit 1, function 0x10, address, 2 registers,
+    # 4 bytes, then the words high first.
+    assert requests[0][2:] == struct.pack(
+        ">HHBBHHBHH",
+        0,
+        11,
+        1,
+        0x10,
+        40001 + BATTERY_SETPOINT_OFFSET,
+        2,
+        4,
+        0xFFFF,
+        0xFE0C,
+    )
+
+
+@pytest.mark.parametrize(
+    ("offset", "value", "cap"),
+    [
+        (BATTERY_SETPOINT_OFFSET, 0, 600),
+        (BATTERY_SETPOINT_OFFSET, 700, 600),
+        (CONTROL_COMMAND_OFFSET, 0x31, 600),
+        (BACKUP_RATIO_OFFSET, 1, 600),
+    ],
+)
+@pytest.mark.asyncio
+async def test_a_refused_32_bit_write_opens_no_connection(offset, value, cap):
+    connections = []
+
+    async def handler(reader, writer):
+        connections.append(writer)
+        request = await reader.readexactly(_WRITE32_REQUEST_LEN)
+        writer.write(_write32_echo(request))
+        await writer.drain()
+        await reader.read()
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        with pytest.raises(ModbusWriteRefused):
+            await client.write_registers32(offset, value, cap)
+        # Control: an allowed write does connect, so one connection means the
+        # refused one opened none.
+        await client.write_registers32(CONTROL_COMMAND_OFFSET, 0)
+
+    assert len(connections) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_32_bit_write_exception_response_carries_the_code_and_the_offset():
+    async def handler(reader, writer):
+        request = await reader.readexactly(_WRITE32_REQUEST_LEN)
+        tid, _proto, _length, unit = struct.unpack(">HHHB", request[:7])
+        writer.write(struct.pack(">HHHBBB", tid, 0, 3, unit, 0x90, 0x02))
+        await writer.drain()
+        await reader.read()
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        with pytest.raises(ModbusExceptionResponse) as excinfo:
+            await client.write_registers32(CONTROL_COMMAND_OFFSET, 0x30)
+
+    assert excinfo.value.code == 2
+    assert excinfo.value.offset == CONTROL_COMMAND_OFFSET
+
+
+@pytest.mark.parametrize(
+    ("damage", "message"),
+    [
+        ({"count": 1}, "echo does not match"),
+        ({"address": 40001 + CONTROL_COMMAND_OFFSET}, "echo does not match"),
+        ({"function": 0x06}, "unexpected function code"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_a_32_bit_echo_that_differs_from_the_write_is_a_protocol_error(
+    damage, message
+):
+    async def handler(reader, writer):
+        request = await reader.readexactly(_WRITE32_REQUEST_LEN)
+        writer.write(_write32_echo(request, **damage))
+        await writer.drain()
+        await reader.read()
+
+    async with _serve(handler) as port:
+        client = ModbusLocalClient("127.0.0.1", port, timeout=2.0)
+        with pytest.raises(ModbusProtocolError, match=message):
+            await client.write_registers32(BATTERY_SETPOINT_OFFSET, 500)

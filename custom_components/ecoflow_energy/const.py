@@ -2685,6 +2685,29 @@ POWEROCEANLOCALONLY_NUMBERS: list[EcoFlowNumberDef] = [
         1,
         entity_category="config",
     ),
+    # Battery power setpoint (W, positive charges, ADR-034). Unlike the two
+    # settings above it needs the control switch on. Its range is not taken
+    # from here: the entity uses the coordinator's power cap in both directions.
+    EcoFlowNumberDef(
+        "local_battery_setpoint_w",
+        "Battery Power Setpoint",
+        "battery_setpoint_w",
+        "W",
+        "mdi:battery-charging-outline",
+        step=50,
+    ),
+]
+
+# Battery mode as the status word and the setpoint show it (ADR-034). It needs
+# the control switch on.
+POWEROCEANLOCALONLY_SELECTS: list[EcoFlowSelectDef] = [
+    EcoFlowSelectDef(
+        "local_battery_mode",
+        "Battery Mode",
+        "battery_mode",
+        ("automatic", "hold", "charge", "discharge"),
+        "mdi:battery-sync",
+    ),
 ]
 
 POWEROCEANLOCALONLY_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [

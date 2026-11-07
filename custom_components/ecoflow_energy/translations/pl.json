@@ -3129,6 +3129,9 @@
       },
       "local_indicator_brightness": {
         "name": "Jasność wskaźnika"
+      },
+      "local_battery_setpoint_w": {
+        "name": "Moc zadana baterii"
       }
     },
     "select": {
@@ -3274,6 +3277,20 @@
           "auto": "Automatycznie",
           "one_phase": "Jedna faza",
           "three_phases": "Trzy fazy"
+        }
+      },
+      "local_battery_mode": {
+        "name": "Tryb baterii",
+        "state": {
+          "automatic": "Automatyczny",
+          "hold": "Wstrzymanie",
+          "charge": "Ładowanie",
+          "discharge": "Rozładowanie"
+        },
+        "state_attributes": {
+          "discharge_blocked_by_reserve": {
+            "name": "Rozładowanie zablokowane przez rezerwę awaryjną"
+          }
         }
       }
     },
@@ -3475,6 +3492,15 @@
     },
     "powerpulse_solar_min_current_range": {
       "message": "Wallbox przyjmuje minimalny prąd ładowania solarnego od {min} do {max} A."
+    },
+    "battery_control_needs_modbus_control": {
+      "message": "Sterowanie baterią wymaga włączonego przełącznika Sterowanie Modbus."
+    },
+    "battery_setpoint_out_of_range": {
+      "message": "Moc zadana baterii musi mieścić się w obu kierunkach między {min} W a {max} W."
+    },
+    "battery_command_failed": {
+      "message": "Urządzenie nie potwierdziło polecenia dla baterii. Sprawdź połączenie i spróbuj ponownie."
     }
   }
 }

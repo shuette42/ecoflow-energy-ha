@@ -3129,6 +3129,9 @@
       },
       "local_indicator_brightness": {
         "name": "Luminosità indicatore"
+      },
+      "local_battery_setpoint_w": {
+        "name": "Setpoint di potenza della batteria"
       }
     },
     "select": {
@@ -3274,6 +3277,20 @@
           "auto": "Automatica",
           "one_phase": "Monofase",
           "three_phases": "Trifase"
+        }
+      },
+      "local_battery_mode": {
+        "name": "Modalità batteria",
+        "state": {
+          "automatic": "Automatica",
+          "hold": "Mantenimento",
+          "charge": "Carica",
+          "discharge": "Scarica"
+        },
+        "state_attributes": {
+          "discharge_blocked_by_reserve": {
+            "name": "Scarica bloccata dalla riserva di backup"
+          }
         }
       }
     },
@@ -3475,6 +3492,15 @@
     },
     "powerpulse_solar_min_current_range": {
       "message": "La wallbox accetta una corrente minima solare compresa tra {min} e {max} A."
+    },
+    "battery_control_needs_modbus_control": {
+      "message": "Il controllo della batteria richiede che l'interruttore Controllo Modbus sia attivo."
+    },
+    "battery_setpoint_out_of_range": {
+      "message": "Il setpoint di potenza della batteria deve essere compreso tra {min} W e {max} W, in entrambe le direzioni."
+    },
+    "battery_command_failed": {
+      "message": "Il dispositivo non ha confermato il comando della batteria. Controlla la connessione e riprova."
     }
   }
 }

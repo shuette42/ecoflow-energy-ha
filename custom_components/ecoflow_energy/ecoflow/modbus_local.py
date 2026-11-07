@@ -1,10 +1,12 @@
 """Modbus/TCP client for the PowerOcean local interface.
 
-Function code 0x03 (read holding registers) carries every poll. The one write
-is function code 0x06 (write single register), and it is guarded:
-``write_register`` refuses any offset outside ``WRITABLE_OFFSETS`` before a
-socket is opened, and it accepts the device's answer only as an exact echo of
-the request. One connection carries all requests of a poll or one write, every
+Function code 0x03 (read holding registers) carries every poll. Writes are
+function code 0x06 (write single register) and, for the two 32-bit control
+registers only, 0x10 (write multiple registers), and both are guarded:
+``write_register`` refuses any offset outside ``WRITABLE_OFFSETS`` and
+``write_registers32`` anything ``encode_write32`` refuses, before a socket is
+opened, and each accepts the device's answer only as the echo of the request.
+One connection carries all requests of a poll or one write, every
 network step runs under a timeout and the whole poll under a shared budget,
 failures are typed, and there is no retry here (the caller owns the retry
 policy). The device serves one client at a time, so a lock per client instance
@@ -13,8 +15,8 @@ No Home Assistant imports: this is core library code.
 
 Register offsets from the device's protocol table are added to
 ``MODBUS_BASE_ADDRESS`` on the wire (measured: without it the device answers
-exception 0x02). Multi-register values are word-swapped: 0x12345678 is sent as
-the words 5678 1234.
+exception 0x02). Multi-register values are read word-swapped: 0x12345678
+arrives as the words 5678 1234. A 32-bit write goes high word first.
 """
 
 from __future__ import annotations
@@ -38,6 +40,18 @@ HEARTBEAT_OFFSET = 0x025F
 BACKUP_RATIO_OFFSET = 0x0217
 BRIGHTNESS_OFFSET = 0x021C
 WRITABLE_OFFSETS = frozenset({HEARTBEAT_OFFSET, BACKUP_RATIO_OFFSET, BRIGHTNESS_OFFSET})
+
+# The two 32-bit control registers, written only through ``write_registers32``
+# (function 0x10, two registers). The System Control Command takes exactly two
+# values; the battery setpoint is signed W, positive charges, nonzero and within
+# a cap the caller sets. Unlike reads, the unit takes these words high word first.
+WRITE_MULTIPLE_REGISTERS = 0x10
+CONTROL_COMMAND_OFFSET = 0x0215
+BATTERY_SETPOINT_OFFSET = 0x023A
+CONTROL_AUTOMATIC = 0x00000000
+CONTROL_BATTERY = 0x00000030
+DEFAULT_SETPOINT_CAP_W = 600
+_INT32_MAX = 0x7FFFFFFF
 
 _EXCEPTION_FLAG = 0x80
 _MBAP_LEN = 7
@@ -77,13 +91,42 @@ class ModbusProtocolError(ModbusLocalError):
     """The answer does not match the request (transaction, unit, length, echo)."""
 
 
+class ModbusWriteRefused(ModbusLocalError, ValueError):
+    """A 32-bit control write was refused before any frame left."""
+
+
+def encode_write32(
+    offset: int, value: int, cap: int = DEFAULT_SETPOINT_CAP_W
+) -> tuple[int, int]:
+    """Check a 32-bit control write and return its two words, high word first.
+
+    Only ``CONTROL_COMMAND_OFFSET`` (``CONTROL_AUTOMATIC`` or
+    ``CONTROL_BATTERY``) and ``BATTERY_SETPOINT_OFFSET`` (nonzero, ``|value|``
+    at most ``cap``) are accepted; anything else raises ``ModbusWriteRefused``.
+    A negative setpoint is sent in two's complement.
+    """
+    if type(value) is not int:
+        raise ModbusWriteRefused(f"value {value!r} is not an integer")
+    if offset == CONTROL_COMMAND_OFFSET:
+        if value not in (CONTROL_AUTOMATIC, CONTROL_BATTERY):
+            raise ModbusWriteRefused(f"control command {value:#x} is not allowed")
+    elif offset == BATTERY_SETPOINT_OFFSET:
+        if value == 0 or abs(value) > min(cap, _INT32_MAX):
+            raise ModbusWriteRefused(f"battery setpoint {value} W outside 1..{cap} W")
+    else:
+        raise ModbusWriteRefused(f"register offset {offset:#06x} is not writable")
+    word = value & 0xFFFFFFFF
+    return word >> 16, word & 0xFFFF
+
+
 @runtime_checkable
 class ModbusTransport(Protocol):
-    """The two calls the coordinator needs from a Modbus link.
+    """The calls the coordinator needs from a Modbus link.
 
     The own client implements it, and so does the adapter onto Home
     Assistant's shared Modbus connection. Both raise ``ModbusLocalError``
-    subclasses and refuse offsets outside ``WRITABLE_OFFSETS`` for writes.
+    subclasses, refuse offsets outside ``WRITABLE_OFFSETS`` for 16-bit writes
+    and anything ``encode_write32`` refuses for 32-bit writes.
     """
 
     async def read_blocks(
@@ -91,6 +134,10 @@ class ModbusTransport(Protocol):
     ) -> dict[int, bytes]: ...
 
     async def write_register(self, offset: int, value: int) -> None: ...
+
+    async def write_registers32(
+        self, offset: int, value: int, cap: int = DEFAULT_SETPOINT_CAP_W
+    ) -> None: ...
 
 
 def decode_u16(raw: bytes) -> int:
@@ -191,6 +238,56 @@ class ModbusLocalClient:
                 await self._write(reader, writer, offset, value)
             finally:
                 await self._close(writer)
+
+    async def write_registers32(
+        self, offset: int, value: int, cap: int = DEFAULT_SETPOINT_CAP_W
+    ) -> None:
+        """Write one 32-bit control register (function 0x10) and check the echo.
+
+        ``encode_write32`` checks the write before any socket is opened. The
+        device acknowledges with function, address and register count; any
+        other answer is a ``ModbusProtocolError``.
+        """
+        words = encode_write32(offset, value, cap)
+        async with self._lock:
+            reader, writer = await self._connect()
+            try:
+                await self._write32(reader, writer, offset, words)
+            finally:
+                await self._close(writer)
+
+    async def _write32(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+        offset: int,
+        words: tuple[int, int],
+    ) -> None:
+        tid = self._next_transaction_id()
+        address = MODBUS_BASE_ADDRESS + offset
+        request = struct.pack(
+            ">HHHBBHHBHH",
+            tid,
+            0,
+            11,
+            self._unit_id,
+            WRITE_MULTIPLE_REGISTERS,
+            address,
+            2,
+            4,
+            *words,
+        )
+        pdu = await self._exchange(reader, writer, tid, request)
+
+        function = pdu[0]
+        if function == WRITE_MULTIPLE_REGISTERS | _EXCEPTION_FLAG:
+            raise ModbusExceptionResponse(pdu[1], offset)
+        if function != WRITE_MULTIPLE_REGISTERS:
+            raise ModbusProtocolError(f"unexpected function code {function:#04x}")
+        if pdu != struct.pack(">BHH", WRITE_MULTIPLE_REGISTERS, address, 2):
+            raise ModbusProtocolError(
+                f"write echo does not match the request at offset {offset:#06x}"
+            )
 
     async def _connect(self) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
         try:

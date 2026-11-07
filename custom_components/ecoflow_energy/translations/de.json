@@ -3129,6 +3129,9 @@
       },
       "local_indicator_brightness": {
         "name": "Anzeigehelligkeit"
+      },
+      "local_battery_setpoint_w": {
+        "name": "Sollwert Batterieleistung"
       }
     },
     "select": {
@@ -3274,6 +3277,20 @@
           "auto": "Automatisch",
           "one_phase": "Eine Phase",
           "three_phases": "Drei Phasen"
+        }
+      },
+      "local_battery_mode": {
+        "name": "Batteriemodus",
+        "state": {
+          "automatic": "Automatisch",
+          "hold": "Halten",
+          "charge": "Laden",
+          "discharge": "Entladen"
+        },
+        "state_attributes": {
+          "discharge_blocked_by_reserve": {
+            "name": "Entladung durch Backup-Reserve gesperrt"
+          }
         }
       }
     },
@@ -3475,6 +3492,15 @@
     },
     "powerpulse_solar_min_current_range": {
       "message": "Für Wallbox-Mindestladestrom Solar nimmt die Wallbox einen Wert zwischen {min} und {max} A an."
+    },
+    "battery_control_needs_modbus_control": {
+      "message": "Die Batteriesteuerung braucht den eingeschalteten Schalter Modbus-Steuerung."
+    },
+    "battery_setpoint_out_of_range": {
+      "message": "Der Sollwert der Batterieleistung muss in beiden Richtungen zwischen {min} W und {max} W liegen."
+    },
+    "battery_command_failed": {
+      "message": "Das Gerät hat den Batteriebefehl nicht bestätigt. Prüfe die Verbindung und versuche es erneut."
     }
   }
 }

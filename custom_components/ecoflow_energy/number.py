@@ -51,7 +51,10 @@ from .coordinator import (
     EcoFlowDeviceCoordinator,
     ScheduleTaskConflict,
 )
-from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
+from .coordinator.local_modbus import (
+    BATTERY_SETPOINT_CAP_W,
+    EcoFlowLocalModbusCoordinator,
+)
 from .ecoflow.const import (
     POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
     schedule_power_max_w,
@@ -108,7 +111,12 @@ async def async_setup_entry(
             # A local entry gets its two settings and nothing from the cloud
             # definition lists.
             entities.extend(
-                EcoFlowLocalNumber(source, defn) for defn in POWEROCEANLOCALONLY_NUMBERS
+                (
+                    EcoFlowLocalBatterySetpointNumber
+                    if defn.key == "local_battery_setpoint_w"
+                    else EcoFlowLocalNumber
+                )(source, defn)
+                for defn in POWEROCEANLOCALONLY_NUMBERS
             )
             continue
         coordinator = source
@@ -1160,3 +1168,33 @@ def _get_number_defs(device_type: str, device_sn: str = "") -> list[EcoFlowNumbe
     if device_type == DEVICE_TYPE_POWERPULSE2:
         return POWERPULSE2_NUMBERS
     return []
+
+
+class EcoFlowLocalBatterySetpointNumber(EcoFlowLocalNumber):
+    """Battery power setpoint of a local entry, shown as the device holds it.
+
+    Unlike the two settings it needs the control switch on. The coordinator
+    checks the value and the switch and runs the battery sequence; its errors
+    reach the caller unchanged. The range is the coordinator's power cap in
+    both directions.
+    """
+
+    def __init__(
+        self,
+        coordinator: EcoFlowLocalModbusCoordinator,
+        definition: EcoFlowNumberDef,
+    ) -> None:
+        """Initialize the number entity with the coordinator's range."""
+        super().__init__(coordinator, definition)
+        self._attr_native_min_value = -BATTERY_SETPOINT_CAP_W
+        self._attr_native_max_value = BATTERY_SETPOINT_CAP_W
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Hand the setpoint to the coordinator in whole watts.
+
+        Home Assistant checks the range but not the step, so a whole value off
+        the 50 W grid is taken as it is.
+        """
+        if not float(value).is_integer():
+            raise_set_rejected(self.entity_id, "whole numbers only")
+        await self.coordinator.async_set_battery_setpoint(int(value))

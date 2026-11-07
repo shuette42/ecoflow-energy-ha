@@ -3129,6 +3129,9 @@
       },
       "local_indicator_brightness": {
         "name": "Helderheid indicator"
+      },
+      "local_battery_setpoint_w": {
+        "name": "Instelwaarde batterijvermogen"
       }
     },
     "select": {
@@ -3274,6 +3277,20 @@
           "auto": "Automatisch",
           "one_phase": "Eenfasig",
           "three_phases": "Driefasig"
+        }
+      },
+      "local_battery_mode": {
+        "name": "Batterijmodus",
+        "state": {
+          "automatic": "Automatisch",
+          "hold": "Vasthouden",
+          "charge": "Laden",
+          "discharge": "Ontladen"
+        },
+        "state_attributes": {
+          "discharge_blocked_by_reserve": {
+            "name": "Ontladen geblokkeerd door back-upreserve"
+          }
         }
       }
     },
@@ -3475,6 +3492,15 @@
     },
     "powerpulse_solar_min_current_range": {
       "message": "De laadpaal accepteert een minimale laadstroom voor de zonnemodus tussen {min} en {max} A."
+    },
+    "battery_control_needs_modbus_control": {
+      "message": "Batterijbesturing vereist dat de schakelaar Modbus-besturing aan staat."
+    },
+    "battery_setpoint_out_of_range": {
+      "message": "De instelwaarde voor het batterijvermogen moet in beide richtingen tussen {min} W en {max} W liggen."
+    },
+    "battery_command_failed": {
+      "message": "Het apparaat heeft de batterijopdracht niet bevestigd. Controleer de verbinding en probeer het opnieuw."
     }
   }
 }
