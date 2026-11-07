@@ -43,6 +43,7 @@ from .const import (
     DEVICE_TYPE_WAVE3,
     DOMAIN,
     POWEROCEAN_SELECTS,
+    POWEROCEANLOCALONLY_SELECTS,
     POWERPULSE2_SELECTS,
     STREAMAC5000_SELECTS,
     WAVE3_SELECTS,
@@ -52,9 +53,11 @@ from .const import (
     supports_stream_ac5000_controls,
 )
 from .coordinator import EcoFlowDeviceCoordinator
+from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .ecoflow.delta3_commands import build_select_command as build_delta3_select_command
 from .ecoflow.wave3_commands import Wave3WriteRefused
 from .entity import (
+    EcoFlowWriteGateMixin,
     raise_set_failed,
     raise_set_rejected,
     raise_set_unsupported,
@@ -83,12 +86,21 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EcoFlow select entities from a config entry."""
-    coordinators: dict[str, EcoFlowDeviceCoordinator] = hass.data[DOMAIN][
-        entry.entry_id
-    ]
-    entities: list[EcoFlowSelect] = []
+    coordinators: dict[
+        str, EcoFlowDeviceCoordinator | EcoFlowLocalModbusCoordinator
+    ] = hass.data[DOMAIN][entry.entry_id]
+    entities: list[SelectEntity] = []
 
-    for coordinator in coordinators.values():
+    for source in coordinators.values():
+        if isinstance(source, EcoFlowLocalModbusCoordinator):
+            # A local entry gets its battery mode and nothing from the cloud
+            # definition lists.
+            entities.extend(
+                EcoFlowLocalBatteryModeSelect(source, defn)
+                for defn in POWEROCEANLOCALONLY_SELECTS
+            )
+            continue
+        coordinator = source
         if (
             coordinator.device_type == DEVICE_TYPE_POWERPULSE2
             and not supports_powerpulse_controls(coordinator.device_sn)
@@ -398,3 +410,72 @@ def _get_select_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSelec
     if device_type == DEVICE_TYPE_POWERPULSE2:
         return POWERPULSE2_SELECTS
     return []
+
+
+class EcoFlowLocalBatteryModeSelect(
+    EcoFlowWriteGateMixin,
+    CoordinatorEntity[EcoFlowLocalModbusCoordinator],
+    SelectEntity,
+):
+    """Battery mode of a local entry, as the status word and the setpoint show it.
+
+    Not optimistic: the coordinator confirms every mode from the status word
+    before it returns, and the entity renders what the coordinator derived. A
+    mode it cannot derive stays unknown. Every command needs the control
+    switch on; the coordinator's refusal reaches the caller unchanged.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: EcoFlowLocalModbusCoordinator,
+        definition: EcoFlowSelectDef,
+    ) -> None:
+        """Initialize the select."""
+        super().__init__(coordinator)
+        self._definition = definition
+        self._attr_unique_id = f"{coordinator.device_sn}_{definition.key}"
+        self._attr_translation_key = definition.key
+        self._attr_icon = definition.icon
+        self._attr_options = list(definition.options)
+
+    @property
+    def available(self) -> bool:
+        """Return True while the device answers its polls."""
+        return self.coordinator.device_available and super().available
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info from coordinator."""
+        return self.coordinator.device_info
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the derived mode, or None while it is not known."""
+        mode = (self.coordinator.data or {}).get(self._definition.state_key)
+        return mode if mode in self._definition.options else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Say whether the backup reserve stops the discharge that is asked for."""
+        return {"discharge_blocked_by_reserve": self._discharge_blocked()}
+
+    def _discharge_blocked(self) -> bool:
+        data = self.coordinator.data or {}
+        soc = data.get("soc_pct")
+        reserve = data.get("ems_backup_ratio_pct")
+        if soc is None or reserve is None or soc > reserve:
+            return False
+        # Only an asked-for discharge: in Automatic the setpoint register keeps
+        # its last value, which the unit ignores there.
+        return self.current_option == "discharge"
+
+    async def async_select_option(self, option: str) -> None:
+        """Run the mode change; the coordinator confirms it before returning."""
+        await self.coordinator.async_set_battery_mode(option)
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle a poll or a confirmed mode change."""
+        self._write_state_if_changed((self.current_option, self._discharge_blocked()))

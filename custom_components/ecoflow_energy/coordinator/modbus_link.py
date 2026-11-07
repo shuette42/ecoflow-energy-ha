@@ -28,6 +28,7 @@ from homeassistant.core import HomeAssistant
 
 from ..const import LOCAL_MODBUS_TIMEOUT_S
 from ..ecoflow.modbus_local import (
+    DEFAULT_SETPOINT_CAP_W,
     MODBUS_BASE_ADDRESS,
     WRITABLE_OFFSETS,
     ModbusConnectError,
@@ -37,6 +38,7 @@ from ..ecoflow.modbus_local import (
     ModbusProtocolError,
     ModbusTimeoutError,
     ModbusTransport,
+    encode_write32,
 )
 
 # The library names are imported under an alias: three of them share a name
@@ -129,6 +131,24 @@ class SharedModbusLink:
             try:
                 async with asyncio.timeout(_BUDGET_S):
                     await self._unit.write_register(MODBUS_BASE_ADDRESS + offset, value)
+            except (mc.ModbusError, TimeoutError) as err:
+                raise _translate(err, offset) from err
+            except OSError as err:
+                raise _os_error(err) from err
+
+    async def write_registers32(
+        self, offset: int, value: int, cap: int = DEFAULT_SETPOINT_CAP_W
+    ) -> None:
+        """Write one 32-bit control register (function 0x10), high word first.
+
+        ``encode_write32`` checks the write before the unit is called.
+        """
+        words = list(encode_write32(offset, value, cap))
+        address = MODBUS_BASE_ADDRESS + offset
+        async with self._lock:
+            try:
+                async with asyncio.timeout(_BUDGET_S):
+                    await self._unit.write_registers(address, words)
             except (mc.ModbusError, TimeoutError) as err:
                 raise _translate(err, offset) from err
             except OSError as err:

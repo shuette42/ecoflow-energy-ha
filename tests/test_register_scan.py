@@ -400,6 +400,7 @@ def test_decoders_equal_the_integrations():
         raw = struct.pack(">HH", *words)
         assert script.decode_u32_ws(words) == modbus_local.decode_u32_ws(raw)
         assert script.decode_f32_ws(words) == modbus_local.decode_f32_ws(raw)
+        assert script.decode_i32_ws(words) == modbus_local.decode_i32_ws(raw)
     assert script.decode_u16([513]) == modbus_local.decode_u16(b"\x02\x01")
 
 

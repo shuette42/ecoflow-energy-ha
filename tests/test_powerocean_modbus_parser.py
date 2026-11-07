@@ -72,6 +72,7 @@ _REGISTERS = {
     "backup_ratio": (0x0217, "u16"),
     "indicator_brightness": (0x021C, "u16"),
     "battery_capacity_wh": (0x0227, "u32"),
+    "battery_setpoint": (0x023A, "i32"),
     "battery_voltage": (0x023D, "f32"),
     "battery_current": (0x023F, "f32"),
     "battery_temp": (0x0241, "f32"),
@@ -127,6 +128,8 @@ DERIVED_KEYS = {
     "local_system_abnormal",
     "local_bms_connected",
     "local_system_alerts",
+    "control_method",
+    "battery_setpoint_w",
     "grid_import_power_w",
     "grid_export_power_w",
     "batt_charge_power_w",
@@ -139,7 +142,7 @@ def _encode(kind, value):
     """Encode a decoded value the way the device sends it: word-swapped."""
     if kind == "u16":
         return struct.pack(">H", value)
-    raw = struct.pack(">I" if kind == "u32" else ">f", value)
+    raw = struct.pack({"u32": ">I", "i32": ">i"}.get(kind, ">f"), value)
     return raw[2:4] + raw[0:2]
 
 
@@ -580,3 +583,59 @@ def test_all_zero_events_give_an_empty_list():
 def test_a_poll_without_the_fault_block_invents_no_fault_state():
     # Frame, not store: an unread block says nothing, so no empty list either.
     assert "fault_codes" not in parse_registers(_poll_blocks(DAY))
+
+
+# -- battery control read-back ----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("status", "method", "active"),
+    [
+        (0x0000_1014, 0, False),
+        # bits 7-10 = 3 (0x180) with bit 11: battery control held
+        (0x0000_1994, 3, True),
+        (0x0000_0780, 15, False),
+        # every bit but 7-10 set: the method stays 0
+        (0xFFFF_F87F, 0, True),
+    ],
+)
+def test_control_method_is_bits_7_to_10_of_the_status(status, method, active):
+    result = parse_registers(_poll_blocks(dict(DAY, system_status=status)))
+
+    assert result["control_method"] == method
+    assert result["modbus_control_active"] is active
+
+
+@pytest.mark.parametrize("setpoint", [-500, 500, -1, 0])
+def test_the_battery_setpoint_decodes_signed_and_word_swapped(setpoint):
+    result = parse_registers(_poll_blocks(dict(DAY, battery_setpoint=setpoint)))
+
+    assert result["battery_setpoint_w"] == setpoint
+
+
+def test_the_setpoint_reads_back_low_word_first_although_writes_go_high_first():
+    # Measured read-back of -500 W after the unit settled: the words FE0C FFFF.
+    blocks = _poll_blocks(DAY)
+    start = next(s for s, _ in POLL_BLOCKS if s == 0x023A)
+    raw = bytearray(blocks[start])
+    raw[0:4] = bytes.fromhex("fe0cffff")
+    blocks[start] = bytes(raw)
+
+    assert parse_registers(blocks)["battery_setpoint_w"] == -500
+
+
+def test_the_battery_block_starts_at_the_setpoint_and_still_covers_the_temperature():
+    assert (0x023A, 9) in POLL_BLOCKS
+    assert (0x023D, 6) not in POLL_BLOCKS
+
+
+def test_a_frame_with_the_old_battery_block_still_parses_every_old_key():
+    blocks = _poll_blocks(DAY)
+    new = blocks.pop(0x023A)
+    # The old block (0x023D, 6) is the new one without its first three registers.
+    blocks[0x023D] = new[6:]
+    result = parse_registers(blocks)
+
+    assert set(result) == EXPECTED_KEYS - {"battery_setpoint_w"}
+    for key, field in KEY_TO_FIELD.items():
+        assert result[key] == pytest.approx(DAY[field], abs=1e-3), key

@@ -58,7 +58,11 @@ from ..const import (
 from ..ecoflow.const import device_log_tag, get_device_name
 from ..ecoflow.modbus_local import (
     BACKUP_RATIO_OFFSET,
+    BATTERY_SETPOINT_OFFSET,
     BRIGHTNESS_OFFSET,
+    CONTROL_AUTOMATIC,
+    CONTROL_BATTERY,
+    CONTROL_COMMAND_OFFSET,
     HEARTBEAT_OFFSET,
     MODBUS_DEFAULT_PORT,
     ModbusExceptionResponse,
@@ -107,6 +111,70 @@ _utcnow = dt_util.utcnow
 # instead of landing after the unit let go, and a window with no more than the
 # margin left is treated as lapsed.
 _BEAT_WINDOW_MARGIN_S = 2.0
+
+# Battery control (System Control Command 0x0215, setpoint 0x023A). A setpoint
+# is never written while the battery command may be live: every change runs
+# command 0 and waits for control method 0, then the setpoint and its
+# read-back, then command 0x30 and waits for control method 3.
+BATTERY_SETPOINT_CAP_W = 5000
+BATTERY_MODES = frozenset({"automatic", "hold", "charge", "discharge"})
+_SETPOINT_MIN_W = 50
+_SETPOINT_DEFAULT_W = 500
+# The one value that reads the same in both word orders.
+_HOLD_SETPOINT_W = -1
+# Control method of the status word: 0 Automatic, 3 battery control.
+_METHOD_AUTOMATIC = 0
+_METHOD_BATTERY = 3
+_METHOD_CONFIRM_S = 8.0
+# After a setpoint write the register reads back with its words swapped for
+# about 5 s; a value counts once two reads in a row decode to it.
+_SETPOINT_SETTLE_S = 15.0
+_SETPOINT_CONFIRM_READS = 2
+_READ_INTERVAL_S = 1.0
+_HOLD_BAND_W = 5
+# One link call may wait up to 12 s on the shared connection (see
+# _BEAT_WINDOW_MARGIN_S). Ending control waits for a running sequence to see
+# the turn-off (one wait plus one call) and run its own fall-back, then gives
+# its own command 0 the confirm time plus two calls.
+_LINK_WAIT_S = 12.0
+_RETURN_BUDGET_S = _METHOD_CONFIRM_S + 2 * _LINK_WAIT_S
+_RETURN_LOCK_WAIT_S = _READ_INTERVAL_S + _LINK_WAIT_S + _RETURN_BUDGET_S
+_STATUS_BLOCK = ((0x0211, 2),)
+_SETPOINT_BLOCK = ((BATTERY_SETPOINT_OFFSET, 2),)
+# Seam for the waits between control steps, like ``_monotonic``.
+_sleep = asyncio.sleep
+
+
+class _StepUnconfirmed(Exception):
+    """A control step was not read back within its budget."""
+
+
+class _ControlTurnedOff(Exception):
+    """Modbus control went off while a battery command was running."""
+
+
+def derive_battery_mode(data: dict[str, Any]) -> str | None:
+    """Return the battery mode the status word and the setpoint show, or None.
+
+    Bit 11 decides first: after a heartbeat lapse the control method keeps
+    reading 3 while the unit is already back in Automatic.
+    """
+    active = data.get("modbus_control_active")
+    method = data.get("control_method")
+    if active is False:
+        return "automatic"
+    if active is None or method is None:
+        return None
+    if method == _METHOD_AUTOMATIC:
+        return "automatic"
+    if method != _METHOD_BATTERY:
+        return None
+    setpoint = data.get("battery_setpoint_w")
+    if setpoint is None:
+        return None
+    if abs(setpoint) <= _HOLD_BAND_W:
+        return "hold"
+    return "charge" if setpoint > 0 else "discharge"
 
 
 class _SerialMismatchError(ModbusLocalError):
@@ -206,6 +274,24 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._control_lock = asyncio.Lock()
         # Set when the entry unloads; a turn-on still in flight starts nothing.
         self._closed: bool = False
+        # Battery control: one command sequence at a time. ``_may_be_method3``
+        # is set before a 0x30 frame leaves and cleared only once control
+        # method 0 was read after a command 0.
+        self._battery_lock = asyncio.Lock()
+        self._may_be_method3: bool = False
+        # True once this run had control on or sent 0x30: only then does
+        # ending control write command 0 (another master may own the unit).
+        self._control_was_on: bool = False
+        # Counts turn-offs; a sequence aborts when it changed since its start,
+        # also when control was turned on again meanwhile.
+        self._turn_offs: int = 0
+        self._sequence_turn_offs: int = 0
+        # The setpoint Charge and Discharge use: the number's last value, or
+        # the confirmed value the device holds (at least 50 W).
+        self._battery_setpoint_w: int | None = None
+        # A setpoint write that has not read back yet: the poll drops its
+        # read until the sequence confirmed it or gave up.
+        self._settle_target: int | None = None
 
         super().__init__(
             hass,
@@ -330,14 +416,23 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         Turning on writes the first beat and reports on only when the device
         acknowledged it; a failure raises ``HomeAssistantError`` and leaves
-        control off. Turning off stops the beats and writes nothing: the unit
-        returns control to the app by itself within the lapse time.
+        control off. A battery command left over from before (a restart or a
+        lapse) is then ended, so a new session starts from Automatic. Turning
+        off returns the battery to Automatic first and then stops the beats.
         """
         # The intent is recorded before anything is awaited, so the last call
         # to arrive is the one that holds, whatever order the writes finish in.
         self._control_wanted = on
         if not on:
-            self._cancel_heartbeat()
+            # Seen at once by a running battery sequence, which then aborts.
+            self.control_enabled = False
+            self._turn_offs += 1
+            await self._async_return_to_automatic()
+            # A turn-on that arrived meanwhile took the running beats over.
+            if not self._control_wanted:
+                self._cancel_heartbeat()
+                # A battery command found later is another master's.
+                self._control_was_on = False
             self.async_update_listeners()
             return
         async with self._control_lock:
@@ -354,16 +449,80 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # within the lapse time, and no heartbeat starts.
             if self._closed or not self._control_wanted:
                 return
-            if self._heartbeat_task is not None and not self._heartbeat_task.done():
-                return
             self._last_beat_ack = _monotonic()
+            self._control_was_on = True
+            if self._heartbeat_task is not None and not self._heartbeat_task.done():
+                # A turn-off still returning to Automatic leaves these running.
+                self.control_enabled = True
+                self.async_update_listeners()
+                return
             self.control_enabled = True
             self._heartbeat_task = self.config_entry.async_create_background_task(
                 self.hass,
                 self._heartbeat_loop(),
                 name=f"ecoflow_energy local heartbeat {self.device_tag}",
             )
+            await self._async_return_to_automatic(fresh_read=True)
             self.async_update_listeners()
+
+    async def _async_return_to_automatic(
+        self, budget_s: float = _RETURN_BUDGET_S, fresh_read: bool = False
+    ) -> None:
+        """Write command 0 and confirm Automatic if a battery command may be live.
+
+        Waits up to ``_RETURN_LOCK_WAIT_S`` for a running sequence, which
+        aborts to Automatic by itself once control is off. Never raises: a link error or
+        a missing confirmation leaves ``_may_be_method3`` set, so the next
+        turn-on ends the command. Nothing is written to a device that is not
+        answering or has not passed the serial number check.
+        """
+        if not fresh_read and not self._control_was_on:
+            return
+        if not self._device_available or not self._identity_verified:
+            if self._may_be_method3:
+                self._automatic_not_confirmed(fresh_read, "the device is not answering")
+            return
+        try:
+            # A running sequence sees the turn-off at its next step and ends
+            # in Automatic by itself; this waits for it, then checks again.
+            async with asyncio.timeout(_RETURN_LOCK_WAIT_S):
+                await self._battery_lock.acquire()
+        except TimeoutError:
+            self._automatic_not_confirmed(fresh_read, "a battery command still runs")
+            return
+        try:
+            async with asyncio.timeout(budget_s):
+                if fresh_read:
+                    await self._read_status()
+                if self._device_data.get("control_method") not in (None, 0):
+                    self._may_be_method3 = True
+                if not self._may_be_method3:
+                    return
+                await self._command(CONTROL_AUTOMATIC, _METHOD_AUTOMATIC)
+                self._publish_battery_mode()
+                self.async_set_updated_data(dict(self._device_data))
+        except (ModbusLocalError, _StepUnconfirmed, TimeoutError) as err:
+            self._automatic_not_confirmed(fresh_read, type(err).__name__)
+        finally:
+            self._battery_lock.release()
+
+    def _automatic_not_confirmed(self, turning_on: bool, reason: str) -> None:
+        """Log a missing Automatic: one WARNING when control ends, else DEBUG.
+
+        ``_may_be_method3`` stays set, so the next turn-on ends the command.
+        """
+        if turning_on:
+            _LOGGER.debug(
+                "Local Modbus %s: Automatic not confirmed (%s)", self.device_tag, reason
+            )
+            return
+        _LOGGER.warning(
+            "Local Modbus %s: the battery did not confirm Automatic when control "
+            "ended (%s). The device returns to Automatic by itself within %s s",
+            self.device_tag,
+            reason,
+            LOCAL_MODBUS_HEARTBEAT_LAPSE_S,
+        )
 
     def _close(self) -> None:
         """Unload callback: stop the beats for good and refuse a late turn-on.
@@ -481,6 +640,7 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._heartbeat_task = None
         self._control_wanted = False
         self.control_enabled = False
+        self._control_was_on = False
         _LOGGER.warning(
             "Local Modbus %s: control stopped, %s. The device returns control "
             "to the app; turn Modbus control on again to take it back",
@@ -522,6 +682,208 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
     # ------------------------------------------------------------------
+    # Battery control: mode and setpoint
+    # ------------------------------------------------------------------
+
+    async def async_set_battery_mode(self, mode: str) -> None:
+        """Put the battery into ``mode`` and confirm it from the status word.
+
+        Charge and Discharge use the setpoint number's last value (500 W when
+        it is below 50 W), Hold uses -1 W, Automatic only sends command 0.
+        """
+        if mode not in BATTERY_MODES:
+            raise ValueError(f"{mode} is not a battery mode")
+        self._check_control()
+        async with self._battery_lock:
+            if mode == "automatic":
+                await self._run_sequence(None)
+                return
+            power = abs(self._battery_setpoint_w or 0)
+            if power < _SETPOINT_MIN_W:
+                power = _SETPOINT_DEFAULT_W
+            setpoint = {"hold": _HOLD_SETPOINT_W, "charge": power}.get(mode, -power)
+            await self._run_sequence(setpoint)
+
+    async def async_set_battery_setpoint(self, watts: int) -> None:
+        """Store a setpoint (W, positive charges) and apply it.
+
+        In Automatic only the setpoint register is written, which the unit
+        ignores under control method 0. Otherwise the full sequence runs into
+        Charge (positive) or Discharge (negative).
+        """
+        if (
+            type(watts) is not int
+            or abs(watts) < _SETPOINT_MIN_W
+            or abs(watts) > BATTERY_SETPOINT_CAP_W
+        ):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="battery_setpoint_out_of_range",
+                translation_placeholders={
+                    "min": str(_SETPOINT_MIN_W),
+                    "max": str(BATTERY_SETPOINT_CAP_W),
+                },
+            )
+        self._check_control()
+        self._battery_setpoint_w = watts
+        async with self._battery_lock:
+            try:
+                status = await self._read_status()
+            except ModbusLocalError as err:
+                raise self._command_failed() from err
+            in_automatic = (
+                status.get("modbus_control_active") is False
+                or status.get("control_method") == _METHOD_AUTOMATIC
+            )
+            # In Automatic a 0x30 that may still be live is ended first: any
+            # control method but 0 (also after a lapse, bit 11 clear) has set
+            # ``_may_be_method3``, so no setpoint is ever written under it.
+            await self._run_sequence(watts, engage=not in_automatic)
+
+    def _check_control(self) -> None:
+        """Refuse a battery command while Modbus control is off."""
+        if not self.control_enabled:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="battery_control_needs_modbus_control",
+            )
+
+    def _command_failed(self) -> HomeAssistantError:
+        return HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="battery_command_failed"
+        )
+
+    def _step(self) -> None:
+        """Checked before every step: the switch may have gone off meanwhile."""
+        if not self.control_enabled or self._turn_offs != self._sequence_turn_offs:
+            raise _ControlTurnedOff
+
+    async def _run_sequence(self, setpoint: int | None, engage: bool = True) -> None:
+        """Command 0, then optionally a setpoint and command 0x30, all confirmed.
+
+        ``setpoint`` None ends in Automatic. With ``engage`` False the
+        setpoint is written without command 0x30; command 0 is sent first only
+        when 0x30 may be live.
+        """
+        self._sequence_turn_offs = self._turn_offs
+        try:
+            if engage or self._may_be_method3:
+                self._step()
+                await self._command(CONTROL_AUTOMATIC, _METHOD_AUTOMATIC)
+            if setpoint is not None:
+                self._step()
+                await self._write_setpoint(setpoint)
+                if engage:
+                    self._step()
+                    await self._command(CONTROL_BATTERY, _METHOD_BATTERY)
+                    self._step()
+        except _ControlTurnedOff:
+            await self._fall_back()
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="battery_control_needs_modbus_control",
+            ) from None
+        except (ModbusLocalError, _StepUnconfirmed) as err:
+            if self._may_be_method3:
+                await self._fall_back()
+            raise self._command_failed() from err
+        finally:
+            self._publish_battery_mode()
+            self.async_set_updated_data(dict(self._device_data))
+
+    async def _command(
+        self, value: int, method: int, confirm_s: float = _METHOD_CONFIRM_S
+    ) -> None:
+        """Write the control command and wait until the status word shows it."""
+        if value == CONTROL_BATTERY:
+            self._may_be_method3 = True
+            self._control_was_on = True
+        await self._link.write_registers32(
+            CONTROL_COMMAND_OFFSET, value, BATTERY_SETPOINT_CAP_W
+        )
+        deadline = _monotonic() + confirm_s
+        while True:
+            await _sleep(_READ_INTERVAL_S)
+            if value == CONTROL_BATTERY:
+                # A turn-off now must lead to the fall-back, never past it.
+                self._step()
+            if (await self._read_status()).get("control_method") == method:
+                break
+            if _monotonic() >= deadline:
+                raise _StepUnconfirmed(f"control method {method} not read back")
+        if method == _METHOD_AUTOMATIC:
+            self._may_be_method3 = False
+
+    async def _fall_back(self) -> None:
+        """One attempt at command 0; if Automatic is not confirmed, stop beating.
+
+        Without beats the unit returns to Automatic by itself within the lapse.
+        """
+        try:
+            await self._command(CONTROL_AUTOMATIC, _METHOD_AUTOMATIC)
+        except (ModbusLocalError, _StepUnconfirmed):
+            self._cancel_heartbeat()
+            _LOGGER.warning(
+                "Local Modbus %s: the battery did not confirm Automatic, control "
+                "stopped. The device returns to Automatic by itself within %s s",
+                self.device_tag,
+                LOCAL_MODBUS_HEARTBEAT_LAPSE_S,
+            )
+            self.async_update_listeners()
+
+    async def _write_setpoint(self, watts: int) -> None:
+        """Write the setpoint and wait until two reads in a row decode to it.
+
+        Only these reads count: the poll drops its read while this runs.
+        """
+        self._settle_target = watts
+        try:
+            await self._link.write_registers32(
+                BATTERY_SETPOINT_OFFSET, watts, BATTERY_SETPOINT_CAP_W
+            )
+            deadline = _monotonic() + _SETPOINT_SETTLE_S
+            hits = 0
+            while True:
+                await _sleep(_READ_INTERVAL_S)
+                raw = await self._link.read_blocks(_SETPOINT_BLOCK)
+                held = parse_registers(raw).get("battery_setpoint_w")
+                hits = hits + 1 if held == watts else 0
+                if hits >= _SETPOINT_CONFIRM_READS:
+                    self._device_data["battery_setpoint_w"] = held
+                    return
+                if _monotonic() >= deadline:
+                    _LOGGER.debug(
+                        "Local Modbus %s: battery setpoint reads %s W, %s W was "
+                        "written",
+                        self.device_tag,
+                        held,
+                        watts,
+                    )
+                    raise _StepUnconfirmed(f"setpoint {watts} W not read back")
+        finally:
+            self._settle_target = None
+
+    def _publish_battery_mode(self) -> None:
+        """Derive the battery mode from the data; unknown leaves no key."""
+        mode = derive_battery_mode(self._device_data)
+        if mode is None:
+            self._device_data.pop("battery_mode", None)
+        else:
+            self._device_data["battery_mode"] = mode
+
+    async def _read_status(self) -> dict[str, Any]:
+        """Read the status word and fold its decoded bits into the data."""
+        status = parse_registers(await self._link.read_blocks(_STATUS_BLOCK))
+        self._note_method(status)
+        self._device_data.update(status)
+        return status
+
+    def _note_method(self, status: dict[str, Any]) -> None:
+        """Any control method but 0 means a battery command may be live."""
+        if status.get("control_method") not in (None, _METHOD_AUTOMATIC):
+            self._may_be_method3 = True
+
+    # ------------------------------------------------------------------
     # Polling
     # ------------------------------------------------------------------
 
@@ -530,6 +892,8 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # The identity blocks ride along until the serial was read and matched.
         blocks = POLL_BLOCKS if self._identity_verified else SETUP_BLOCKS + POLL_BLOCKS
         try:
+            # A read taken during a settle is dropped even if handled after it.
+            settling = self._settle_target is not None
             raw = await self._link.read_blocks(blocks)
         except ModbusLocalError as err:
             return self._handle_failure(err)
@@ -562,7 +926,19 @@ class EcoFlowLocalModbusCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Unknown beats a list from an earlier poll that may be out of date.
             self._device_data.pop(FAULT_CODES_KEY, None)
         self._hold_counters(parsed)
+        if settling or self._settle_target is not None:
+            # A setpoint still settling reads back swapped: the last confirmed
+            # value stays; only the sequence's own reads confirm it.
+            parsed.pop("battery_setpoint_w", None)
+        elif (
+            _SETPOINT_MIN_W
+            <= abs(parsed.get("battery_setpoint_w") or 0)
+            <= BATTERY_SETPOINT_CAP_W
+        ):
+            self._battery_setpoint_w = parsed["battery_setpoint_w"]
+        self._note_method(parsed)
         self._device_data.update(parsed)
+        self._publish_battery_mode()
         self._sync_held_notices()
         return dict(self._device_data)
 

@@ -1910,3 +1910,38 @@ Home Assistant 2026.9 added a shared Modbus connection to its `modbus` integrati
 3. Switch the source once per entry (settings if ever seen). Rejected: a stream that stops would freeze the display for the session. The ten-second hold already exists and gives a self-healing fallback.
 
 **Consequences:** `ev_settings_work_mode` now holds a mode word (fast, solar, custom, smart) instead of a number. `POWERPULSE2_CHARGE_MODE_WINDOW_S` is removed. The entity page sentences on the heartbeat and the 75 s window are rewritten. A recording with every write retained through all four modes would settle the two 2026-08-24 cases. It is optional.
+
+---
+
+## ADR-034: A Local (Modbus/TCP) PowerOcean entry may set a battery mode (Automatic, Hold, Charge, Discharge) and one signed battery power setpoint while Modbus Control is on; nothing is written while the switch is off, and both entities show what the device reports
+
+**Status:** Accepted. Amends ADR-031 items 1 (the registers written) and 2 (what happens when control ends).
+**Date:** 2026-10-28, measured 2026-11-07
+
+**Context:** ADR-031 let a Local entry write Backup Reserve and Indicator Brightness and run the heartbeat, and kept the System Control Command (`0x0215`) and the Battery Charge/Discharge Setting (`0x023A`) out, because they move real power and the command register carries a shutdown bit. Owners asked for a small battery control without app schedules. The EcoFlow Open Modbus Protocol V1.0 documents `0x0215` as a write-only 32-bit word whose bits 4-7 select the control method (0 default operation, 3 battery charge and discharge), and `0x023A` as a signed 32-bit value in W that applies under method 3. The System Status word (`0x0211`), which the poll already reads, reports the active method in bits 7-10 and the Modbus control hold in bit 11. The decision rests on supervised measurements on one unit.
+
+**Decision:**
+1. One select, Battery Mode (Automatic, Hold, Charge, Discharge), and one signed number, Battery Power Setpoint (W, positive charges, negative discharges), on the Local entry, behind the Modbus Control switch. While the switch is off nothing is written and both refuse with a message.
+2. `0x0215` is written with exactly two values, `0x00000000` (method 0, shown as Automatic) and `0x00000030` (method 3). Every other value is refused before anything is sent, so the shutdown, off-grid and power-saving bits cannot be produced. `0x023A` is an INT32 in W, positive charges.
+3. Both registers are written high word first. The unit reads them back with the words swapped for a few seconds after a write, so a setpoint counts once two reads in a row decode to it.
+4. A change runs in one order: `0x0215 = 0`, wait until bits 7-10 read 0; write `0x023A` and confirm it twice; `0x0215 = 0x30`, wait until bits 7-10 read 3. A setpoint is never written while method 3 may be live. Hold is a setpoint of -1 W. Automatic writes `0x0215 = 0` only.
+5. The heartbeat of ADR-031 (`0x025F`, every 15 s) carries the control. Without it the unit falls back to Automatic by itself about a minute after the last beat, even though bits 7-10 keep reading 3. Bit 11 therefore decides first: with bit 11 clear the mode is Automatic.
+6. Turning Modbus Control off, unloading the entry and stopping Home Assistant write `0x0215 = 0` before the heartbeat stops.
+7. The select is derived from the device on every poll: method 0 is Automatic, method 3 is Hold, Charge or Discharge by the setpoint read back, anything else is unknown. The number is the read-back of `0x023A`. There is no optimistic state.
+
+**Trade-offs:**
+- (+) An owner can hold, charge or discharge the battery from Home Assistant without the EcoFlow app and without a control loop
+- (+) The shutdown bit cannot be written, whatever the entity layer asks for
+- (+) Every state shown is read from the device, so the select never claims a mode the unit has left
+- (-) The Backup Reserve still blocks a discharge while the battery charge is at or below it. The select says so in an attribute rather than overriding it
+- (-) A change passes through Automatic for a few seconds, in which the battery may serve the house load
+- (-) The range is ±5000 W and the device limits itself below that; only ±500 W has been measured, on one three-phase unit
+- (-) There are no export, import or limit modes
+
+**Alternatives considered:**
+1. The full set of seven modes with export, import and solar-first variants, a charge limit and an emulated reserve. Rejected: each emulated limit is a control loop that rewrites the setpoint continuously and holds state the device cannot confirm.
+2. Two unsigned numbers for charge and discharge power. Rejected: they would hold preferences no register confirms. One signed number is the register itself.
+3. Show the requested mode until the device confirms it. Rejected: an optimistic state, which ADR-031 rules out.
+4. Confirm a mode by battery power. Rejected: the setpoint is a limit the device may undershoot, and a full battery or the Backup Reserve would read as a failed command.
+
+**Consequences:** The core library writes the two registers with function code 16 and refuses every other value. The poll decodes bits 7-10 of `0x0211` and reads `0x023A`. The Local entry gains the select platform. The entity page states that the Backup Reserve still applies, that a change passes through Automatic, and what was measured.

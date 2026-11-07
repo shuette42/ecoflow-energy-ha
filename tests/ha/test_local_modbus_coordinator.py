@@ -24,7 +24,7 @@ from unittest.mock import patch
 import homeassistant.util.dt as dt_util
 import pytest
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant, State
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
@@ -64,6 +64,7 @@ from custom_components.ecoflow_energy.diagnostics import (
 from custom_components.ecoflow_energy.ecoflow.modbus_local import (
     BACKUP_RATIO_OFFSET,
     BRIGHTNESS_OFFSET,
+    DEFAULT_SETPOINT_CAP_W,
     HEARTBEAT_OFFSET,
     ModbusConnectError,
     ModbusExceptionResponse,
@@ -208,6 +209,8 @@ class StubClient:
         # that read raises. The fault read is its own call and takes no script step.
         self.fault_events: list[int] = [0] * FAULT_EVENT_COUNT
         self.fault_error: Exception | None = None
+        # When set, the control registers answer as the unit does.
+        self.battery: FakeBattery | None = None
 
     async def read_blocks(self, blocks: Sequence[tuple[int, int]]) -> dict[int, bytes]:
         if tuple(blocks) == FAULT_BLOCKS:
@@ -215,6 +218,11 @@ class StubClient:
             if self.fault_error is not None:
                 raise self.fault_error
             return {FAULT_EVENT_OFFSET: struct.pack(">20H", *self.fault_events)}
+        if self.battery is not None and tuple(blocks) in FakeBattery.BLOCKS:
+            return self.battery.read(blocks[0][0])
+        if tuple(blocks) == FakeBattery.BLOCKS[0]:
+            # A unit with no battery command: the status word is not a poll.
+            return {0x0211: bytes(4)}
         self.calls += 1
         self.requested.append(tuple(blocks))
         if len(blocks) == 1 and blocks[0][1] == 1 and blocks[0][0] in self.registers:
@@ -226,6 +234,8 @@ class StubClient:
         step = self._script.pop(0)
         if isinstance(step, Exception):
             raise step
+        if self.battery is not None:
+            step = self.battery.overlay(step)
         return step
 
     def queue(self, *steps: dict[int, bytes] | Exception) -> None:
@@ -240,6 +250,70 @@ class StubClient:
         if error is not None:
             raise error
         self.registers[offset] = value
+
+    async def write_registers32(
+        self, offset: int, value: int, cap: int = DEFAULT_SETPOINT_CAP_W
+    ) -> None:
+        self.writes.append((offset, value))
+        if self.battery is not None:
+            self.battery.write(offset, value)
+
+
+class FakeBattery:
+    """Control registers as the unit answered on 2026-11-07.
+
+    Control method (bits 7-10 of 0x0211) follows the last 0x0215 write after
+    two seconds; 0x023A reads back with its words swapped for five seconds
+    after a write. ``log`` holds every 32-bit write with the control method
+    the unit showed at that moment.
+    """
+
+    BLOCKS = (((0x0211, 2),), ((0x023A, 2),))
+
+    def __init__(self, clock: Clock, method: int = 0, setpoint: int = -1) -> None:
+        self.clock = clock
+        self.held = True
+        self.command = 0x30 if method == 3 else 0
+        self.command_at = -100.0
+        self.previous_method = method
+        self.setpoint = setpoint
+        self.setpoint_at = -100.0
+        self.ignore_battery_command = False
+        self.log: list[tuple[int, int, int]] = []
+
+    def method(self) -> int:
+        if self.clock.now - self.command_at < 2:
+            return self.previous_method
+        return 3 if self.command == 0x30 and not self.ignore_battery_command else 0
+
+    def write(self, offset: int, value: int) -> None:
+        self.log.append((offset, value, self.method()))
+        if offset == 0x0215:
+            self.previous_method = self.method()
+            self.command, self.command_at = value, self.clock.now
+        else:
+            self.setpoint, self.setpoint_at = value, self.clock.now
+
+    def _raw(self, offset: int) -> bytes:
+        if offset == 0x0211:
+            raw = struct.pack(">I", (self.method() << 7) | (int(self.held) << 11))
+        else:
+            raw = struct.pack(">i", self.setpoint)
+            if self.clock.now - self.setpoint_at < 5:
+                return raw  # high word first: decodes swapped
+        return raw[2:4] + raw[0:2]
+
+    def read(self, offset: int) -> dict[int, bytes]:
+        return {offset: self._raw(offset)}
+
+    def overlay(self, answer: dict[int, bytes]) -> dict[int, bytes]:
+        out = dict(answer)
+        for offset in (0x0211, 0x023A):
+            for start, raw in out.items():
+                if start <= offset < start + len(raw) // 2:
+                    low = (offset - start) * 2
+                    out[start] = raw[:low] + self._raw(offset) + raw[low + 4 :]
+        return out
 
 
 def _local_entry() -> MockConfigEntry:
@@ -381,6 +455,7 @@ async def test_local_entry_creates_the_local_entities_and_a_missing_value_is_unk
         "sensor",
         "switch",
         "number",
+        "select",
         "binary_sensor",
     }
     unique_ids = {item.unique_id for item in registered if item.domain == "sensor"}
@@ -397,6 +472,8 @@ async def test_local_entry_creates_the_local_entities_and_a_missing_value_is_unk
             "local_off_grid",
             "local_system_abnormal",
             "local_bms_connected",
+            "local_battery_mode",
+            "local_battery_setpoint_w",
         )
     }
     assert f"{SERIAL}_mqtt_status" not in unique_ids
@@ -1894,3 +1971,605 @@ async def test_a_poll_without_the_fault_count_leaves_the_fault_list_unknown(
 
     assert "fault_codes" not in coordinator.data
     assert stub.fault_calls == 0
+
+
+# ----------------------------------------------------------------------
+# Battery control: mode and setpoint
+# ----------------------------------------------------------------------
+
+COMMAND = 0x0215
+SETPOINT = 0x023A
+
+
+async def _battery_rig(
+    hass: HomeAssistant,
+    clock: Clock,
+    monkeypatch: pytest.MonkeyPatch,
+    method: int = 0,
+    on_sleep: Any = None,
+) -> tuple[EcoFlowLocalModbusCoordinator, StubClient, FakeBattery]:
+    """A polled coordinator with control on, a fake unit and waits on the clock."""
+    coordinator, stub = await _polled(hass, _local_entry(), *[_frame(DAY)] * 40)
+    stub.battery = FakeBattery(clock, method=method)
+    coordinator.control_enabled = True
+
+    async def fake_sleep(seconds: float) -> None:
+        clock.now += seconds
+        if on_sleep is not None:
+            await on_sleep()
+        await asyncio.sleep(0)
+
+    monkeypatch.setattr(local_modbus, "_sleep", fake_sleep)
+    return coordinator, stub, stub.battery
+
+
+def _setpoint_writes_under_live_method(fake: FakeBattery) -> list[tuple[int, int, int]]:
+    return [entry for entry in fake.log if entry[0] == SETPOINT and entry[2] != 0]
+
+
+async def test_charge_ends_battery_control_before_the_setpoint_and_engages_after(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The unit is already in battery control: the setpoint must wait for method 0.
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch, method=3)
+    await coordinator.async_set_battery_setpoint(800)
+    await coordinator.async_set_battery_mode("charge")
+
+    assert [(o, v) for o, v, _ in fake.log][-3:] == [
+        (COMMAND, 0),
+        (SETPOINT, 800),
+        (COMMAND, 0x30),
+    ]
+    assert _setpoint_writes_under_live_method(fake) == []
+    assert coordinator.data["battery_setpoint_w"] == 800
+    assert coordinator.data["battery_mode"] == "charge"
+
+
+async def test_hold_writes_minus_one_and_discharge_the_negative_setpoint(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    await coordinator.async_set_battery_mode("hold")
+    assert (SETPOINT, -1) in stub.writes
+    assert coordinator.data["battery_mode"] == "hold"
+
+    # No setpoint stored yet: Discharge uses 500 W.
+    await coordinator.async_set_battery_mode("discharge")
+    assert [(o, v) for o, v, _ in fake.log][-3:] == [
+        (COMMAND, 0),
+        (SETPOINT, -500),
+        (COMMAND, 0x30),
+    ]
+    assert coordinator.data["battery_mode"] == "discharge"
+    assert _setpoint_writes_under_live_method(fake) == []
+
+
+async def test_automatic_sends_command_zero_only_and_confirms_it(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch, method=3)
+    await coordinator.async_set_battery_mode("automatic")
+    assert [(o, v) for o, v, _ in fake.log] == [(COMMAND, 0)]
+    assert coordinator.data["battery_mode"] == "automatic"
+
+
+async def test_a_setpoint_in_automatic_writes_the_setpoint_register_only(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    await coordinator.async_set_battery_setpoint(-1200)
+    assert [(o, v) for o, v, _ in fake.log] == [(SETPOINT, -1200)]
+    assert coordinator.data["battery_mode"] == "automatic"
+
+
+@pytest.mark.parametrize("watts", [0, 49, -49, 5001, -5001])
+async def test_an_out_of_range_setpoint_is_refused_before_any_frame(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch, watts: int
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    with pytest.raises(HomeAssistantError) as err:
+        await coordinator.async_set_battery_setpoint(watts)
+    assert err.value.translation_key == "battery_setpoint_out_of_range"
+    assert fake.log == []
+    assert local_modbus.BATTERY_SETPOINT_CAP_W == 5000
+
+
+@pytest.mark.parametrize("call", ["mode", "setpoint"])
+async def test_battery_commands_are_refused_while_control_is_off(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch, call: str
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    coordinator.control_enabled = False
+    with pytest.raises(HomeAssistantError) as err:
+        if call == "mode":
+            await coordinator.async_set_battery_mode("charge")
+        else:
+            await coordinator.async_set_battery_setpoint(800)
+    assert err.value.translation_key == "battery_control_needs_modbus_control"
+    assert fake.log == []
+    assert stub.writes == []
+
+
+async def test_a_swapped_read_back_is_never_published(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    published: list[Any] = []
+    coordinator: EcoFlowLocalModbusCoordinator | None = None
+
+    async def poll() -> None:
+        assert coordinator is not None
+        await coordinator.async_refresh()
+        published.append(coordinator.data.get("battery_setpoint_w"))
+
+    coordinator, stub, fake = await _battery_rig(
+        hass, clock, monkeypatch, on_sleep=poll
+    )
+    await poll()
+    await coordinator.async_set_battery_setpoint(100)
+    # Polls after the settle time read the true value.
+    await poll()
+
+    assert fake.log == [(SETPOINT, 100, 0)]
+    # +100 read with its words swapped is 6553600.
+    assert 6553600 not in published
+    assert set(published) <= {-1, 100}
+    assert published[-1] == 100
+
+
+async def test_a_failed_step_after_the_battery_command_ends_in_one_command_zero(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    fake.ignore_battery_command = True
+    with pytest.raises(HomeAssistantError) as err:
+        await coordinator.async_set_battery_mode("charge")
+    assert err.value.translation_key == "battery_command_failed"
+    writes = [(o, v) for o, v, _ in fake.log]
+    after = writes[writes.index((COMMAND, 0x30)) + 1 :]
+    assert after == [(COMMAND, 0)]
+    # Automatic was confirmed, so control stays on.
+    assert coordinator.control_enabled is True
+
+
+async def test_unconfirmed_automatic_after_a_failure_stops_the_heartbeat(
+    hass: HomeAssistant,
+    clock: Clock,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    fake.ignore_battery_command = True
+    accept = fake.write
+
+    def write(offset: int, value: int) -> None:
+        # The link drops right after the battery command went out.
+        if any(entry[:2] == (COMMAND, 0x30) for entry in fake.log):
+            raise ModbusTimeoutError("no answer")
+        accept(offset, value)
+
+    monkeypatch.setattr(fake, "write", write)
+    with pytest.raises(HomeAssistantError) as err:
+        await coordinator.async_set_battery_mode("charge")
+    assert err.value.translation_key == "battery_command_failed"
+    assert stub.writes[-2:] == [(COMMAND, 0x30), (COMMAND, 0)]
+    assert coordinator.control_enabled is False
+    warnings = _control_warnings(caplog)
+    assert len(warnings) == 1
+    assert "did not confirm Automatic" in warnings[0]
+
+
+async def test_control_turned_off_mid_sequence_aborts_to_command_zero(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator: EcoFlowLocalModbusCoordinator | None = None
+
+    turn_offs: list[asyncio.Task[None]] = []
+
+    async def switch_off() -> None:
+        # Another caller, as a service call is: the sequence keeps running.
+        assert coordinator is not None
+        if not turn_offs and any(entry[0] == SETPOINT for entry in fake.log):
+            turn_offs.append(
+                hass.async_create_task(coordinator.async_set_control(False))
+            )
+
+    coordinator, stub, fake = await _battery_rig(
+        hass, clock, monkeypatch, on_sleep=switch_off
+    )
+    with pytest.raises(HomeAssistantError) as err:
+        await coordinator.async_set_battery_mode("charge")
+    await _bounded(turn_offs[0])
+    assert err.value.translation_key == "battery_control_needs_modbus_control"
+    writes = [(o, v) for o, v, _ in fake.log]
+    assert (COMMAND, 0x30) not in writes
+    after_setpoint = writes[[o for o, _ in writes].index(SETPOINT) + 1 :]
+    assert after_setpoint == [(COMMAND, 0)]
+    assert coordinator.control_enabled is False
+
+
+@pytest.mark.parametrize(
+    ("data", "mode"),
+    [
+        (
+            {
+                "modbus_control_active": False,
+                "control_method": 3,
+                "battery_setpoint_w": 800,
+            },
+            "automatic",
+        ),
+        (
+            {
+                "modbus_control_active": True,
+                "control_method": 0,
+                "battery_setpoint_w": 800,
+            },
+            "automatic",
+        ),
+        (
+            {
+                "modbus_control_active": True,
+                "control_method": 3,
+                "battery_setpoint_w": -1,
+            },
+            "hold",
+        ),
+        (
+            {
+                "modbus_control_active": True,
+                "control_method": 3,
+                "battery_setpoint_w": 5,
+            },
+            "hold",
+        ),
+        (
+            {
+                "modbus_control_active": True,
+                "control_method": 3,
+                "battery_setpoint_w": -5,
+            },
+            "hold",
+        ),
+        (
+            {
+                "modbus_control_active": True,
+                "control_method": 3,
+                "battery_setpoint_w": 6,
+            },
+            "charge",
+        ),
+        (
+            {
+                "modbus_control_active": True,
+                "control_method": 3,
+                "battery_setpoint_w": -6,
+            },
+            "discharge",
+        ),
+        (
+            {
+                "modbus_control_active": True,
+                "control_method": 1,
+                "battery_setpoint_w": 800,
+            },
+            None,
+        ),
+        (
+            {
+                "modbus_control_active": True,
+                "control_method": 2,
+                "battery_setpoint_w": 800,
+            },
+            None,
+        ),
+        ({}, None),
+    ],
+)
+def test_the_battery_mode_is_derived_from_bit_11_first(
+    data: dict[str, Any], mode: str | None
+) -> None:
+    assert local_modbus.derive_battery_mode(data) == mode
+
+
+async def _charging_entry(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> tuple[EcoFlowLocalModbusCoordinator, FakeBattery, list[int]]:
+    """A set-up entry in Charge; the list holds the log length at each beat stop."""
+    entry = _local_entry()
+    assert await _set_up_local_entry(hass, entry, [_frame(DAY)] * 40)
+    coordinator = hass.data[DOMAIN][entry.entry_id][SERIAL]
+    coordinator._link.battery = fake = FakeBattery(clock)
+    monkeypatch.setattr(local_modbus, "_sleep", _clock_sleep(clock))
+    await coordinator.async_set_control(True)
+    await coordinator.async_set_battery_mode("charge")
+    assert fake.method() == 3
+    cancelled_at: list[int] = []
+    cancel = coordinator._cancel_heartbeat
+
+    def recording_cancel() -> None:
+        cancelled_at.append(len(fake.log))
+        cancel()
+
+    monkeypatch.setattr(coordinator, "_cancel_heartbeat", recording_cancel)
+    return coordinator, fake, cancelled_at
+
+
+def _clock_sleep(clock: Clock) -> Any:
+    async def fake_sleep(seconds: float) -> None:
+        clock.now += seconds
+        await asyncio.sleep(0)
+
+    return fake_sleep
+
+
+@pytest.mark.parametrize("how", ["switch_off", "unload", "stop"])
+async def test_ending_control_in_charge_returns_to_automatic_before_the_beats_stop(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    coordinator, fake, cancelled_at = await _charging_entry(hass, clock, monkeypatch)
+    before = len(fake.log)
+
+    if how == "switch_off":
+        await coordinator.async_set_control(False)
+    elif how == "unload":
+        # Awaited by the unload itself: no wait for pending tasks before the check.
+        assert await hass.config_entries.async_unload(coordinator.config_entry.entry_id)
+    else:
+        hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
+        await hass.async_block_till_done()
+
+    assert fake.log[before:] == [(COMMAND, 0, 3)]
+    assert fake.method() == 0
+    assert coordinator.device_data["control_method"] == 0
+    assert coordinator._may_be_method3 is False
+    assert cancelled_at[0] == before + 1
+    assert coordinator.control_enabled is False
+
+
+async def test_switching_off_with_no_battery_command_writes_nothing(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    await coordinator.async_set_control(False)
+    assert fake.log == []
+    assert stub.writes == []
+    assert coordinator.control_enabled is False
+
+
+async def test_switching_on_ends_a_command_left_over_from_a_lapse(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # After a lapse the unit runs Automatic but still shows control method 3.
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch, method=3)
+    coordinator.control_enabled = False
+
+    await coordinator.async_set_control(True)
+
+    assert stub.writes[0] == (HEARTBEAT_OFFSET, 1)
+    assert fake.log == [(COMMAND, 0, 3)]
+    assert fake.method() == 0
+    assert coordinator.control_enabled is True
+    assert coordinator._may_be_method3 is False
+    await coordinator.async_set_control(False)
+
+
+async def test_a_link_error_while_ending_control_does_not_raise(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    await coordinator.async_set_battery_mode("charge")
+
+    async def broken(*_args: Any) -> None:
+        raise ModbusConnectError("link down")
+
+    monkeypatch.setattr(stub, "write_registers32", broken)
+    await coordinator.async_set_control(False)
+
+    assert coordinator.control_enabled is False
+    # Not confirmed: the next turn-on ends the command.
+    assert coordinator._may_be_method3 is True
+
+
+async def test_a_turn_on_during_the_return_to_automatic_keeps_the_beats(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, fake, _ = await _charging_entry(hass, clock, monkeypatch)
+    task = coordinator._heartbeat_task
+    turn_off = hass.async_create_task(coordinator.async_set_control(False))
+    await asyncio.sleep(0)
+    assert coordinator.control_enabled is False
+
+    await coordinator.async_set_control(True)
+    await _bounded(turn_off)
+
+    assert coordinator.control_enabled is True
+    assert coordinator._heartbeat_task is task
+    assert task is not None and not task.done()
+    assert fake.method() == 0
+    await coordinator.async_set_control(False)
+
+
+@pytest.mark.parametrize("phase", [0, 1])
+async def test_a_poll_between_the_settle_reads_neither_confirms_nor_fails_the_setpoint(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch, phase: int
+) -> None:
+    coordinator: EcoFlowLocalModbusCoordinator | None = None
+    sleeps = [0]
+    published: list[Any] = []
+
+    async def poll_every_other_wait() -> None:
+        assert coordinator is not None
+        if not any(entry[0] == SETPOINT for entry in fake.log):
+            return
+        sleeps[0] += 1
+        if sleeps[0] % 2 == phase:
+            await coordinator.async_refresh()
+            published.append(coordinator.data.get("battery_setpoint_w"))
+
+    coordinator, stub, fake = await _battery_rig(
+        hass, clock, monkeypatch, on_sleep=poll_every_other_wait
+    )
+    before = coordinator.data.get("battery_setpoint_w")
+    await coordinator.async_set_battery_mode("charge")
+
+    assert [(o, v) for o, v, _ in fake.log] == [
+        (COMMAND, 0),
+        (SETPOINT, 500),
+        (COMMAND, 0x30),
+    ]
+    assert published
+    # 500 read with its words swapped is 32768000.
+    assert set(published) <= {before, 500}
+    assert coordinator.data["battery_mode"] == "charge"
+
+
+async def test_control_turned_off_while_the_battery_command_confirms_ends_in_automatic(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator: EcoFlowLocalModbusCoordinator | None = None
+    turn_off: list[asyncio.Task[None]] = []
+
+    async def off_after_the_battery_command() -> None:
+        assert coordinator is not None
+        if any(entry[:2] == (COMMAND, 0x30) for entry in fake.log) and not turn_off:
+            turn_off.append(
+                hass.async_create_task(coordinator.async_set_control(False))
+            )
+
+    coordinator, stub, fake = await _battery_rig(
+        hass, clock, monkeypatch, on_sleep=off_after_the_battery_command
+    )
+    with pytest.raises(HomeAssistantError) as err:
+        await coordinator.async_set_battery_mode("charge")
+    await _bounded(turn_off[0])
+
+    assert err.value.translation_key == "battery_control_needs_modbus_control"
+    writes = [(o, v) for o, v, _ in fake.log]
+    assert writes[writes.index((COMMAND, 0x30)) + 1 :] == [(COMMAND, 0)]
+    assert fake.command == 0
+    assert coordinator._may_be_method3 is False
+    assert coordinator.control_enabled is False
+
+
+async def test_a_setpoint_after_a_lapse_ends_the_battery_command_first(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Bit 11 clear, control method still 3, and this run never sent 0x30.
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch, method=3)
+    fake.held = False
+    await coordinator.async_set_battery_setpoint(800)
+
+    assert _setpoint_writes_under_live_method(fake) == []
+    assert [(o, v) for o, v, _ in fake.log] == [(COMMAND, 0), (SETPOINT, 800)]
+
+
+async def test_turning_off_a_control_that_never_ran_writes_nothing(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch, method=3)
+    fake.held = False
+    coordinator.control_enabled = False
+    await coordinator.async_refresh()
+    await coordinator.async_set_control(False)
+    assert fake.log == []
+
+
+async def test_charge_after_a_restart_uses_the_setpoint_the_device_holds(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    fake.setpoint = -1200
+    await coordinator.async_refresh()
+    await coordinator.async_set_battery_mode("charge")
+    assert (SETPOINT, 1200) in [(o, v) for o, v, _ in fake.log]
+
+
+async def test_after_control_ended_a_foreign_battery_command_is_left_alone(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    coordinator.control_enabled = False
+    await coordinator.async_set_control(True)
+    await coordinator.async_set_control(False)
+    # Another Modbus master puts the unit into battery control.
+    fake.command, fake.command_at = 0x30, clock.now - 10
+    await coordinator.async_refresh()
+    await coordinator.async_set_control(False)
+    assert fake.log == []
+
+
+async def test_a_setpoint_above_the_cap_is_not_used_by_charge(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator, stub, fake = await _battery_rig(hass, clock, monkeypatch)
+    fake.setpoint = 8000
+    await coordinator.async_refresh()
+    await coordinator.async_set_battery_mode("charge")
+    assert (SETPOINT, 500) in [(o, v) for o, v, _ in fake.log]
+
+
+async def test_a_poll_read_during_the_settle_is_dropped_even_if_handled_after_it(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator: EcoFlowLocalModbusCoordinator | None = None
+    release = asyncio.Event()
+    polls: list[asyncio.Task[None]] = []
+
+    async def held_fault_read() -> dict[int, bytes]:
+        await release.wait()
+        return {}
+
+    async def poll_once_while_settling() -> None:
+        assert coordinator is not None
+        if any(entry[0] == SETPOINT for entry in fake.log) and not polls:
+            polls.append(hass.async_create_task(coordinator.async_refresh()))
+            for _ in range(5):
+                await asyncio.sleep(0)
+
+    coordinator, stub, fake = await _battery_rig(
+        hass, clock, monkeypatch, on_sleep=poll_once_while_settling
+    )
+    before = coordinator.data.get("battery_setpoint_w")
+    # A reported fault makes the poll wait for the event list after its read.
+    stub.queue(*[_frame(DAY, fault_count=1)] * 2)
+    stub._script = stub._script[-2:]
+    monkeypatch.setattr(coordinator, "_read_fault_events", held_fault_read)
+    await coordinator.async_set_battery_setpoint(100)
+    release.set()
+    await _bounded(polls[0])
+
+    # +100 read with its words swapped is 6553600.
+    assert coordinator.data.get("battery_setpoint_w") in (before, 100)
+    assert coordinator._battery_setpoint_w == 100
+
+
+async def test_control_off_and_on_again_mid_sequence_aborts_the_mode_call(
+    hass: HomeAssistant, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    coordinator: EcoFlowLocalModbusCoordinator | None = None
+    toggles: list[asyncio.Task[None]] = []
+    off_at: list[int] = []
+
+    async def off_and_on_after_the_setpoint() -> None:
+        assert coordinator is not None
+        if any(entry[0] == SETPOINT for entry in fake.log) and not toggles:
+            off_at.append(len(fake.log))
+            toggles.append(hass.async_create_task(coordinator.async_set_control(False)))
+            toggles.append(hass.async_create_task(coordinator.async_set_control(True)))
+            for _ in range(5):
+                await asyncio.sleep(0)
+            assert coordinator.control_enabled is True
+
+    coordinator, stub, fake = await _battery_rig(
+        hass, clock, monkeypatch, on_sleep=off_and_on_after_the_setpoint
+    )
+    coordinator.control_enabled = False
+    await coordinator.async_set_control(True)
+    with pytest.raises(HomeAssistantError):
+        await coordinator.async_set_battery_mode("charge")
+    for task in toggles:
+        await _bounded(task)
+
+    assert (COMMAND, 0x30) not in [(o, v) for o, v, _ in fake.log[off_at[0] :]]
+    assert fake.command == 0
+    await coordinator.async_set_control(False)

@@ -1,6 +1,6 @@
 # Connecting a PowerOcean locally over Modbus
 
-This guide covers the Local (Modbus/TCP) connection for a three-phase PowerOcean. It talks to the inverter directly over your home network. No EcoFlow account is involved and nothing goes through the cloud. It shows the inverter's values and can change two settings, Backup Reserve and Indicator Brightness. A switch called Modbus Control takes control of the inverter over Modbus. While it is on, the EcoFlow app is locked.
+This guide covers the Local (Modbus/TCP) connection for a three-phase PowerOcean. It talks to the inverter directly over your home network. No EcoFlow account is involved and nothing goes through the cloud. It shows the inverter's values and can change two settings, Backup Reserve and Indicator Brightness. It can also run the battery (see [Battery control](#battery-control)). A switch called Modbus Control takes control of the inverter over Modbus. While it is on, the EcoFlow app is locked.
 
 I built it for my own PowerOcean, the only unit it has been measured on. Treat it as an option for owners who want a connection that does not depend on EcoFlow's servers, not as a replacement for the account sign-in.
 
@@ -15,7 +15,7 @@ I built it for my own PowerOcean, the only unit it has been measured on. Treat i
 
 Thanks to [@jensfr1](https://github.com/jensfr1), who already helped with the Ocean 2 support. For this local connection he showed how EcoFlow enables Modbus on the inverter and made the Modbus protocol description available.
 
-The integration writes only these: the keep-alive signal behind the Modbus Control switch, Backup Reserve and Indicator Brightness. See [Control from Home Assistant](#control-from-home-assistant). Reading and writing both worked on my unit once support had enabled Modbus.
+The integration writes only these: the keep-alive signal behind the Modbus Control switch, Backup Reserve, Indicator Brightness, and the battery commands behind Battery Mode and Battery Power Setpoint. See [Control from Home Assistant](#control-from-home-assistant) and [Battery control](#battery-control). Reading and writing both worked on my unit once support had enabled Modbus.
 
 ## Setting it up
 
@@ -35,7 +35,7 @@ The sensor System Alerts reads a second status word. It lists what the inverter 
 
 The diagnostic sensor Active Fault Codes lists the fault codes the inverter reports in decimal, or `none`. Its `faults` attribute adds a name for each code where one is known, in your Home Assistant language where a translation exists and in English otherwise. The integration reads the list only while the fault count is above zero, so an inverter without a fault is not asked for it. The names follow the list that @MaxGrmm published in his EF-PowerOcean-TcpModbus integration. I could not check them against EcoFlow's own material, so a name can be missing or off. The code itself is what the inverter reports.
 
-After five failed reads in a row the entry goes unavailable, and these entities with it. An automation should treat unavailable as "unknown", not as "grid is back". Four of the sensors are disabled by default: Total Battery Capacity, Battery Packs Online (EMS), EMS Backup Ratio and Feed Power Limit. Enable the ones you use in the entity settings. The Backup Reserve number shows the same value as EMS Backup Ratio and is enabled. The four entities under [Control from Home Assistant](#control-from-home-assistant) come on top.
+After five failed reads in a row the entry goes unavailable, and these entities with it. An automation should treat unavailable as "unknown", not as "grid is back". Four of the sensors are disabled by default: Total Battery Capacity, Battery Packs Online (EMS), EMS Backup Ratio and Feed Power Limit. Enable the ones you use in the entity settings. The Backup Reserve number shows the same value as EMS Backup Ratio and is enabled. The six entities under [Control from Home Assistant](#control-from-home-assistant) come on top.
 
 The values refresh every 2 seconds. The inverter updates its power readings about once a second, so this stays close to its own pace. On Home Assistant 2026.9 or newer the connection stays open while the entry is loaded. On older versions each refresh opens a short connection and closes it again, so the inverter's single slot is free almost all of the time.
 
@@ -45,13 +45,84 @@ I compared these values with the same inverter's account connection over about 1
 
 ## Control from Home Assistant
 
-A Local entry has four entities for this: the switch **Modbus Control**, the numbers **Backup Reserve** and **Indicator Brightness**, and the diagnostic binary sensor **Modbus Control Active**.
+A Local entry has six entities for this: the switch **Modbus Control**, the numbers **Backup Reserve**, **Indicator Brightness** and **Battery Power Setpoint**, the select **Battery Mode**, and the diagnostic binary sensor **Modbus Control Active**. Battery Mode and Battery Power Setpoint are described under [Battery control](#battery-control).
 
 **Modbus Control** takes control of the inverter over Modbus. It is always off after a restart. While it is on, the EcoFlow app is locked: it shows "control via Modbus" and some functions are not available. After you switch it off, the inverter hands control back after about a minute, and the app stays locked until then. On my unit the lock was gone between 30 and 65 seconds after Home Assistant stopped sending the keep-alive signal.
 
 **Backup Reserve** and **Indicator Brightness** each take a value from 0 to 100. They work with Modbus Control off. After each change the integration reads the value back from the inverter, and a change the inverter does not take shows as an error. The value you write stays after Modbus Control ends. Switching it off does not undo it. The backup reserve reading and the Backup Reserve number show the same value from the inverter. With Modbus Control off, the EcoFlow app shows the Backup Reserve you set here. I checked that on my own unit. While Modbus Control is on, the app hides it.
 
 **Modbus Control Active** shows whether the inverter itself reports that Modbus control is on. It can stay on for up to about a minute after you switch Modbus Control off. That is the time the app stays locked.
+
+## Battery control
+
+With Modbus Control on, a Local entry can run the battery. Two entities do this: the select **Battery Mode** and the number **Battery Power Setpoint**. Nothing is written while Modbus Control is off, and a change is refused with the message "Battery control needs the Modbus Control switch to be on."
+
+**Battery Mode** has four options:
+
+- **Automatic.** The PowerOcean decides, as it does without Modbus control.
+- **Hold.** The battery stays at rest. It neither charges nor discharges.
+- **Charge.** The battery charges at the power of Battery Power Setpoint.
+- **Discharge.** The battery discharges at the power of Battery Power Setpoint.
+
+**Battery Power Setpoint** goes from -5000 to 5000 W. A positive value charges and a negative value discharges. The box steps by 50 W, and any whole watt from 50 W is accepted. A value closer to zero than 50 W is refused, so use Hold or Automatic to stop. Charge and Discharge use the size of the setpoint, whichever sign it has. If the number is below 50 W or has not been set, they use 500 W. After a restart the number starts from the value the inverter holds when that is at least 50 W. While Battery Mode is Hold, the number shows -1 W.
+
+In Hold, Charge or Discharge, setting the number switches Battery Mode at once: to Charge for a positive value, to Discharge for a negative one. In Automatic the number only stores the value, and nothing starts until you choose Charge or Discharge.
+
+### From an automation
+
+The examples use the placeholders `select.<powerocean>_battery_mode`, `number.<powerocean>_battery_power_setpoint` and `switch.<powerocean>_modbus_control`. Replace each one with your own entity id, angle brackets included. Entity ids depend on the language of your Home Assistant and on the device name, so copy them from the entity's settings page (Settings > Devices & Services, then the PowerOcean). Turn Modbus Control on before these calls, for example with `switch.turn_on`.
+
+```yaml
+automation:
+  - alias: "Charge the battery at 1000 W"
+    trigger:
+      - platform: time
+        at: "02:00:00"
+    action:
+      - service: number.set_value
+        target:
+          entity_id: number.<powerocean>_battery_power_setpoint
+        data:
+          value: 1000
+      - service: select.select_option
+        target:
+          entity_id: select.<powerocean>_battery_mode
+        data:
+          option: charge
+
+  - alias: "Hold the battery"
+    trigger:
+      - platform: time
+        at: "06:00:00"
+    action:
+      - service: select.select_option
+        target:
+          entity_id: select.<powerocean>_battery_mode
+        data:
+          option: hold
+
+  - alias: "Give the battery back to the inverter"
+    trigger:
+      - platform: time
+        at: "08:00:00"
+    action:
+      - service: select.select_option
+        target:
+          entity_id: select.<powerocean>_battery_mode
+        data:
+          option: automatic
+```
+
+### What to expect
+
+- **A short pass through Automatic.** Every change goes through Automatic for a few seconds before the new mode or power takes hold. A command the inverter does not confirm shows the error "The battery command was not confirmed by the device. Check the connection and try again."
+- **Backup Reserve still applies.** While the battery charge is at or below Backup Reserve, the inverter does not discharge, whatever you ask. The select keeps showing Discharge. Its attribute `discharge_blocked_by_reserve` is true while the charge is at or below the reserve and a discharge is asked for.
+- **The return to Automatic.** The inverter returns to Automatic when you switch Modbus Control off, when the integration is unloaded and when Home Assistant stops. Home Assistant sends the keep-alive signal every 15 seconds. If it stops, the inverter returns to Automatic by itself about a minute after the last one.
+- **Battery Mode can be unknown.** It shows unknown until the inverter has reported its state.
+
+### What has been measured
+
+I measured only Hold, and Charge and Discharge at 500 W, on one three-phase PowerOcean (HJ31, firmware V5.1.37.13). Other power values and other units are untested. Start with small values and watch the battery power sensor before you rely on it.
 
 ## Sharing the inverter with another Modbus integration
 
@@ -61,7 +132,7 @@ The inverter serves one Modbus client at a time, and a second client gets no ans
 
 - **Per-pack charge levels.** The inverter reports the level the app shows, while the account connection reports the battery's own level, up to 5 points higher at a low charge. They are not the same quantity, so they are not shown.
 - **Grid phase voltage and current, and the working mode.** They read zero on my unit, so the entry does not create them.
-- **Other controls.** Power setpoints, shutdown and the working mode are not written. EcoFlow's protocol document warns that writing can affect the inverter's internal scheduling.
+- **Other controls.** Shutdown and the working mode are not written. The battery commands under [Battery control](#battery-control) are the only power control. EcoFlow's protocol document warns that writing can affect the inverter's internal scheduling.
 - **The cloud entry's other sensors.** The entities only the account connection provides are unavailable while the entry is Local.
 
 ## Switching between account and Local

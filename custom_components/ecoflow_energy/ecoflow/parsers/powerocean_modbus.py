@@ -21,9 +21,11 @@ from typing import Any
 
 from ..modbus_local import (
     BACKUP_RATIO_OFFSET,
+    BATTERY_SETPOINT_OFFSET,
     BRIGHTNESS_OFFSET,
     decode_ascii,
     decode_f32_ws,
+    decode_i32_ws,
     decode_u16,
     decode_u32_ws,
 )
@@ -42,7 +44,8 @@ POLL_BLOCKS: tuple[tuple[int, int], ...] = (
     # system state 2 (0x0213-0x0214)
     (0x0206, 15),
     (0x0217, 18),  # backup ratio ... battery capacity (0x0227-0x0228)
-    (0x023D, 6),  # battery voltage, battery current, battery temperature
+    # battery setpoint (0x023A), battery voltage, current, temperature
+    (0x023A, 9),
     # frequency, PV1-PV3 voltage, PV1/PV2 current, feed limit (0x0260). The
     # block spans 0x025F, which the protocol marks write-only; the reference
     # device answers the whole block read anyway (checked 2026-10-02).
@@ -63,12 +66,15 @@ FAULT_BLOCKS: tuple[tuple[int, int], ...] = ((FAULT_EVENT_OFFSET, FAULT_EVENT_CO
 
 # Bits of the system status word (0x0211) that are decoded. Bit 0: 0 grid
 # connected, 1 off-grid. Bit 1: 0 normal, 1 abnormal. Bit 11: the device
-# reports that Modbus control is active. Bit 12: 0 battery management system
+# reports that Modbus control is active. Bits 7-10: the control method the
+# device runs (0 automatic, 3 battery control). Bit 12: 0 battery management system
 # not connected, 1 connected. Bits 4-6 are not decoded as a mode: the device
 # shows an undocumented value 7 there while Backup Reserve is above 0, and that
 # is not an error.
 _OFF_GRID_BIT = 0
 _SYSTEM_ABNORMAL_BIT = 1
+_CONTROL_METHOD_SHIFT = 7
+_CONTROL_METHOD_MASK = 0xF
 _CONTROL_ACTIVE_BIT = 11
 _BMS_CONNECTED_BIT = 12
 
@@ -162,6 +168,9 @@ _REGISTERS: tuple[_Register, ...] = (
     _Register("ems_total_battery_capacity_wh", 0x0227, 2, decode_u32_ws),
     # Whole-system battery figures. The current is positive while charging, and
     # is not the cloud `bp_current_a`, which is a single pack.
+    # The setpoint is read word-swapped like every other register, although
+    # the unit takes it high word first on a write.
+    _Register("battery_setpoint_w", BATTERY_SETPOINT_OFFSET, 2, decode_i32_ws),
     _Register("batt_voltage_v", 0x023D, 2, decode_f32_ws),
     _Register("batt_current_a", 0x023F, 2, decode_f32_ws),
     _Register("batt_temp_c", 0x0241, 2, decode_f32_ws),
@@ -229,6 +238,9 @@ def parse_registers(blocks: Mapping[int, bytes]) -> dict[str, Any]:
         result["local_off_grid"] = bool((status >> _OFF_GRID_BIT) & 1)
         result["local_system_abnormal"] = bool((status >> _SYSTEM_ABNORMAL_BIT) & 1)
         result["modbus_control_active"] = bool((status >> _CONTROL_ACTIVE_BIT) & 1)
+        result["control_method"] = (
+            status >> _CONTROL_METHOD_SHIFT
+        ) & _CONTROL_METHOD_MASK
         result["local_bms_connected"] = bool((status >> _BMS_CONNECTED_BIT) & 1)
 
     # The fault events: every non-zero word in register order, kept as read. No

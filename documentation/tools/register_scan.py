@@ -53,7 +53,7 @@ SERIAL_REGISTER_COUNT = 8
 POLL_BLOCKS = (
     (0x0206, 15),
     (0x0217, 18),
-    (0x023D, 6),
+    (0x023A, 9),
     (0x0251, 17),
     (0x0800, 1),
     (0x0820, 1),
@@ -78,7 +78,7 @@ _VOLTAGE = (0, 1000)
 _CURRENT = (-1000, 1000)
 
 # (key, offset, register count, decoder, lifetime counter, plausible range).
-# Decoders: u16, u32_ws and f32_ws (two registers, low word first).
+# Decoders: u16, u32_ws, i32_ws and f32_ws (two registers, low word first).
 REGISTERS = (
     ("home_w", 0x0206, 2, "f32_ws", False, _POWER_W),
     ("grid_w", 0x0208, 2, "f32_ws", False, _POWER_W),
@@ -90,6 +90,7 @@ REGISTERS = (
     ("ems_backup_ratio_pct", 0x0217, 1, "u16", False, _PERCENT),
     ("local_indicator_brightness_pct", 0x021C, 1, "u16", False, _PERCENT),
     ("ems_total_battery_capacity_wh", 0x0227, 2, "u32_ws", False, (0, 1_000_000)),
+    ("battery_setpoint_w", 0x023A, 2, "i32_ws", False, _POWER_W),
     ("batt_voltage_v", 0x023D, 2, "f32_ws", False, _VOLTAGE),
     ("batt_current_a", 0x023F, 2, "f32_ws", False, _CURRENT),
     ("batt_temp_c", 0x0241, 2, "f32_ws", False, (-50, 100)),
@@ -114,7 +115,7 @@ BLOCK_NAMES = {
     0x000B: "firmware package",
     0x0206: "load, grid, solar, battery power, SoC, system status",
     0x0217: "backup ratio ... battery capacity",
-    0x023D: "battery voltage, current, temperature",
+    0x023A: "battery setpoint, voltage, current, temperature",
     0x0251: "frequency, PV voltage and current, feed limit",
     0x0800: "fault count",
     0x0801: "fault events",
@@ -131,11 +132,21 @@ def decode_u32_ws(words: list[int]) -> int:
     return (words[1] << 16) | words[0]
 
 
+def decode_i32_ws(words: list[int]) -> int:
+    value = decode_u32_ws(words)
+    return value - (1 << 32) if value & 0x8000_0000 else value
+
+
 def decode_f32_ws(words: list[int]) -> float:
     return float(struct.unpack(">f", struct.pack(">HH", words[1], words[0]))[0])
 
 
-_DECODERS = {"u16": decode_u16, "u32_ws": decode_u32_ws, "f32_ws": decode_f32_ws}
+_DECODERS = {
+    "u16": decode_u16,
+    "u32_ws": decode_u32_ws,
+    "i32_ws": decode_i32_ws,
+    "f32_ws": decode_f32_ws,
+}
 
 # ---------------------------------------------------------------------------
 # Modbus link. Read-only by construction.

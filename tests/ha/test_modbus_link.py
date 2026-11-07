@@ -26,6 +26,8 @@ from custom_components.ecoflow_energy.coordinator.modbus_link import (
 )
 from custom_components.ecoflow_energy.ecoflow.modbus_local import (
     BACKUP_RATIO_OFFSET,
+    BATTERY_SETPOINT_OFFSET,
+    CONTROL_COMMAND_OFFSET,
     HEARTBEAT_OFFSET,
     MODBUS_BASE_ADDRESS,
     ModbusConnectError,
@@ -35,6 +37,7 @@ from custom_components.ecoflow_energy.ecoflow.modbus_local import (
     ModbusProtocolError,
     ModbusTimeoutError,
     ModbusTransport,
+    ModbusWriteRefused,
     decode_f32_ws,
     decode_u16,
 )
@@ -69,7 +72,7 @@ class FakeUnit:
 
     def __init__(self, registers: dict[int, int] | None = None) -> None:
         self.registers = registers or {}
-        self.calls: list[tuple[str, int, int]] = []
+        self.calls: list[tuple[str, int, int | list[int]]] = []
         # Call index (over reads and writes together) -> error to raise.
         self.errors: dict[int, Exception] = {}
         self.delay = 0.0
@@ -98,6 +101,11 @@ class FakeUnit:
     async def write_register(self, address: int, value: int) -> None:
         index = len(self.calls)
         self.calls.append(("write", address, value))
+        await self._step(index)
+
+    async def write_registers(self, address: int, values: list[int]) -> None:
+        index = len(self.calls)
+        self.calls.append(("write32", address, list(values)))
         await self._step(index)
 
     async def disconnect(self) -> None:
@@ -204,6 +212,60 @@ async def test_a_value_outside_sixteen_bits_is_refused_before_the_unit_is_called
 
 
 @pytest.mark.parametrize(
+    ("offset", "value", "words"),
+    [
+        (BATTERY_SETPOINT_OFFSET, 500, [0x0000, 0x01F4]),
+        (BATTERY_SETPOINT_OFFSET, -500, [0xFFFF, 0xFE0C]),
+        (CONTROL_COMMAND_OFFSET, 0x30, [0x0000, 0x0030]),
+    ],
+)
+async def test_a_32_bit_write_sends_the_high_word_first_at_the_wire_address(
+    lib: SimpleNamespace, offset: int, value: int, words: list[int]
+) -> None:
+    unit = FakeUnit()
+
+    await SharedModbusLink(unit).write_registers32(offset, value)
+
+    assert unit.calls == [("write32", MODBUS_BASE_ADDRESS + offset, words)]
+
+
+async def test_a_32_bit_write_honours_a_cap_above_the_default(
+    lib: SimpleNamespace,
+) -> None:
+    unit = FakeUnit()
+
+    await SharedModbusLink(unit).write_registers32(
+        BATTERY_SETPOINT_OFFSET, 650, cap=700
+    )
+
+    assert unit.calls == [
+        ("write32", MODBUS_BASE_ADDRESS + BATTERY_SETPOINT_OFFSET, [0x0000, 0x028A])
+    ]
+
+
+@pytest.mark.parametrize(
+    ("offset", "value", "cap"),
+    [
+        (BATTERY_SETPOINT_OFFSET, 601, 600),
+        (BATTERY_SETPOINT_OFFSET, -601, 600),
+        (BATTERY_SETPOINT_OFFSET, 0, 600),
+        (BATTERY_SETPOINT_OFFSET, 400, 300),
+        (CONTROL_COMMAND_OFFSET, 0x01, 600),
+        (HEARTBEAT_OFFSET, 1, 600),
+    ],
+)
+async def test_a_refused_32_bit_write_sends_no_frame(
+    lib: SimpleNamespace, offset: int, value: int, cap: int
+) -> None:
+    unit = FakeUnit()
+
+    with pytest.raises(ModbusWriteRefused):
+        await SharedModbusLink(unit).write_registers32(offset, value, cap)
+
+    assert unit.calls == []
+
+
+@pytest.mark.parametrize(
     ("raised", "expected"),
     [
         (LibConnection("refused"), ModbusConnectError),
@@ -212,7 +274,7 @@ async def test_a_value_outside_sixteen_bits_is_refused_before_the_unit_is_called
         (LibException(2), ModbusExceptionResponse),
     ],
 )
-@pytest.mark.parametrize("operation", ["read", "write"])
+@pytest.mark.parametrize("operation", ["read", "write", "write32"])
 async def test_each_library_error_maps_onto_the_local_family(
     lib: SimpleNamespace,
     raised: Exception,
@@ -226,8 +288,10 @@ async def test_each_library_error_maps_onto_the_local_family(
     with pytest.raises(ModbusLocalError) as caught:
         if operation == "read":
             await link.read_blocks([(0x0206, 2)])
-        else:
+        elif operation == "write":
             await link.write_register(HEARTBEAT_OFFSET, 1)
+        else:
+            await link.write_registers32(BATTERY_SETPOINT_OFFSET, 500)
 
     assert type(caught.value) is expected
     assert caught.value.__cause__ is raised

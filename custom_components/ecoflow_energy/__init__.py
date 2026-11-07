@@ -65,14 +65,15 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
 ]
 
-# A local Modbus entry: the readings, plus the one control switch, the two
-# writable settings and the diagnostic that shows whether the unit accepted
-# control. Nothing else of the cloud platform list applies to it.
+# A local Modbus entry: the readings, plus the control switch, the writable
+# settings, the battery mode and the diagnostic that shows whether the unit
+# accepted control. Nothing else of the cloud platform list applies to it.
 LOCAL_PLATFORMS: list[Platform] = [
     Platform.SENSOR,
     Platform.SWITCH,
     Platform.NUMBER,
     Platform.BINARY_SENSOR,
+    Platform.SELECT,
 ]
 
 type EcoFlowConfigEntry = ConfigEntry
@@ -517,6 +518,14 @@ async def _async_setup_local_entry(
     }
     await hass.config_entries.async_forward_entry_setups(entry, LOCAL_PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+
+    # A stop does not unload the entry: the battery goes back to Automatic here.
+    async def _async_end_control(_event: Event) -> None:
+        await coordinator.async_set_control(False)
+
+    entry.async_on_unload(
+        hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_end_control)
+    )
     return True
 
 
@@ -823,10 +832,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: EcoFlowConfigEntry) -> 
     # other mode's platform list names platforms this entry never loaded
     # (Home Assistant then fails the unload and the reload stops there).
     running = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
-    is_local = any(
-        isinstance(coordinator, EcoFlowLocalModbusCoordinator)
-        for coordinator in running.values()
-    )
+    is_local = False
+    for coordinator in running.values():
+        if isinstance(coordinator, EcoFlowLocalModbusCoordinator):
+            is_local = True
+            # Before anything else goes: the unload callbacks close the shared
+            # connection, and the battery has to reach Automatic through it.
+            await coordinator.async_set_control(False)
     unload_ok = await hass.config_entries.async_unload_platforms(
         entry, LOCAL_PLATFORMS if is_local else PLATFORMS
     )

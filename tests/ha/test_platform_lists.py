@@ -36,7 +36,13 @@ CLOUD = [
     Platform.CLIMATE,
     Platform.BUTTON,
 ]
-LOCAL = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.BINARY_SENSOR]
+LOCAL = [
+    Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.NUMBER,
+    Platform.BINARY_SENSOR,
+    Platform.SELECT,
+]
 
 
 def test_the_lists_hold_exactly_these_platforms() -> None:

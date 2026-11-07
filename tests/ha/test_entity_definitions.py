@@ -100,7 +100,7 @@ def _local_sensor_defs() -> list[Any]:
 
 
 def _local_control_defs() -> list[list[Any]]:
-    """Mirror the switch, number and binary sensor platforms' Local branch.
+    """Mirror the switch, number, binary sensor and select platforms' Local branch.
 
     Each of those platforms hands a Local entry exactly one list, named inline
     in ``async_setup_entry`` and returned by no device-type dispatcher. The
@@ -112,6 +112,7 @@ def _local_control_defs() -> list[list[Any]]:
         C.POWEROCEANLOCALONLY_SWITCHES,
         C.POWEROCEANLOCALONLY_NUMBERS,
         C.POWEROCEANLOCALONLY_BINARY_SENSORS,
+        C.POWEROCEANLOCALONLY_SELECTS,
     ]
 
 
@@ -120,6 +121,7 @@ LOCAL_CONTROL_LISTS: dict[str, str] = {
     "switch.py": "POWEROCEANLOCALONLY_SWITCHES",
     "number.py": "POWEROCEANLOCALONLY_NUMBERS",
     "binary_sensor.py": "POWEROCEANLOCALONLY_BINARY_SENSORS",
+    "select.py": "POWEROCEANLOCALONLY_SELECTS",
 }
 
 
@@ -277,7 +279,7 @@ def test_sensor_platform_local_branch_is_the_only_one() -> None:
 
 
 def test_control_platform_local_branches_are_the_only_ones() -> None:
-    """`_local_control_defs` mirrors three platforms, each naming one Local list.
+    """`_local_control_defs` mirrors four platforms, each naming one Local list.
 
     switch.py, number.py and binary_sensor.py pick the Local entry's
     definitions inline; this file mirrors those picks. A platform that starts
@@ -364,6 +366,12 @@ def test_every_device_type_has_sensors(constant: str) -> None:
 # nouns, so the German forms are not the English ones with other words).
 LOCAL_CONTROL_NAMES = {
     "modbus_control": ("switch", "Modbus Control", "Modbus-Steuerung"),
+    "local_battery_setpoint_w": (
+        "number",
+        "Battery Power Setpoint",
+        "Sollwert Batterieleistung",
+    ),
+    "local_battery_mode": ("select", "Battery Mode", "Batteriemodus"),
     "local_backup_reserve": ("number", "Backup Reserve", "Backup-Reserve"),
     "local_indicator_brightness": (
         "number",
@@ -401,6 +409,7 @@ def test_the_local_control_names_are_title_case_in_every_file() -> None:
             C.POWEROCEANLOCALONLY_SWITCHES,
             C.POWEROCEANLOCALONLY_NUMBERS,
             C.POWEROCEANLOCALONLY_BINARY_SENSORS,
+            C.POWEROCEANLOCALONLY_SELECTS,
         )
         for definition in block
     }

@@ -12,7 +12,7 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -48,6 +48,7 @@ from custom_components.ecoflow_energy.ecoflow.modbus_local import (
 from custom_components.ecoflow_energy.fault_codes import async_load_fault_names
 from custom_components.ecoflow_energy.number import EcoFlowLocalNumber, EcoFlowNumber
 from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
+from custom_components.ecoflow_energy.select import async_setup_entry as select_setup
 from custom_components.ecoflow_energy.switch import async_setup_entry as switch_setup
 
 from .conftest import add_entities_collector
@@ -71,7 +72,9 @@ CONTROL_KEYS = (
 # The three binary sensors decoded from bits 0, 1 and 12 of the same status word.
 STATUS_KEYS = ("local_off_grid", "local_system_abnormal", "local_bms_connected")
 # Everything a local entry creates beyond the sensors, and a cloud entry never.
-LOCAL_ONLY_KEYS = CONTROL_KEYS + STATUS_KEYS
+# The battery control: a select and a number, both behind the control switch.
+BATTERY_KEYS = ("local_battery_mode", "local_battery_setpoint_w")
+LOCAL_ONLY_KEYS = CONTROL_KEYS + STATUS_KEYS + BATTERY_KEYS
 # Bit 11 of the system status word.
 CONTROL_ACTIVE_STATUS = 1 << 11
 # Bits 4-6 set (the device shows 7 there while Backup Reserve is above 0). Not a
@@ -176,12 +179,12 @@ async def _call(
     )
 
 
-async def test_a_cloud_entry_gets_none_of_the_seven_and_a_local_entry_gets_them(
+async def test_a_cloud_entry_gets_none_of_the_local_ones_and_a_local_entry_gets_them(
     hass: HomeAssistant,
 ) -> None:
-    """The seven entities exist for a Local coordinator and for no cloud one.
+    """The nine entities exist for a Local coordinator and for no cloud one.
 
-    Three of the seven are the Off-Grid, System Abnormal and Battery Connection
+    Three of the nine are the Off-Grid, System Abnormal and Battery Connection
     binary sensors: the cloud PowerOcean builds its own binary sensors from the
     same platform setup, and none of these three is among them.
     """
@@ -193,7 +196,12 @@ async def test_a_cloud_entry_gets_none_of_the_seven_and_a_local_entry_gets_them(
     }
 
     created: list[Any] = []
-    for platform_setup in (switch_setup, number_setup, binary_sensor_setup):
+    for platform_setup in (
+        switch_setup,
+        number_setup,
+        binary_sensor_setup,
+        select_setup,
+    ):
         await platform_setup(hass, cloud_entry, add_entities_collector(created))
     cloud_ids = {entity.unique_id for entity in created}
     cloud_sn = POWEROCEAN_DEVICE["sn"]
@@ -201,10 +209,15 @@ async def test_a_cloud_entry_gets_none_of_the_seven_and_a_local_entry_gets_them(
     assert f"{cloud_sn}_backup_reserve" in cloud_ids
     assert not {f"{cloud_sn}_{key}" for key in LOCAL_ONLY_KEYS} & cloud_ids
 
-    # Control: the same three platform setups hand a Local coordinator all seven.
+    # Control: the same platform setups hand a Local coordinator all nine.
     entry, _stub, _coordinator = await _setup_local(hass)
     local: list[Any] = []
-    for platform_setup in (switch_setup, number_setup, binary_sensor_setup):
+    for platform_setup in (
+        switch_setup,
+        number_setup,
+        binary_sensor_setup,
+        select_setup,
+    ):
         await platform_setup(hass, entry, add_entities_collector(local))
     assert {entity.unique_id for entity in local} == {
         f"{SERIAL}_{key}" for key in LOCAL_ONLY_KEYS
@@ -252,6 +265,7 @@ async def test_a_local_entry_creates_its_own_plus_the_shared_sensors(
         "switch",
         "number",
         "binary_sensor",
+        "select",
     }
 
     by_key = {item.unique_id.removeprefix(f"{SERIAL}_"): item for item in registered}
@@ -283,6 +297,10 @@ async def test_a_local_entry_creates_its_own_plus_the_shared_sensors(
     assert by_key["ems_feed_power_limit_w"].domain == "sensor"
     assert by_key["local_indicator_brightness"].entity_category == "config"
     assert by_key["local_backup_reserve"].entity_category is None
+    assert by_key["local_battery_mode"].domain == "select"
+    assert by_key["local_battery_mode"].entity_category is None
+    assert by_key["local_battery_setpoint_w"].domain == "number"
+    assert by_key["local_battery_setpoint_w"].entity_category is None
     # The cloud number "Backup Reserve" slugs to `..._backup_reserve`; the two
     # local numbers register apart from it, so a cloud entry reconfigured to
     # Local does not get its new number as `..._backup_reserve_2`.
@@ -749,3 +767,187 @@ async def test_fault_names_follow_the_home_assistant_language_with_english_fallb
     assert 9999 not in names
     # Every one of the 16 codes is named in every language.
     assert len(names) == 16
+
+
+async def _publish(
+    coordinator: EcoFlowLocalModbusCoordinator, hass: HomeAssistant, **values: Any
+) -> None:
+    """Hand the entities the polled data with ``values`` set (None removes a key)."""
+    data = dict(coordinator.data)
+    for key, value in values.items():
+        if value is None:
+            data.pop(key, None)
+        else:
+            data[key] = value
+    coordinator.async_set_updated_data(data)
+    await hass.async_block_till_done()
+
+
+@pytest.mark.parametrize("mode", ["automatic", "hold", "charge", "discharge"])
+async def test_the_battery_mode_shows_the_mode_the_coordinator_derived(
+    hass: HomeAssistant, mode: str
+) -> None:
+    """The select renders `battery_mode` as it stands, one option per mode."""
+    entry, _stub, coordinator = await _setup_local(hass)
+    await _publish(coordinator, hass, battery_mode=mode)
+    assert _state(hass, "select", "local_battery_mode") == mode
+    attributes = hass.states.get(
+        _entity_id(hass, "select", "local_battery_mode")
+    ).attributes  # type: ignore[union-attr]
+    assert attributes["options"] == ["automatic", "hold", "charge", "discharge"]
+    await _unload(hass, entry)
+
+
+async def test_the_battery_mode_is_unknown_while_the_mode_is_not_known(
+    hass: HomeAssistant,
+) -> None:
+    """No status word, no mode: the select shows unknown, never a guess."""
+    entry, _stub, coordinator = await _setup_local(hass, _poll_frame(status=None))
+    assert "battery_mode" not in coordinator.data
+    assert _state(hass, "select", "local_battery_mode") == "unknown"
+
+    # Control: once the key is there, the select shows it.
+    await _publish(coordinator, hass, battery_mode="hold")
+    assert _state(hass, "select", "local_battery_mode") == "hold"
+    await _publish(coordinator, hass, battery_mode=None)
+    assert _state(hass, "select", "local_battery_mode") == "unknown"
+    await _unload(hass, entry)
+
+
+@pytest.mark.parametrize("mode", ["automatic", "hold", "charge", "discharge"])
+async def test_selecting_a_battery_mode_calls_the_coordinator_with_it(
+    hass: HomeAssistant, mode: str
+) -> None:
+    entry, _stub, coordinator = await _setup_local(hass)
+    with patch.object(coordinator, "async_set_battery_mode", AsyncMock()) as setter:
+        await _call(hass, "select", "select_option", "local_battery_mode", option=mode)
+    setter.assert_awaited_once_with(mode)
+    await _unload(hass, entry)
+
+
+async def test_the_setpoint_shows_the_polled_value_with_its_range(
+    hass: HomeAssistant,
+) -> None:
+    entry, _stub, coordinator = await _setup_local(hass)
+    await _publish(coordinator, hass, battery_setpoint_w=-1200)
+    assert float(_state(hass, "number", "local_battery_setpoint_w")) == -1200
+    attributes = hass.states.get(
+        _entity_id(hass, "number", "local_battery_setpoint_w")
+    ).attributes  # type: ignore[union-attr]
+    assert attributes["unit_of_measurement"] == "W"
+    assert attributes["mode"] == "box"
+    assert (attributes["min"], attributes["max"], attributes["step"]) == (
+        -5000,
+        5000,
+        50,
+    )
+    await _unload(hass, entry)
+
+
+async def test_setting_the_setpoint_calls_the_coordinator_with_whole_watts(
+    hass: HomeAssistant,
+) -> None:
+    entry, _stub, coordinator = await _setup_local(hass)
+    with patch.object(coordinator, "async_set_battery_setpoint", AsyncMock()) as setter:
+        await _call(
+            hass, "number", "set_value", "local_battery_setpoint_w", value=-1500
+        )
+    setter.assert_awaited_once_with(-1500)
+    assert type(setter.await_args.args[0]) is int  # type: ignore[union-attr]
+    await _unload(hass, entry)
+
+
+async def test_a_fractional_setpoint_is_refused_and_any_whole_watt_is_taken(
+    hass: HomeAssistant,
+) -> None:
+    """1025.5 W never reaches the coordinator; 1025 W, off the 50 W grid, does.
+
+    Home Assistant checks min and max but not the step, so an automation can
+    send any value in range.
+    """
+    entry, _stub, coordinator = await _setup_local(hass)
+    with patch.object(coordinator, "async_set_battery_setpoint", AsyncMock()) as setter:
+        with pytest.raises(HomeAssistantError) as refused:
+            await _call(
+                hass, "number", "set_value", "local_battery_setpoint_w", value=1025.5
+            )
+        assert refused.value.translation_key == "set_value_rejected"
+        setter.assert_not_awaited()
+
+        await _call(hass, "number", "set_value", "local_battery_setpoint_w", value=1025)
+    setter.assert_awaited_once_with(1025)
+    await _unload(hass, entry)
+
+
+@pytest.mark.parametrize(
+    ("domain", "service", "key", "data"),
+    [
+        ("select", "select_option", "local_battery_mode", {"option": "charge"}),
+        ("number", "set_value", "local_battery_setpoint_w", {"value": 1000}),
+    ],
+)
+async def test_a_battery_command_without_modbus_control_is_refused_and_writes_nothing(
+    hass: HomeAssistant, domain: str, service: str, key: str, data: dict[str, Any]
+) -> None:
+    """The coordinator's refusal reaches the caller unchanged."""
+    entry, stub, coordinator = await _setup_local(hass)
+    assert coordinator.control_enabled is False
+    with pytest.raises(HomeAssistantError) as refused:
+        await _call(hass, domain, service, key, **data)
+    assert refused.value.translation_key == "battery_control_needs_modbus_control"
+    assert stub.writes == []
+    await _unload(hass, entry)
+
+
+async def test_a_setpoint_below_50_w_is_refused_by_the_coordinator(
+    hass: HomeAssistant,
+) -> None:
+    """25 W passes the entity range; the coordinator refuses it with its own text."""
+    entry, stub, _coordinator = await _setup_local(hass)
+    with pytest.raises(HomeAssistantError) as refused:
+        await _call(hass, "number", "set_value", "local_battery_setpoint_w", value=25)
+    assert refused.value.translation_key == "battery_setpoint_out_of_range"
+    assert refused.value.translation_placeholders == {"min": "50", "max": "5000"}
+    assert stub.writes == []
+    await _unload(hass, entry)
+
+
+@pytest.mark.parametrize(
+    ("soc", "reserve", "mode", "setpoint", "blocked"),
+    [
+        (20, 20, "discharge", -1000, True),
+        (10, 20, "discharge", -1000, True),
+        (21, 20, "discharge", -1000, False),
+        (20, 20, "charge", 1000, False),
+        (20, 20, "hold", -1, False),
+        # Only an asked-for discharge is blocked: in Automatic or an unknown
+        # mode the register keeps a stale negative value the unit ignores.
+        (20, 20, "automatic", -1000, False),
+        (20, 20, "automatic", 1000, False),
+        (20, 20, None, -1000, False),
+        # Without SoC or reserve nothing is claimed.
+        (None, 20, "discharge", -1000, False),
+        (20, None, "discharge", -1000, False),
+    ],
+)
+async def test_discharge_blocked_by_reserve_compares_soc_with_the_reserve(
+    hass: HomeAssistant,
+    soc: int | None,
+    reserve: int | None,
+    mode: str | None,
+    setpoint: int,
+    blocked: bool,
+) -> None:
+    entry, _stub, coordinator = await _setup_local(hass)
+    await _publish(
+        coordinator,
+        hass,
+        soc_pct=soc,
+        ems_backup_ratio_pct=reserve,
+        battery_mode=mode,
+        battery_setpoint_w=setpoint,
+    )
+    state = hass.states.get(_entity_id(hass, "select", "local_battery_mode"))
+    assert state is not None
+    assert state.attributes["discharge_blocked_by_reserve"] is blocked
+    await _unload(hass, entry)
