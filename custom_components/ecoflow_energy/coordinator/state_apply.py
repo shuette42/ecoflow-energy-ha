@@ -15,6 +15,7 @@ from ..const import (
     DEVICE_TYPE_OCEAN2,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
+    DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
@@ -639,6 +640,28 @@ class StateApplyMixin(_Base):
         if coming_in or (total_unknown and "remain_time_min" in parsed):
             parsed["remain_time_min"] = None
 
+    def _hold_plug_current_while_off(self, parsed: dict[str, Any]) -> None:
+        """Smart Plug: publish 0 A while the relay is off (#682).
+
+        The plug sends only the fields that changed, so a frame without
+        `current_a` never means zero. With the relay off its last reading
+        (0.30 A on the reporter's plug) would stand for good. The plug's last
+        real reading is kept apart: switched on again, a load near that value
+        is not sent again, and the entity would stay at 0 A until the next
+        full status, up to 120 s later.
+        """
+        if "current_a" in parsed:
+            self._plug_last_current_a = parsed["current_a"]
+        switch = parsed.get("switch_state", self._device_data.get("switch_state"))
+        if switch == 0:
+            parsed["current_a"] = 0.0
+        elif switch == 1 and self._plug_last_current_a is not None:
+            # A frame's own reading was recorded above, so this is that
+            # reading or the last one the plug sent. While the relay stays
+            # on it equals the stored value, so it only changes the value
+            # right after an off.
+            parsed["current_a"] = self._plug_last_current_a
+
     def _apply_data(
         self,
         parsed: dict[str, Any],
@@ -748,6 +771,9 @@ class StateApplyMixin(_Base):
                 # of the config entry once that first race was lost.
                 if device is not None and device.sw_version != firmware:
                     registry.async_update_device(device.id, sw_version=firmware)
+
+        if self.device_type == DEVICE_TYPE_SMARTPLUG:
+            self._hold_plug_current_while_off(parsed)
 
         self._note_value_change(parsed)
 

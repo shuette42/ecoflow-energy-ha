@@ -104,6 +104,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _dev_soc_352_seen: bool
     _dev_soc_352_unapplied: int
     _last_app_surplus_sync_ts: float
+    _plug_last_current_a: float | None
     _batt_w_samples: list[tuple[float, float]]
     _batt_state_changed_at: float
     _consecutive_http_failures: int
@@ -166,6 +167,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     ) -> None: ...
 
     def _note_value_change(self, parsed: dict[str, Any]) -> None: ...
+
+    def _hold_plug_current_while_off(self, parsed: dict[str, Any]) -> None: ...
 
     def _enforce_monotonic(self, parsed: dict[str, Any]) -> dict[str, Any]: ...
 

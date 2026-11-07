@@ -297,6 +297,9 @@ class EcoFlowDeviceCoordinator(
         # echo of a value the user has since superseded in HA) would
         # otherwise pull HA back to the obsolete app-side value.
         self._last_ems_param_change_ts: float = 0.0
+        # Smart Plug (#682): the plug's last real current reading, kept apart
+        # from the published value, which reads 0 A while the relay is off.
+        self._plug_last_current_a: float | None = None
         # PowerOcean Plus (#631): 96/8 field 352 is read as the surplus value
         # only while no 96/13 `dev_soc` has arrived (`_resolve_surplus_source`).
         # Diagnostics only: whether 352 was ever seen on this connection, and

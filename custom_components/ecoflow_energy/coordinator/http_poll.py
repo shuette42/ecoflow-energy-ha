@@ -200,6 +200,8 @@ class HttpPollMixin(_Base):
         # Same pop as in _apply_data: prevent EMS raw battery state from
         # overwriting the power-derived value (#50).
         parsed.pop("batt_charge_discharge_state", None)
+        if self.device_type == DEVICE_TYPE_SMARTPLUG:
+            self._hold_plug_current_while_off(parsed)
         self._note_value_change(parsed)
         self._device_data.update(parsed)
 
