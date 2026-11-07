@@ -5,7 +5,7 @@
 **Real-time solar, battery, grid & home power monitoring.**
 **Energy Dashboard ready. Two cloud modes: official API or real-time app connection. Plus a local Modbus connection for the three-phase PowerOcean.**
 
-[![HACS Default](https://img.shields.io/badge/HACS-Default-30D158?style=for-the-badge&logo=home-assistant&logoColor=white)](https://github.com/hacs/integration)
+[![Home Assistant Marketplace](https://img.shields.io/badge/Marketplace-Default-30D158?style=for-the-badge&logo=home-assistant&logoColor=white)](https://www.home-assistant.io/integrations/marketplace/)
 [![GitHub Release](https://img.shields.io/github/v/release/shuette42/ecoflow-energy-ha?style=for-the-badge&color=30D158)](https://github.com/shuette42/ecoflow-energy-ha/releases)
 [![Tests](https://img.shields.io/github/actions/workflow/status/shuette42/ecoflow-energy-ha/tests.yml?branch=main&label=Tests&style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/shuette42/ecoflow-energy-ha/actions/workflows/tests.yml)
 
@@ -23,7 +23,7 @@
 
 ## Highlights
 
-- **In the HACS default store** - installable from HACS directly, no custom repository to add
+- **In the Home Assistant Marketplace** - listed in the default catalog (HACS before Home Assistant 2026.11), no custom repository to add
 - **Up to 253 sensors on one device** - power, energy, battery packs, temperature, diagnostics
 - **Energy Dashboard ready** - local Riemann-sum kWh with gap detection
 - **Real-time out of the box** - Enhanced Mode: ~2-4 s updates for most devices
@@ -197,7 +197,7 @@ Battery state and per-unit readings on a linked installation · grid import and 
 
 [![Add to Home Assistant](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=shuette42&repository=ecoflow-energy-ha&category=integration)
 
-Or: **HACS** > **Integrations** > **Explore & Download** > search **EcoFlow Energy** > **Download** > restart HA.
+Or, on Home Assistant 2026.11 or newer: open the **Marketplace**, search **EcoFlow Energy**, select **Install**. Older versions: **HACS** > **Integrations** > **Explore & Download** > search **EcoFlow Energy** > **Download** > restart HA.
 
 <details>
 <summary>Manual installation</summary>

@@ -3,3 +3,6 @@ contact_links:
   - name: Questions & Support
     url: https://github.com/shuette42/ecoflow-energy-ha/discussions
     about: For general questions about setup or usage, please use Discussions instead of Issues.
+  - name: Problems with the Home Assistant Marketplace itself
+    url: https://github.com/home-assistant/core/issues
+    about: Install, update or catalog problems in the Marketplace itself, not in this integration, go to the Home Assistant issue tracker.
