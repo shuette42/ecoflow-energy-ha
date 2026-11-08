@@ -146,15 +146,15 @@ To create these in Home Assistant go to `Settings` -> `Automations and scenes`
 
 ```yaml
 ---
-alias: PredBat_powerocean_charge_start
-description: PredBat PowerOcean - Charge Start
+alias: predbat_powerocean_charge_start
+description: Predbat PowerOcean - Charge Start
 mode: restart
 fields:
   power:
     name: Charge power
     description: Charge power to set on the EcoFlow PowerOcean schedule
     required: false
-    default: 5000
+    default: 6000
     selector:
       number:
         min: 500
@@ -164,11 +164,11 @@ fields:
 sequence:
   - variables:
       charge_power: >-
-        {% set snapped = (power | float(5000) / 500) | round(0) * 500 %}
+        {% set snapped = (power | float(5000) / 500) | round(0, "ceil") * 500 %}
         {{ [[snapped, 500] | max, 6000] | min }}
   - action: system_log.write
     data:
-      message: "PredBat Start Charge on EcoFlow - charge power {{ charge_power }} W"
+      message: "Predbat Start Charge on EcoFlow - charge power {{ charge_power }} W ({{ power }})"
       level: info
   - action: number.set_value
     target:
@@ -229,11 +229,11 @@ model ---` to match your system.
 
 ```yaml
 pred_bat:
-  module: PredBat
+  module: predbat
   class: PredBat
 
   # Sets the prefix for all created entities in HA - only change if you want to run more than once instance
-  prefix: PredBat
+  prefix: predbat
 
   # Timezone to work in
   timezone: Europe/London
@@ -285,15 +285,17 @@ pred_bat:
   export_today: sensor.ecoflow_powerocean_export_energy_today
   pv_today: sensor.ecoflow_powerocean_solar_energy_today
   reserve: number.ecoflow_powerocean_backup_reserve
+  soc_kw: sensor.ecoflow_powerocean_battery_remaining_capacity
 
   # --- Battery model ---
-  soc_max: 20.0
-  battery_size: 20.0 # usable kWh of your PowerOcean battery
+  soc_max: 25.0
+  battery_size: 25.0 # usable kWh of your PowerOcean battery
   inverter_limit: 5000 # max AC output (W)
   inverter_limit_charge:
     - 6000 # max AC charge (W)
   inverter_limit_discharge:
     - 5000 # max AC discharge (W)
+  battery_rate_max: 6000
   battery_charge_power_curve:
     100: 1.0
   battery_discharge_power_curve:
@@ -302,21 +304,21 @@ pred_bat:
 
   # --- Control (Service API) ---
   charge_start_service:
-    - service: script.PredBat_powerocean_charge_start
+    - service: script.predbat_powerocean_charge_start
       power: "{power}"
       repeat: True
   charge_stop_service:
-    - service: script.PredBat_powerocean_charge_stop
+    - service: script.predbat_powerocean_charge_stop
   discharge_start_service:
-    - service: script.PredBat_powerocean_export_start
+    - service: script.predbat_powerocean_export_start
   discharge_stop_service:
-    - service: script.PredBat_powerocean_export_stop
+    - service: script.predbat_powerocean_export_stop
 
   # --- Control behavior ---
   set_soc_enable: true
   set_reserve_enable: true
-  battery_power_invert: true # this fixes the direction of arrows on PredBats power flow diagram
-  grid_power_invert: true # this fixes the direction of arrows on PredBats power flow diagram
+  battery_power_invert: true # this fixes the direction of arrows on predbats power flow diagram
+  grid_power_invert: true # this fixes the direction of arrows on predbats power flow diagram
 
   # Inverter clock skew in minutes, e.g. 1 means it's 1 minute fast and -1 is 1 minute slow
   inverter_clock_skew_start: 0
