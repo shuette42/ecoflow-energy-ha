@@ -692,6 +692,101 @@ def parse_relayed_wallbox_settings(payload: bytes) -> dict[str, dict[str, Any]]:
     return found
 
 
+# The key a PowerOcean frame carries the relayed wallbox charging power under,
+# from the frame parse to `_resolve_relayed_wallbox_power` in the coordinator,
+# which pops it before anything reaches the PowerOcean's own store (#691).
+RELAYED_WALLBOX_POWER_KEY = "_relayed_wallbox_power_by_sn"
+# `cmd_id = 33` as it appears in a header (tag, varint); `cmd_func = 241` is
+# the same run as the settings relay's.
+_RELAY_POWER_CMD_ID_BYTES = b"\x48\x21"
+# Wire type 5 (fixed 32 bit) is the only form the PowerOcean sends `pwr` in.
+_WIRE_FIXED32 = 5
+# No wallbox draws more; a larger float is a corrupt field, not a reading.
+_RELAYED_POWER_MAX_W = 100_000.0
+
+
+def _decode_relayed_power_item(item: bytes) -> tuple[str, float] | None:
+    """Return `(serial, watts)` from one energy-stream item, or None.
+
+    The item is `dev_info = 1` (the accessory descriptor) and `pwr = 2` as a
+    4-byte float. The PowerOcean adds `from_pv`, `from_bat` and `from_grid`
+    beside it; those are its own split of the flow and are not read. An item
+    without `pwr` (the PowerOcean sends the descriptor alone outside a
+    charging session) yields None: a missing field is never a zero reading.
+    A reading on the wire of 0 W is kept as 0.0 (also when sent as -0.0); a
+    negative, non-finite or implausibly large one is dropped.
+    """
+    serial: str | None = None
+    power: float | None = None
+    for field_num, wire_type, raw in _iter_fields(item):
+        if field_num == 1 and wire_type == 2 and serial is None:
+            serial = _decode_dev_info(raw).get("ev_charger_sn")
+        elif field_num == 2 and wire_type == _WIRE_FIXED32 and power is None:
+            value = _decode_scalar(wire_type, raw, _TYPE_FLOAT)
+            if (
+                isinstance(value, float)
+                and isfinite(value)
+                and 0 <= value <= _RELAYED_POWER_MAX_W
+            ):
+                # `-0.0 >= 0` holds; adding 0.0 turns it into a plain 0.0.
+                power = _tidy_float(value) + 0.0
+    if serial is None or power is None:
+        return None
+    return serial, power
+
+
+def parse_relayed_wallbox_power(payload: bytes) -> dict[str, dict[str, float]]:
+    """Read a coupled wallbox's charging power out of a PowerOcean frame (#691).
+
+    The PowerOcean publishes `241/33`, an energy-stream report, on its own
+    topic about every 5 s; `pdata` is a repeated `energy = 1` of items, one
+    per accessory, each addressed by its descriptor. While a PowerPulse 2
+    charges, its item carries `pwr`, the same reading the wallbox's own `2/33`
+    heartbeat sends only once a minute. Returns `{wallbox serial:
+    {"ev_charge_power_w": W}}`; every item resolves by its own serial, so a
+    heating rod sharing the message never lends its reading to the wallbox.
+    Each item decodes on its own, so a malformed item never hides a valid
+    one behind it. The app's ack copy (`src == 32` or `is_ack == 1`) is
+    skipped like the settings relay's. An envelope that does not decode
+    yields what was read before the error, or an empty dict: this runs
+    beside the PowerOcean's own decode and must never cost it a key.
+    """
+    found: dict[str, dict[str, float]] = {}
+    if _RELAY_CMD_FUNC_BYTES not in payload or _RELAY_POWER_CMD_ID_BYTES not in payload:
+        return found
+    try:
+        headers, _ = decode_header_message(payload)
+    except Exception:
+        return found
+    for header in headers or ():
+        try:
+            if (
+                int(header.get("cmd_func", -1)),
+                int(header.get("cmd_id", -1)),
+            ) != (241, 33):
+                continue
+            if (
+                int(header.get("src", -1)) == _RELAY_ACK_COPY_SRC
+                or int(header.get("is_ack", 0)) == 1
+            ):
+                continue
+            for pdata in _pdata_candidates(header):
+                for field_num, wire_type, item in _iter_fields(pdata):
+                    if field_num != 1 or wire_type != 2:
+                        continue
+                    try:
+                        decoded = _decode_relayed_power_item(item)
+                    except Exception:
+                        continue
+                    if decoded is not None:
+                        serial, power = decoded
+                        found.setdefault(serial, {"ev_charge_power_w": power})
+                break
+        except Exception:
+            continue
+    return found
+
+
 def parse_powerpulse_message(payload: bytes) -> dict[str, Any] | None:
     """Parse a PowerPulse 2 (C376) protobuf frame into flat sensor keys."""
     try:

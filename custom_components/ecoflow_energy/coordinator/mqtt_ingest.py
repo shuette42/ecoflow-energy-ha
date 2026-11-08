@@ -63,8 +63,10 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_tou_task_keys,
 )
 from ..ecoflow.parsers.powerpulse_proto import (
+    RELAYED_WALLBOX_POWER_KEY,
     RELAYED_WALLBOX_SETTINGS_KEY,
     parse_powerpulse_message,
+    parse_relayed_wallbox_power,
     parse_relayed_wallbox_settings,
 )
 from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
@@ -1015,6 +1017,12 @@ class MqttIngestMixin(_Base):
         relayed = parse_relayed_wallbox_settings(payload)
         if relayed:
             merged[RELAYED_WALLBOX_SETTINGS_KEY] = relayed
+        # A coupled PowerPulse 2's charging power, relayed on `241/33` about
+        # every 5 s while it charges (#691); its own heartbeat sends it once
+        # a minute. Handed to the wallbox the same way as the settings.
+        relayed_power = parse_relayed_wallbox_power(payload)
+        if relayed_power:
+            merged[RELAYED_WALLBOX_POWER_KEY] = relayed_power
 
         return merged or None
 

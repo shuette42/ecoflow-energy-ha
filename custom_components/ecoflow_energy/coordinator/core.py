@@ -341,6 +341,11 @@ class EcoFlowDeviceCoordinator(
         # Counts and seconds only, no serial.
         self._relayed_settings_stats: dict[str, float] = {}
         self._relayed_settings_last_ts: float | None = None
+        # Running totals of relayed wallbox charging power (#691): on a
+        # PowerOcean the readings it handed on or could not route, on a
+        # wallbox the readings it applied or dropped because it was not
+        # charging. Counts only, no serial.
+        self._relayed_power_stats: dict[str, float] = {}
         # Whether a Stream ever reported the system state of charge; once it
         # has, a unit's own figure no longer stands in for it (#323).
         self._soc_from_system = False
@@ -689,6 +694,34 @@ class EcoFlowDeviceCoordinator(
     def relayed_settings_stats(self) -> dict[str, float] | None:
         """Relayed wallbox settings counters (#553), or None if none seen."""
         return dict(self._relayed_settings_stats) or None
+
+    def apply_relayed_wallbox_power(self, parsed: dict[str, Any]) -> bool:
+        """Apply the charging power this wallbox's PowerOcean relayed (#691).
+
+        The PowerOcean publishes the wallbox's charging power about every 5 s
+        on `241/33`; the wallbox's own heartbeat carries it once a minute. The
+        relayed reading goes through the identical `_apply_data` path with
+        `own_connection=False`, so the PowerOcean's connection never stands
+        in for the wallbox's liveness or its stale thresholds. Applied only
+        while the wallbox's own last status is `charging`: a relayed reading
+        arriving late must not overwrite the reading the heartbeat sent at
+        the end of a session. Dropped, and False returned, otherwise.
+        """
+        if self._device_data.get("ev_charge_status") != "charging":
+            self._relayed_power_stats["dropped_not_charging"] = (
+                self._relayed_power_stats.get("dropped_not_charging", 0) + 1
+            )
+            return False
+        self._relayed_power_stats["applied"] = (
+            self._relayed_power_stats.get("applied", 0) + 1
+        )
+        self._apply_data(parsed, own_connection=False)
+        return True
+
+    @property
+    def relayed_power_stats(self) -> dict[str, float] | None:
+        """Relayed wallbox charging power counters (#691), or None if none."""
+        return dict(self._relayed_power_stats) or None
 
     def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None:
         """Return the entry's one PowerOcean coordinator, or None (ADR-009).

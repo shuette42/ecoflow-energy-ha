@@ -27,7 +27,10 @@ from ..const import (
 )
 from ..ecoflow.const import POWERPULSE2_DISPLAY_BLOCK_LEN_KEY
 from ..ecoflow.parsers.powerocean_proto import EMS_CHANGE_DEV_SOC_KEY
-from ..ecoflow.parsers.powerpulse_proto import RELAYED_WALLBOX_SETTINGS_KEY
+from ..ecoflow.parsers.powerpulse_proto import (
+    RELAYED_WALLBOX_POWER_KEY,
+    RELAYED_WALLBOX_SETTINGS_KEY,
+)
 from ..ecoflow.parsers.stream_ac5000_proto import (
     UNIT_POWER_BY_SN_KEY,
     UNIT_PV_BY_SN_KEY,
@@ -610,6 +613,51 @@ class StateApplyMixin(_Base):
                 stats["handed_over"] = stats.get("handed_over", 0) + 1
         return True
 
+    def _resolve_relayed_wallbox_power(
+        self, parsed: dict[str, Any], *, own_connection: bool
+    ) -> bool:
+        """Hand a coupled wallbox's relayed charging power to its device (#691).
+
+        A PowerOcean frame may carry `241/33`, the charging power of each
+        PowerPulse 2 linked to it (`parse_relayed_wallbox_power`), about every
+        5 s where the wallbox's own heartbeat reports it once a minute. Popped
+        here whatever happens to it, and routed exactly like the relayed
+        settings (`_resolve_relayed_wallbox_settings`): only from this
+        device's own connection, only to a PowerPulse 2 of this entry whose
+        one PowerOcean is this coordinator. Anything else is counted as
+        unrouted and dropped, nothing is buffered. Returns whether the frame
+        carried such a block at all.
+        """
+        if RELAYED_WALLBOX_POWER_KEY not in parsed:
+            return False
+        relayed = parsed.pop(RELAYED_WALLBOX_POWER_KEY)
+        if not own_connection or not isinstance(relayed, dict):
+            return True
+        stats = self._relayed_power_stats
+        for serial, reading in relayed.items():
+            target = self._linked_unit_coordinator(serial)
+            if (
+                target is None
+                or target is self
+                or target.device_type != DEVICE_TYPE_POWERPULSE2
+                or target.powerocean_sibling() is not self
+            ):
+                stats["unrouted"] = stats.get("unrouted", 0) + 1
+                continue
+            try:
+                handed = target.apply_relayed_wallbox_power(dict(reading))
+            except Exception:
+                stats["handoff_failed"] = stats.get("handoff_failed", 0) + 1
+                _LOGGER.debug(
+                    "%s: relayed wallbox power hand-over failed",
+                    self.device_tag,
+                    exc_info=True,
+                )
+                continue
+            if handed:
+                stats["handed_over"] = stats.get("handed_over", 0) + 1
+        return True
+
     def _resolve_battery_only_remaining_time(self, parsed: dict[str, Any]) -> None:
         """Keep Remaining Time empty while anything comes in (RIVER 2 Max, #585).
 
@@ -715,14 +763,16 @@ class StateApplyMixin(_Base):
             self._last_ems_param_change_ts = now
         self._resolve_surplus_source(parsed, own_connection=own_connection)
         self._resolve_unit_power(parsed, own_connection=own_connection, now=now)
-        if (
-            self._resolve_relayed_wallbox_settings(
-                parsed, own_connection=own_connection
-            )
-            and not parsed
-        ):
-            # A frame that carried only a coupled wallbox's settings has
-            # nothing left for this device: no listener call, no snapshot.
+        carried_settings = self._resolve_relayed_wallbox_settings(
+            parsed, own_connection=own_connection
+        )
+        carried_power = self._resolve_relayed_wallbox_power(
+            parsed, own_connection=own_connection
+        )
+        if (carried_settings or carried_power) and not parsed:
+            # A frame that carried only a coupled wallbox's settings or
+            # charging power has nothing left for this device: no listener
+            # call, no snapshot.
             return
         if not own_connection and not parsed:
             # A fully held hand-over (every block it carried was dropped in

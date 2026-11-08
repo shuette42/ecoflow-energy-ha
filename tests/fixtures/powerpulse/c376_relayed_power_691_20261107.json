@@ -1,0 +1,23 @@
+{
+  "source": "Issue #691, @deladus, diagnostics download of 2026-11-07: three PowerOcean property frames carrying 241/33, an energy-stream report, taken unchanged from the download, which already masks every serial as 16 x X (the wallbox serial in pdata 1.1.2 included). One header each, src 96, dest 32. The item addresses the wallbox at dev_addr 215.",
+  "frames": [
+    {
+      "label": "charging",
+      "ts_iso": "2026-11-07T14:25:50.909593+00:00",
+      "hex": "0a5f0a2a0a280a1708d7011210585858585858585858585858585858581801150020554525000016443500a02f45106018202001280140f1014821502a5801708fd9fd237881a601800103880101c2011058585858585858585858585858585858",
+      "note": "pwr 3410 W, from_pv 600 W, from_grid 2810 W"
+    },
+    {
+      "label": "charging_later",
+      "ts_iso": "2026-11-07T14:27:17.711381+00:00",
+      "hex": "0a5f0a2a0a280a1708d7011210585858585858585858585858585858581801150060564525008013443500803145106018202001280140f1014821502a5801709cdefd237881a601800103880101c2011058585858585858585858585858585858",
+      "note": "pwr 3430 W, from_pv 590 W, from_grid 2840 W"
+    },
+    {
+      "label": "descriptor_only",
+      "ts_iso": "2026-11-07T14:28:07.985135+00:00",
+      "hex": "0a500a1b0a190a1708d7011210585858585858585858585858585858581801106018202001280140f1014821501b58017090e1fd237881a601800103880101c2011058585858585858585858585858585858",
+      "note": "dev_info only, no pwr: the wallbox is not charging"
+    }
+  ]
+}

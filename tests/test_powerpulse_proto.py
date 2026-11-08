@@ -11,6 +11,8 @@ for any field map.
 from __future__ import annotations
 
 import json
+import math
+import struct
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -19,6 +21,7 @@ from ecoflow_energy.ecoflow.parsers.powerpulse_proto import (
     _decode_settings_block,
     _finalize,
     parse_powerpulse_message,
+    parse_relayed_wallbox_power,
     parse_relayed_wallbox_settings,
 )
 from ecoflow_energy.ecoflow.proto_encoding import (
@@ -1387,3 +1390,154 @@ def test_display_builder_addresses_the_wallbox_and_the_powerocean_apart() -> Non
     assert built == app_write.replace(masked, wallbox_sn.encode(), 1).replace(
         masked, ocean_sn.encode(), 1
     )
+
+
+# Issue #691: the PowerOcean's `241/33`, an energy-stream report, three real
+# frames from @deladus's download. The wallbox serial is masked as 16 x X.
+RELAYED_POWER_FIXTURE = FIXTURE.with_name("c376_relayed_power_691_20261107.json")
+_MASKED_SN = "X" * 16
+
+
+def _relayed_power_frame(label: str) -> bytes:
+    data = json.loads(RELAYED_POWER_FIXTURE.read_text())
+    return next(
+        bytes.fromhex(frame["hex"])
+        for frame in data["frames"]
+        if frame["label"] == label
+    )
+
+
+def _relayed_power_items(frame: bytes) -> bytes:
+    """The real `pdata` (the repeated item field) of a recorded `241/33`."""
+    from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
+
+    headers, _ = decode_header_message(frame)
+    return bytes.fromhex(headers[0]["pdata"])
+
+
+def _power_relay_frame(pdata: bytes, *, src: int = 96) -> bytes:
+    header = (
+        encode_field_bytes(1, pdata)
+        + encode_field_varint(2, src)
+        + encode_field_varint(8, 241)
+        + encode_field_varint(9, 33)
+    )
+    return encode_field_bytes(1, header)
+
+
+def _fixed32_float(field: int, value: float) -> bytes:
+    return bytes([(field << 3) | 5]) + struct.pack("<f", value)
+
+
+def test_relayed_power_reads_pwr_and_not_the_split() -> None:
+    """The item's `pwr` (field 2) is the wallbox's charging power: 3410 W and
+    then 3430 W in the reporter's session. `from_pv` (600/590) and
+    `from_grid` (2810/2840) beside it are not read.
+
+    Mutation probe: reading field 4 instead of 2 returns 600.0 and fails.
+    """
+    assert parse_relayed_wallbox_power(_relayed_power_frame("charging")) == {
+        _MASKED_SN: {"ev_charge_power_w": 3410.0}
+    }
+    assert parse_relayed_wallbox_power(_relayed_power_frame("charging_later")) == {
+        _MASKED_SN: {"ev_charge_power_w": 3430.0}
+    }
+
+
+def test_relayed_power_descriptor_alone_is_no_reading() -> None:
+    """Outside a session the item carries the descriptor alone: nothing is
+    returned, never a zero for the missing `pwr`.
+
+    Mutation probe: defaulting a missing `pwr` to 0.0 fails here.
+    """
+    assert parse_relayed_wallbox_power(_relayed_power_frame("descriptor_only")) == {}
+
+
+def test_relayed_power_resolves_every_item_by_its_own_serial() -> None:
+    """A heating rod (dev_addr 212) can share the message: each item names
+    its own accessory, so the rod's 1500 W never reaches the wallbox and the
+    wallbox's reading behind it is still read.
+
+    Mutation probe: stopping after the first item loses the wallbox.
+    """
+    rod_sn = b"XXXXHEATROD00001"
+    rod_item = encode_field_bytes(
+        1,
+        encode_field_varint(1, 212) + encode_field_bytes(2, rod_sn),
+    ) + _fixed32_float(2, 1500.0)
+    pdata = encode_field_bytes(1, rod_item) + _relayed_power_items(
+        _relayed_power_frame("charging")
+    )
+    assert parse_relayed_wallbox_power(_power_relay_frame(pdata)) == {
+        rod_sn.decode(): {"ev_charge_power_w": 1500.0},
+        _MASKED_SN: {"ev_charge_power_w": 3410.0},
+    }
+
+
+def test_relayed_power_skips_the_app_copy_and_bad_readings() -> None:
+    """The app's copy (src 32) of the same items, a negative or non-finite
+    `pwr`, a `pwr` as a varint, a frame of another command and garbage all
+    yield nothing.
+
+    Mutation probes: removing the ack-copy skip fails the src 32 case;
+    removing the `>= 0` guard fails the negative case.
+    """
+    real = _relayed_power_items(_relayed_power_frame("charging"))
+    assert parse_relayed_wallbox_power(_power_relay_frame(real)) == {
+        _MASKED_SN: {"ev_charge_power_w": 3410.0}
+    }
+    assert parse_relayed_wallbox_power(_power_relay_frame(real, src=32)) == {}
+    descriptor = encode_field_bytes(
+        1, encode_field_varint(1, 215) + encode_field_bytes(2, _MASKED_SN.encode())
+    )
+    for bad_pwr in (
+        _fixed32_float(2, -5.0),
+        _fixed32_float(2, float("nan")),
+        _fixed32_float(2, float("inf")),
+        encode_field_varint(2, 3410),
+    ):
+        frame = _power_relay_frame(encode_field_bytes(1, descriptor + bad_pwr))
+        assert parse_relayed_wallbox_power(frame) == {}, bad_pwr
+    assert parse_relayed_wallbox_power(_relayed_frame("baseline")) == {}
+    assert parse_relayed_wallbox_power(b"\xff\xff\xff") == {}
+
+
+def test_relayed_power_a_malformed_item_does_not_hide_the_wallbox() -> None:
+    """A rod item whose descriptor is cut short sits before the wallbox's
+    real item: the wallbox's reading is still read.
+
+    Mutation probe: dropping the per-item try loses the wallbox (the error
+    ends the whole header).
+    """
+    # Field 1 (bytes) claims 16 bytes but holds a truncated varint tag run.
+    broken_rod = encode_field_bytes(1, b"\x08\xff\xff\xff")
+    pdata = encode_field_bytes(1, broken_rod) + _relayed_power_items(
+        _relayed_power_frame("charging")
+    )
+    assert parse_relayed_wallbox_power(_power_relay_frame(pdata)) == {
+        _MASKED_SN: {"ev_charge_power_w": 3410.0}
+    }
+
+
+def test_relayed_power_negative_zero_and_implausible_readings() -> None:
+    """`-0.0` is a 0 W reading and comes out as a plain 0.0 (a wallbox that
+    reports 0 W while charging publishes 0); 3.4e38 W is no reading.
+
+    Mutation probes: removing the `+ 0.0` keeps the sign of -0.0; removing
+    the ceiling returns 3.4e38.
+    """
+    descriptor = encode_field_bytes(
+        1, encode_field_varint(1, 215) + encode_field_bytes(2, _MASKED_SN.encode())
+    )
+
+    def read(pwr: float) -> dict[str, dict[str, float]]:
+        item = descriptor + _fixed32_float(2, pwr)
+        return parse_relayed_wallbox_power(
+            _power_relay_frame(encode_field_bytes(1, item))
+        )
+
+    zero = read(-0.0)[_MASKED_SN]["ev_charge_power_w"]
+    assert zero == 0.0 and math.copysign(1.0, zero) == 1.0
+    assert read(0.0) == {_MASKED_SN: {"ev_charge_power_w": 0.0}}
+    assert read(3.4e38) == {}
+    assert read(99_000.0) == {_MASKED_SN: {"ev_charge_power_w": 99_000.0}}
