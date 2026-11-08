@@ -24,6 +24,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_HOME_PANEL_2,
     DEVICE_TYPE_SMART_METER,
+    DEVICE_TYPE_SMART_METER_DUAL,
     DEVICE_TYPE_SMART_PANEL_40,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_SOLAR_TRACKER,
@@ -533,6 +534,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_STREAM_AC5000: "STREAM AC 5000",
     DEVICE_TYPE_POWERSTREAM: "PowerStream",
     DEVICE_TYPE_SMART_METER: "Smart Meter",
+    DEVICE_TYPE_SMART_METER_DUAL: "Smart Meter Dual",
     DEVICE_TYPE_SOLAR_TRACKER: "Solar Tracker",
     DEVICE_TYPE_WAVE3: "WAVE 3",
     DEVICE_TYPE_POWERPULSE2: "PowerPulse 2",
@@ -549,6 +551,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
 ENHANCED_ONLY_DEVICE_TYPES: frozenset[str] = frozenset(
     {
         DEVICE_TYPE_SMART_METER,
+        DEVICE_TYPE_SMART_METER_DUAL,
         DEVICE_TYPE_SOLAR_TRACKER,
         DEVICE_TYPE_WAVE3,
         DEVICE_TYPE_POWERPULSE2,
@@ -7498,9 +7501,102 @@ POWERSTREAM_SENSORS: list[EcoFlowSensorDef] = [
 # Smart Meter sensor definitions
 # =====================================================================
 
-# The meter reports through the app channel only, so every reading here
-# arrives as a push. Phase labels follow the app, which counts A/B/C, while
-# the keys keep the L1/L2/L3 form the wire uses.
+# ES81 native readout: preserve the four established power entity keys.
+# Directional energy counters are phase sums, not billing-meter equivalence.
+SMARTMETERDUAL_SENSORS: list[EcoFlowSensorDef] = [
+    EcoFlowSensorDef(
+        key,
+        label,
+        "W",
+        "power",
+        "measurement",
+        "mdi:transmission-tower",
+        suggested_display_precision=0,
+        translation_key=translation,
+    )
+    for key, label, translation in (
+        ("grid_w", "Grid Power", "grid_w"),
+        ("grid_l1_w", "Grid L1 Power", "grid_l1_power_w"),
+        ("grid_l2_w", "Grid L2 Power", "grid_l2_power_w"),
+        ("grid_l3_w", "Grid L3 Power", "grid_l3_power_w"),
+    )
+]
+SMARTMETERDUAL_SENSORS.extend(
+    EcoFlowSensorDef(
+        f"grid_l{phase}_{quantity}_{suffix}",
+        f"Phase {label} {quantity.title()}",
+        unit,
+        quantity,
+        "measurement",
+        icon,
+        suggested_display_precision=precision,
+    )
+    for phase, label in ((1, "A"), (2, "B"), (3, "C"))
+    for quantity, suffix, unit, icon, precision in (
+        ("voltage", "v", "V", "mdi:sine-wave", 1),
+        ("current", "a", "A", "mdi:current-ac", 2),
+    )
+)
+SMARTMETERDUAL_SENSORS.extend(
+    EcoFlowSensorDef(
+        key,
+        label,
+        "Wh",
+        "energy",
+        state_class,
+        icon,
+        suggested_display_precision=0,
+    )
+    for key, label, state_class, icon in (
+        (
+            "grid_import_energy_wh",
+            "Grid Import Energy",
+            "total_increasing",
+            "mdi:transmission-tower-import",
+        ),
+        (
+            "grid_export_energy_wh",
+            "Grid Export Energy",
+            "total_increasing",
+            "mdi:transmission-tower-export",
+        ),
+        ("grid_net_energy_wh", "Grid Net Energy", "total", "mdi:transmission-tower"),
+        (
+            "grid_l1_net_energy_wh",
+            "Phase A Net Energy",
+            "total",
+            "mdi:transmission-tower",
+        ),
+        (
+            "grid_l2_net_energy_wh",
+            "Phase B Net Energy",
+            "total",
+            "mdi:transmission-tower",
+        ),
+        (
+            "grid_l3_net_energy_wh",
+            "Phase C Net Energy",
+            "total",
+            "mdi:transmission-tower",
+        ),
+    )
+)
+
+# BK21 reports through the app channel only. Its phase labels follow A/B/C;
+# these electrical/counter definitions are not inherited by the ES81 profile.
+# The schema names field602 module_wifi_rssi. ES81 reports this value, but
+# its unit is not independently confirmed: do not imply dBm or a calibration.
+SMARTMETERDUAL_SENSORS.append(
+    EcoFlowSensorDef(
+        "wifi_signal_reported",
+        "Reported Wi-Fi Signal",
+        icon="mdi:wifi",
+        entity_category="diagnostic",
+        suggested_display_precision=2,
+        disabled_by_default=True,
+    )
+)
+
 SMARTMETER_SENSORS: list[EcoFlowSensorDef] = [
     # --- Grid power ---
     EcoFlowSensorDef(

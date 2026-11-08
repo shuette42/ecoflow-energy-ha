@@ -109,6 +109,11 @@ class TestDeltaProfileRouting:
 
 
 class TestDeviceTypeRouting:
+    def test_smart_meter_dual_prefix_is_distinct_from_bk21(self) -> None:
+        assert get_device_type("Dual", "ES81TEST00000001") == "smart_meter_dual"
+        assert get_device_type("", "ES81TEST00000001") == "smart_meter_dual"
+        assert get_device_type("", "BK21TEST00000001") == "smart_meter"
+
     def test_powerstream_is_not_a_stream(self) -> None:
         """ "PowerStream" contains "stream", and the match is by substring.
 

@@ -18,6 +18,7 @@ from ..const import (
     DEVICE_TYPE_POWERSTREAM,
     DEVICE_TYPE_SMART_HOME_PANEL_2,
     DEVICE_TYPE_SMART_METER,
+    DEVICE_TYPE_SMART_METER_DUAL,
     DEVICE_TYPE_SMART_PANEL_40,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_SOLAR_TRACKER,
@@ -73,6 +74,7 @@ from ..ecoflow.parsers.powerstream_http import parse_powerstream_quota
 from ..ecoflow.parsers.smart_home_panel_2_proto import (
     parse_smart_home_panel_2_message,
 )
+from ..ecoflow.parsers.smart_meter_dual_proto import parse_smart_meter_dual_message
 from ..ecoflow.parsers.smart_meter_proto import parse_smart_meter_message
 from ..ecoflow.parsers.smart_panel_40_proto import parse_hr61_proto_message
 from ..ecoflow.parsers.smartplug import (
@@ -593,6 +595,15 @@ class MqttIngestMixin(_Base):
 
     def _parse_message(self, topic: str, payload: bytes) -> dict[str, Any] | None:
         """Parse an MQTT message payload."""
+        if self.device_type == DEVICE_TYPE_SMART_METER_DUAL:
+            # ES81 uses its own plaintext protobuf telemetry profile.
+            # Never admit generic JSON quotaMap/params fallbacks as its data.
+            if topic == f"/app/device/property/{self.device_sn}" or (
+                topic.startswith("/app/")
+                and topic.endswith(f"/{self.device_sn}/thing/property/get_reply")
+            ):
+                return parse_smart_meter_dual_message(payload)
+            return None
         # get_reply topic: /app/{userId}/{sn}/thing/property/get_reply
         if "get_reply" in topic:
             try:

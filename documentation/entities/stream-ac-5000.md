@@ -68,7 +68,9 @@ With units linked, the strings are the unit's own: the device reports one set of
 
 ## Sensors - Smart Meter
 
-Only an EcoFlow P1 meter reports per-phase values. A meter that reports a single total, such as a Tibber Pulse, feeds Grid Power above and creates none of these.
+A linked EcoFlow P1 meter or Smart Meter Dual CT can supply per-phase values through the STREAM's telemetry. These are measurements of the linked meter, not the individual battery's phases. In one saved two-STREAM installation, the reported MASTER carried populated Dual CT readings while the SLAVE's meter block was empty; the entities need not appear on both units. A meter that reports a single total, such as a Tibber Pulse, feeds Grid Power above and creates none of these.
+
+The [standalone Smart Meter Dual CT profile](smart-meter-dual.md) adds the ES81 as a separate HA device in Enhanced Mode, using the meter's own messages and native Wh counters. The linked-meter entities below remain on the STREAM. Choose one source for overlapping grid measurements rather than adding the same measurement from both devices. This support does not change meter links or MASTER/SLAVE roles.
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|

@@ -49,6 +49,7 @@ DEVICE_TYPE_POWERSTREAM = "powerstream"
 # nothing and switches nothing, so it shares the BK-series envelope with the
 # Stream line and none of its battery, PV or outlet fields (#331).
 DEVICE_TYPE_SMART_METER = "smart_meter"
+DEVICE_TYPE_SMART_METER_DUAL = "smart_meter_dual"
 # Single Axis Solar Tracker. One type for both account serial prefixes it
 # ships under, `HZ31` and `S02F`: same product id (7937), same productType
 # (31), same report message (32/1). Reported in #339.
@@ -338,6 +339,9 @@ _SN_PREFIX_MAP = {
     # product name empty like every other BK prefix, so without this entry
     # the unit is classified by name alone and skipped as unsupported.
     "BK21": DEVICE_TYPE_SMART_METER,
+    # Smart Meter Dual CT: its own plaintext 254/21 power/electrical counters.
+    # This is not the BK21 counter/electrical profile or a generic ES* family.
+    "ES81": DEVICE_TYPE_SMART_METER_DUAL,
     # Single Axis Solar Tracker (#339). Both prefixes map to the one type:
     # the app registry keys `HZ31` (`product_st_fd100`) and `S02F`
     # (`product_st_sp002`) to the same productType 31, and a reporter
@@ -439,6 +443,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "ES22": "STREAM AC 5000",
     "ES21": "STREAM 5000",
     "BK21": "Smart Meter",
+    "ES81": "Smart Meter Dual",
     "RE11": "Ocean 2",
     "RE17": "Ocean 2",
     "RE41": "Ocean 2 Plus",
@@ -609,7 +614,7 @@ def get_device_type(product_name: str, sn: str = "") -> str:
 
     Returns DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_DELTA, DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000,
-    DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER,
+    DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER, DEVICE_TYPE_SMART_METER_DUAL,
     DEVICE_TYPE_SOLAR_TRACKER, DEVICE_TYPE_WAVE3, DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_OCEAN2, DEVICE_TYPE_SMART_PANEL_40,
     DEVICE_TYPE_DELTA_PRO_ULTRA, DEVICE_TYPE_SMART_HOME_PANEL_2, or

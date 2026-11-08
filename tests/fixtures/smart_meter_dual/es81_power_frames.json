@@ -1,0 +1,29 @@
+{
+  "note": "Hand-built numeric test frames for the observed ES81 wire layout. No recorded identifiers.",
+  "frames": [
+    {
+      "at": "full",
+      "hex": "0a2b0a189d200000f042953c0000f0c19d3c0000c842a5300000484240fe01481550187881ca02800103880101",
+      "expected": {
+        "grid_w": 120.0,
+        "grid_l1_w": -30.0,
+        "grid_l2_w": 100.0,
+        "grid_l3_w": 50.0
+      }
+    },
+    {
+      "at": "partial",
+      "hex": "0a0f0a06953c000020c240fe0148155006",
+      "expected": {
+        "grid_l1_w": -40.0
+      }
+    },
+    {
+      "at": "zero",
+      "hex": "0a190a069d200000000040fe01481550067881ca02800103880101",
+      "expected": {
+        "grid_w": 0.0
+      }
+    }
+  ]
+}

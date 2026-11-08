@@ -2679,6 +2679,12 @@
       },
       "other_vehicle_energy": {
         "name": "Wallbox Completed Charging Energy Unassigned"
+      },
+      "grid_l3_power_w": {
+        "name": "Grid L3 Power"
+      },
+      "wifi_signal_reported": {
+        "name": "Reported Wi-Fi Signal"
       }
     },
     "binary_sensor": {

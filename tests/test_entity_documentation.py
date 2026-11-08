@@ -123,6 +123,7 @@ FAMILY_TO_FILE: dict[str, str] = {
     "DELTA3": "delta-3-max-plus.md",
     "POWERSTREAM": "powerstream.md",
     "SMARTMETER": "smart-meter.md",
+    "SMARTMETERDUAL": "smart-meter-dual.md",
     "SOLARTRACKER": "solar-tracker.md",
     "WAVE3": "wave-3.md",
     "POWERPULSE2": "powerpulse-2.md",
@@ -1261,6 +1262,7 @@ _ENTITY_REFERENCE_SIMPLE_DEVICES: tuple[tuple[str, str, str], ...] = (
     ("PowerStream", const.DEVICE_TYPE_POWERSTREAM, "HW51XXXXXXXXXXXX"),
     ("STREAM AC 5000", const.DEVICE_TYPE_STREAM_AC5000, "ES22XXXXXXXXXXXX"),
     ("Smart Meter", const.DEVICE_TYPE_SMART_METER, "BK21XXXXXXXXXXXX"),
+    ("Smart Meter Dual CT", const.DEVICE_TYPE_SMART_METER_DUAL, "ES81XXXXXXXXXXXX"),
     ("Solar Tracker", const.DEVICE_TYPE_SOLAR_TRACKER, "HZ31XXXXXXXXXXXX"),
 )
 

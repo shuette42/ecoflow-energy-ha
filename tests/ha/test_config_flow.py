@@ -240,6 +240,14 @@ SMART_METER_DEVICE = {
     "online": 1,
 }
 
+SMART_METER_DUAL_DEVICE = {
+    "sn": "ES81TEST00000001",
+    "name": "",
+    "product_name": "",
+    "device_type": "unknown",
+    "online": 1,
+}
+
 SOLAR_TRACKER_DEVICE = {
     "sn": "HZ31TEST00000001",
     "name": "Solar Tracker",
@@ -308,6 +316,11 @@ SMART_HOME_PANEL_2_DEVICE = {
 # that set silently loses its guard coverage along with its parametrize
 # case, so this list is the thing to extend when another type joins it.
 ENHANCED_ONLY_DEVICE_CASES = [
+    pytest.param(
+        SMART_METER_DUAL_DEVICE,
+        "Smart Meter Dual (0001) (ES81...0001) - requires Enhanced Mode",
+        id="smart_meter_dual",
+    ),
     pytest.param(
         SMART_METER_DEVICE,
         "Smart Meter (0001) (BK21...0001) - requires Enhanced Mode",

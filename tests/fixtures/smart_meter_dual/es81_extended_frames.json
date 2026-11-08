@@ -1,0 +1,59 @@
+{
+  "note": "Hand-built numeric test frames for the observed ES81 wire layout. No recorded identifiers.",
+  "frames": [
+    {
+      "at": "full",
+      "hex": "0a700a5d9d200000f042953c0000f0c19d3c0000c842a53000004842e53b00406643ed3b008067439d3000c06543f53b000080befd3b0000003f85310000403faa301e0d00003143150000ce421d0000a6c22500c02544350000e9433d0000454340fe014815505d7881ca02800103880101",
+      "expected": {
+        "grid_w": 120.0,
+        "grid_l1_w": -30.0,
+        "grid_l2_w": 100.0,
+        "grid_l3_w": 50.0,
+        "grid_l1_voltage_v": 230.25,
+        "grid_l2_voltage_v": 231.5,
+        "grid_l3_voltage_v": 229.75,
+        "grid_l1_current_a": -0.25,
+        "grid_l2_current_a": 0.5,
+        "grid_l3_current_a": 0.75,
+        "grid_l1_net_energy_wh": 177.0,
+        "grid_l2_net_energy_wh": 103.0,
+        "grid_l3_net_energy_wh": -83.0,
+        "grid_import_energy_wh": 663.0,
+        "grid_export_energy_wh": 466.0,
+        "grid_net_energy_wh": 197.0
+      }
+    },
+    {
+      "at": "partial",
+      "hex": "0a170a0eed3b00406843aa3005150000c64240fe014815500e",
+      "expected": {
+        "grid_l2_voltage_v": 232.25,
+        "grid_l2_net_energy_wh": 99.0
+      }
+    },
+    {
+      "at": "2026-11-02T22:24:00Z",
+      "hex": "0a340a21aa301e0d0080a24415000061441d0000c8c22500c0284535000016443d0040034540fe01481550217881ca02800103880101",
+      "expected": {
+        "grid_l1_net_energy_wh": 1300.0,
+        "grid_l2_net_energy_wh": 900.0,
+        "grid_l3_net_energy_wh": -100.0,
+        "grid_import_energy_wh": 2700.0,
+        "grid_export_energy_wh": 600.0,
+        "grid_net_energy_wh": 2100.0
+      }
+    },
+    {
+      "at": "2026-11-03T00:12:00Z",
+      "hex": "0a2a0a21aa301e0d00a0a0441500007a441d0000c8c22500902c4535008022443d00f0034540fe0148155021",
+      "expected": {
+        "grid_l1_net_energy_wh": 1285.0,
+        "grid_l2_net_energy_wh": 1000.0,
+        "grid_l3_net_energy_wh": -100.0,
+        "grid_import_energy_wh": 2761.0,
+        "grid_export_energy_wh": 650.0,
+        "grid_net_energy_wh": 2111.0
+      }
+    }
+  ]
+}
