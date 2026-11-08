@@ -120,6 +120,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _own_settings_report_seen: bool
     _relayed_settings_stats: dict[str, float]
     _relayed_settings_last_ts: float | None
+    _relayed_power_stats: dict[str, float]
 
     # -- group (C): implemented by core.py or by a sibling mixin --
     @property
@@ -142,6 +143,8 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     def apply_linked_unit_entry(self, parsed: dict[str, Any]) -> None: ...
 
     def apply_relayed_wallbox_settings(self, parsed: dict[str, Any]) -> bool: ...
+
+    def apply_relayed_wallbox_power(self, parsed: dict[str, Any]) -> bool: ...
 
     def powerocean_sibling(self) -> EcoFlowDeviceCoordinator | None: ...
 

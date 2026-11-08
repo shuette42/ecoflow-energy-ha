@@ -767,6 +767,12 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
     relayed_settings = coordinator.relayed_settings_stats
     if relayed_settings is not None:
         diag["relayed_wallbox_settings"] = relayed_settings
+    # The same for a PowerPulse 2's charging power relayed on `241/33`
+    # (#691): handed on or unrouted on the PowerOcean, applied or dropped
+    # because the wallbox was not charging on the wallbox.
+    relayed_power = coordinator.relayed_power_stats
+    if relayed_power is not None:
+        diag["relayed_wallbox_power"] = relayed_power
 
     # Enhanced Mode: the raw push frames the device sent, with the serial
     # masked and each frame truncated. Device variants within a serial family

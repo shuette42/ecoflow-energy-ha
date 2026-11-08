@@ -20,7 +20,7 @@ Start and stop of a charging session are available as two buttons with no PowerO
 
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
-| Wallbox Charging Power | W | - | enabled | Power currently going into the vehicle |
+| Wallbox Charging Power | W | - | enabled | Power currently going into the vehicle. The wallbox reports it once a minute. In Enhanced Mode with exactly one PowerOcean in the same integration entry, it is also taken from the PowerOcean's report for the wallbox, which arrives about every 5 seconds, in steps of about 10 W, while the wallbox reports Charging; the first reading of a session still comes from the wallbox |
 | Wallbox Voltage L1 | V | - | enabled | Line voltage on phase 1 |
 | Wallbox Voltage L2 | V | - | enabled | Line voltage on phase 2 |
 | Wallbox Voltage L3 | V | - | enabled | Line voltage on phase 3 |
