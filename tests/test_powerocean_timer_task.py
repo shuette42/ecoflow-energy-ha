@@ -17,6 +17,7 @@ from base64 import b64encode
 
 from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+    SCHEDULE_MAX_INDEX,
     remap_timer_task_keys,
 )
 from ecoflow_energy.ecoflow.proto.runtime import (
@@ -153,12 +154,45 @@ def test_a_device_that_never_had_a_schedule_publishes_nothing() -> None:
 def test_an_index_outside_the_slot_range_is_ignored() -> None:
     """A malformed list must not create keys without end.
 
-    Only slot 1 has ever been seen, so the cap is a guard rather than a
-    statement about how many slots exist.
+    The unit numbers its slots itself (up to 18 seen on a PowerOcean Plus,
+    #714), so the cap is a guard rather than a statement about how many slots
+    exist.
     """
     task = {"task_index": 99, "is_enable": True, "sys_chg_dsg_pwr": 1500}
 
     assert remap_timer_task_keys({"time_task_cfg": [task]}, set()) == {}
+
+
+def test_slots_the_unit_numbers_above_eight_are_published() -> None:
+    """#714: a PowerOcean Plus lists its schedules as 16, 17 and 18."""
+    known: set[int] = set()
+    tasks = [
+        {"task_index": 16, "is_enable": True, "sys_chg_dsg_pwr": 1500},
+        {"task_index": 18, "is_enable": False, "sys_chg_dsg_pwr": 900},
+    ]
+
+    keys = remap_timer_task_keys({"time_task_cfg": tasks}, known)
+
+    assert known == {16, 18}
+    assert keys["schedule_16_enabled"] is True
+    assert keys["schedule_16_power_w"] == 1500
+    assert keys["schedule_18_enabled"] is False
+    assert keys["schedule_18_power_w"] == 900
+    assert not any(key.startswith("schedule_17_") for key in keys)
+
+
+def test_the_slot_range_ends_at_the_cap_on_both_sides() -> None:
+    """Index 0 and the first one past the cap are refused, the cap itself is not."""
+    refused = [
+        {"task_index": 0, "is_enable": True},
+        {"task_index": SCHEDULE_MAX_INDEX + 1, "is_enable": True},
+    ]
+    kept = {"task_index": SCHEDULE_MAX_INDEX, "is_enable": True}
+
+    assert remap_timer_task_keys({"time_task_cfg": refused}, set()) == {}
+    keys = remap_timer_task_keys({"time_task_cfg": [kept]}, set())
+    assert keys[f"schedule_{SCHEDULE_MAX_INDEX}_enabled"] is True
+    assert SCHEDULE_MAX_INDEX == 32
 
 
 def test_an_unreadable_window_block_publishes_no_window() -> None:
