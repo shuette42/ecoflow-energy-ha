@@ -750,8 +750,8 @@ EXCLUDE_FROM_UNDOCUMENTED: tuple[Exclusion, ...] = (
         "sensors",
         re.compile(r"^Schedule ([2-9]|[1-9]\d+) "),
         "only 'Schedule 1 ...' is a literal table row in "
-        "'## Scheduled Charge Tasks'; slots 2-8 are covered by the prose "
-        "'Further schedules follow the same pattern ... up to Schedule 8'",
+        "'## Scheduled Charge Tasks'; slots 2-32 are covered by the prose "
+        "'Further schedules follow the same pattern ... up to Schedule 32'",
     ),
     Exclusion(
         "POWEROCEAN",
@@ -776,32 +776,32 @@ EXCLUDE_FROM_UNDOCUMENTED: tuple[Exclusion, ...] = (
         "sensors",
         re.compile(r"^Feed Schedule ([2-9]|[1-9]\d+) "),
         "only 'Feed Schedule 1 ...' is a literal table row in "
-        "'## Feed-to-Grid Schedules'; slots 2-8 are covered by the prose "
-        "'Further schedules follow the same pattern ... up to Feed Schedule 8'",
+        "'## Feed-to-Grid Schedules'; slots 2-32 are covered by the prose "
+        "'Further schedules follow the same pattern ... up to Feed Schedule 32'",
     ),
     Exclusion(
         "POWEROCEAN",
         "binary_sensors",
         re.compile(r"^Feed Schedule ([2-9]|[1-9]\d+) "),
         "only 'Feed Schedule 1 ...' is a literal table row in "
-        "'## Feed-to-Grid Schedules'; slots 2-8 are covered by the prose "
-        "'Further schedules follow the same pattern ... up to Feed Schedule 8'",
+        "'## Feed-to-Grid Schedules'; slots 2-32 are covered by the prose "
+        "'Further schedules follow the same pattern ... up to Feed Schedule 32'",
     ),
     Exclusion(
         "POWEROCEAN",
         "numbers",
         re.compile(r"^Feed Schedule ([2-9]|[1-9]\d+) "),
         "only 'Feed Schedule 1 ...' is a literal table row in "
-        "'## Feed-to-Grid Schedules'; slots 2-8 are covered by the prose "
-        "'Further schedules follow the same pattern ... up to Feed Schedule 8'",
+        "'## Feed-to-Grid Schedules'; slots 2-32 are covered by the prose "
+        "'Further schedules follow the same pattern ... up to Feed Schedule 32'",
     ),
     Exclusion(
         "POWEROCEAN",
         "switches",
         re.compile(r"^Feed Schedule ([2-9]|[1-9]\d+) "),
         "only 'Feed Schedule 1 ...' is a literal table row in "
-        "'## Feed-to-Grid Schedules'; slots 2-8 are covered by the prose "
-        "'Further schedules follow the same pattern ... up to Feed Schedule 8'",
+        "'## Feed-to-Grid Schedules'; slots 2-32 are covered by the prose "
+        "'Further schedules follow the same pattern ... up to Feed Schedule 32'",
     ),
     Exclusion(
         "DELTA2MAX",

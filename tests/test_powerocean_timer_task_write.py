@@ -17,6 +17,7 @@ from ecoflow_energy.ecoflow.energy_stream import (
     POWEROCEAN_TASK_POWER_MAX_W,
     build_timer_task_set_payload,
 )
+from ecoflow_energy.ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX
 from ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
@@ -278,10 +279,20 @@ def test_a_short_frame_refuses_an_armed_argument():
         build("arm", armed=True)
 
 
-@pytest.mark.parametrize("index", [0, -1, 9])
+@pytest.mark.parametrize("index", [0, -1, SCHEDULE_MAX_INDEX + 1])
 def test_the_task_index_is_bounded(index):
     with pytest.raises(ValueError, match="task_index"):
         build_timer_task_set_payload("arm", index, device_sn=CAPTURE_SN)
+
+
+def test_the_highest_slot_the_parser_reads_can_be_written():
+    """#714: a unit numbers its slots itself, so the write bound is the read bound."""
+    frame = build_timer_task_set_payload(
+        "arm", SCHEDULE_MAX_INDEX, device_sn=CAPTURE_SN
+    )
+
+    # is_cfg=2, task_index=32, is_enable=1: ARM_PDATA with the index swapped.
+    assert pdata_of(frame) == bytes.fromhex("100218202001")
 
 
 def test_a_bool_is_not_a_task_index():
