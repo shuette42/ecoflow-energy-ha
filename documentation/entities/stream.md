@@ -31,8 +31,8 @@ Full list of all entities created for Stream devices.
 | Unit Battery Power | W | - | enabled | This unit's own battery, positive = charging, negative = discharging. Measured at the battery (DC side) and updated about once a minute, so it includes the unit's own consumption and can differ from Battery Power by tens of watts. On linked units each unit shows its own battery, not the group. **Enhanced Mode only.** |
 | Unit Battery Charge Power | W | - | enabled | Charging power of this unit's battery (always >= 0), split from Unit Battery Power. **Enhanced Mode only.** |
 | Unit Battery Discharge Power | W | - | enabled | Discharging power of this unit's battery (always >= 0), split from Unit Battery Power. **Enhanced Mode only.** |
-| Battery Voltage | V | - | enabled | Pack voltage |
-| Battery Temp | C | - | enabled | Battery temperature |
+| Battery Voltage | V | - | enabled | Pack voltage. Enhanced Mode only: Standard Mode does not provide it |
+| Battery Temp | C | - | enabled | Battery temperature. Enhanced Mode only: Standard Mode does not provide it |
 | Backup Reserve | % | diagnostic | enabled | Current reserve level. On the Stream AC Pro (`BK31`) it mirrors the Backup Reserve number; the other models show the value only. The value is also reported in Standard Mode |
 | Battery Charge/Discharge State | - | diagnostic | disabled | `standby`, `charging` or `discharging`. It is derived from Battery Power, so on a linked unit that does not report Battery Power it keeps its last value or stays empty |
 
@@ -91,8 +91,8 @@ Full list of all entities created for Stream devices.
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
 | Design Capacity | mAh | diagnostic | disabled | Nominal pack capacity |
-| Remaining Capacity | mAh | - | disabled | Remaining capacity |
-| Full Capacity | mAh | - | disabled | Full charge capacity |
+| Remaining Capacity | mAh | - | disabled | Remaining capacity. Enhanced Mode only: Standard Mode does not provide it |
+| Full Capacity | mAh | - | disabled | Full charge capacity. Enhanced Mode only: Standard Mode does not provide it |
 | Max Cell Temp / Min Cell Temp | C | diagnostic | disabled | Cell temperature range |
 | Max MOSFET Temp | C | diagnostic | disabled | MOSFET temperature |
 | Max Cell Voltage / Min Cell Voltage | mV | diagnostic | disabled | Cell voltage range |
