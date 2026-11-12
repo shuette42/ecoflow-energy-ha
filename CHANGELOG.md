@@ -7,7 +7,9 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 - The STREAM Ultra (`BK11`) has the AC Outlet 1 and AC Outlet 2 switches in Enhanced Mode, as the STREAM AC Pro does. Switching outlet 1 is confirmed by a recording of the app: the unit acknowledges the write and reports the new outlet state about two seconds later, and the integration sends the same bytes the app does. Outlet 2 uses the same message with its own field, which is recorded on a STREAM AC Pro but not yet on a STREAM Ultra. Thanks to @KEV-github for the recording and to @aharder3 for testing both outlets. (Ref #677)
-- A base DELTA 3 (serial prefix `P231`) has a USB output switch in Enhanced Mode. The command is the one the app sends, recorded on a `P231` switching USB off and on, and the unit acknowledges it. The unit reports the state in its USB flow field, where bit 1 means on, seen in both directions. A frame right after switching off in the app is still missing from the recordings, so the read-back is confirmed in one recording and not yet in all. The AC, AC 2 and 12 V outputs keep their reading. Thanks to @JuHeFr for the recordings. (Ref #685)
+- A base DELTA 3 (serial prefix `P231`) has a USB output switch in Enhanced Mode. The command is the one the app sends, recorded on a `P231` switching USB off and on, and the unit acknowledges it. The unit reports the state in its USB flow field, where bit 1 means on, seen in both directions. A report right after switching USB off from the app is still missing from the recordings, so the read-back after a write is confirmed for switching on and not yet for switching off. The AC, AC 2 and 12 V outputs keep their reading. Thanks to @JuHeFr for the recordings. (Ref #685)
+
+## [1.27.1] - 2026-11-11
 
 ### Changed
 
