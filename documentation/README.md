@@ -10,7 +10,7 @@ Complete list of all sensors, switches, numbers, and binary sensors per device:
 
 - [PowerOcean](entities/powerocean.md) - 301 sensors, 69 binary sensors, 68 numbers, 64 switches, 2 selects (`HJ31`, `HJ32`, `HJ35`, `HJ36`, `HJ37`, `J32B`, `J327`, `J329`, `J32D`, `J32E`, the Plus variants `R371`, `R372`, `R373`, `R374`, `HJ3C`, and the DC Fit `HC31`) on an account entry. A Local (Modbus/TCP) entry for a three-phase PowerOcean has 29 sensors, 4 binary sensors, 2 numbers and 1 switch
 - [Delta 2 Max](entities/delta-2-max.md) - 94 sensors, 4 binary sensors, 7 switches, 8 numbers (`R351`, `R331`)
-- [Delta 3 Max Plus](entities/delta-3-max-plus.md) - 47 sensors, 7 switches, 4 numbers, 5 selects (`D3M1`, `D3N1`, `P321`, `P231`, `P351`), plus 3 switches, 3 numbers and 1 binary sensor for port priority on `D3M` serials
+- [Delta 3 Max Plus](entities/delta-3-max-plus.md) - 47 sensors, 7 switches, 4 numbers, 5 selects (`D3M1`, `D3N1`, `P321`, `P231`, `P351`), plus 3 switches, 3 numbers and 1 binary sensor for port priority on `D3M` serials, and a USB output switch on `P231` in Enhanced Mode
 - [Smart Plug](entities/smart-plug.md) - 11 sensors, 1 binary sensor, 1 switch, 2 numbers (`HW52`)
 - [Stream](entities/stream.md) - 65 sensors, 2 binary sensors, 0 numbers (`BK11`, `BK12`, `BK31`, `BK41`, `BK51`, `BK61`), plus 4 numbers and 2 switches on `BK31`
 - [Stream AC Pro outlet notes](entities/stream-ac-pro.md) - Enhanced Mode outlet controls and telemetry (`BK31`)

@@ -5,7 +5,7 @@ across the generation: Delta 3 Max Plus (`D3M1`, `P321`), DELTA 3 Max (`D3N1`), 
 
 **Totals:** 47 sensors, 7 switches, 4 numbers, 5 selects. Units whose serial
 starts with `D3M` add the port priority set: 3 switches, 3 numbers and 1 binary
-sensor.
+sensor. A base DELTA 3 (`P231`) adds the USB output switch in Enhanced Mode.
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
@@ -103,6 +103,7 @@ be used in the Energy Dashboard without accumulating drift.
 | AC 1 non-essential | Mark the first AC outlet group as non-essential |
 | AC 2 non-essential | Mark the second AC outlet group as non-essential |
 | DC non-essential | Mark the DC output as non-essential |
+| USB output | All USB-A and USB-C ports on/off. Base DELTA 3 (`P231`) only, Enhanced Mode only. The state is read back from the port status the device reports, so a press on the device panel shows here too |
 
 ---
 

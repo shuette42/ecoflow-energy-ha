@@ -29,6 +29,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import (
     DELTA2MAX_SWITCHES,
     DELTA3_SWITCHES,
+    DELTA3USB_SWITCHES,
     DELTA_PROFILE_R331,
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
@@ -57,6 +58,7 @@ from .const import (
     WAVE3_SWITCHES,
     EcoFlowSwitchDef,
     filter_defs_for_serial,
+    supports_delta3_usb_switch,
     supports_ocean2_storm_guard,
     supports_powerpulse_controls,
     supports_stream_ac5000_controls,
@@ -692,6 +694,8 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
             defs = defs + STREAMFEEDIN_SWITCHES
         return defs
     if device_type == DEVICE_TYPE_DELTA3:
+        if supports_delta3_usb_switch(device_sn):
+            return DELTA3_SWITCHES + DELTA3USB_SWITCHES
         return DELTA3_SWITCHES
     if device_type == DEVICE_TYPE_STREAM_AC5000:
         if not supports_stream_ac5000_controls(device_sn):

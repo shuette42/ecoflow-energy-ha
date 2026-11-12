@@ -121,6 +121,8 @@ FAMILY_TO_FILE: dict[str, str] = {
     "STREAMFEEDIN": "stream.md",
     "STREAMAC5000": "stream-ac-5000.md",
     "DELTA3": "delta-3-max-plus.md",
+    # The P231 USB output switch shares the Delta 3 page (#685).
+    "DELTA3USB": "delta-3-max-plus.md",
     "POWERSTREAM": "powerstream.md",
     "SMARTMETER": "smart-meter.md",
     "SOLARTRACKER": "solar-tracker.md",
@@ -1326,7 +1328,9 @@ def test_readme_delta3_primary_and_footnote_counts_match_const_py():
     primary, footnote = _primary_and_footnote(
         _bullet_segment(doc_text, "Delta 3 Max Plus")
     )
-    base = _real_counts(const.DEVICE_TYPE_DELTA3, "P231XXXXXXXXXXXX")
+    # The base is a prefix without the P231-only USB output switch (#685),
+    # which the bullet names in words rather than in the counts.
+    base = _real_counts(const.DEVICE_TYPE_DELTA3, "P321XXXXXXXXXXXX")
     d3m = _real_counts(const.DEVICE_TYPE_DELTA3, "D3M1XXXXXXXXXXXX")
 
     stated_primary = _parse_counts(primary)

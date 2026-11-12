@@ -6137,6 +6137,20 @@ def supports_stream_feed_in_control(device_sn: str) -> bool:
     return device_sn[:4].upper() in STREAM_FEED_IN_CONTROL_PREFIXES
 
 
+# Delta 3 variants whose USB output switch is offered. An allowlist, so a new
+# prefix does not get the switch by default: the write (ConfigWrite field 19)
+# and its read-back (field 13) are recorded on a P231 only (#685). A P351
+# reports field 13 too, but no write of its own is on file.
+DELTA3_USB_CONTROL_PREFIXES: frozenset[str] = frozenset({"P231"})
+
+
+def supports_delta3_usb_switch(device_sn: str) -> bool:
+    """Return whether this Delta 3 variant gets the USB output switch."""
+    if not device_sn:
+        return False
+    return device_sn[:4].upper() in DELTA3_USB_CONTROL_PREFIXES
+
+
 @dataclass(frozen=True)
 class Ocean2Controls:
     """What may be written to one Ocean 2 model, and how (None = no control).
@@ -6861,6 +6875,19 @@ DELTA3_SWITCHES: list[EcoFlowSwitchDef] = [
         "DC Non-Essential",
         "port_priority_dc_limited",
         "mdi:power-plug-off-outline",
+        enhanced_only=True,
+    ),
+]
+
+# USB output master switch, P231 only (supports_delta3_usb_switch). Push path
+# only: the read-back (flow_info_qcusb1) is recorded on the app channel and the
+# polled quota has no recording of it.
+DELTA3USB_SWITCHES: list[EcoFlowSwitchDef] = [
+    EcoFlowSwitchDef(
+        "usb_out_switch",
+        "USB output",
+        "usb_out_flow",
+        "mdi:usb-port",
         enhanced_only=True,
     ),
 ]

@@ -62,6 +62,7 @@ _PROTO_PLAIN_FIELDS: dict[str, str] = {
     "flow_info_ac_out": "flowInfoAcOut",
     "flow_info_ac2_out": "flowInfoAc2Out",
     "flow_info_12v": "flowInfo12v",
+    "flow_info_qcusb1": "flowInfoQcusb1",
     "xboost_en": "xboostEn",
     "en_beep": "enBeep",
     "energy_backup_en": "energyBackupEn",
