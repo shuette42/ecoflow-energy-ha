@@ -197,12 +197,12 @@ class TestStreamProtoParser:
         assert result["home_w"] == pytest.approx(309.5, rel=1e-5)
         assert result["solar_w"] == 0.0
         assert result["backup_reserve_pct"] == 20
-        # Field 518 is a group aggregate that one unit of a group publishes;
-        # it must never become this unit's battery power (#486). The per-unit
-        # value comes from the BMS frame, see TestStreamUnitBatteryPower.
-        assert "batt_w" not in result
-        assert "batt_charge_power_w" not in result
-        assert "batt_discharge_power_w" not in result
+        # Field 518 is the system battery power the app shows (#710); the
+        # pack's own figure comes from the BMS frame, see
+        # TestStreamUnitBatteryPower.
+        assert result["batt_w"] == pytest.approx(1043.4, rel=1e-5)
+        assert result["batt_charge_power_w"] == pytest.approx(1043.4, rel=1e-5)
+        assert result["batt_discharge_power_w"] == 0.0
         # batt_charge_discharge_state is derived by the coordinator (#50),
         # not by the parser, so it must not appear in parser output.
         assert "batt_charge_discharge_state" not in result
@@ -363,7 +363,7 @@ class TestStreamProtoParser:
         assert result["sys_grid_connection_power_w"] == pytest.approx(304.15, rel=1e-5)
 
     def test_parse_zero_battery_power_splits_to_zero(self):
-        """At zero battery power both charge and discharge splits are 0.
+        """At zero pack power the unit reading is 0 and no system key appears.
         State derivation is the coordinator's job, so the parser emits no
         batt_charge_discharge_state."""
         inner = bytearray()
@@ -373,9 +373,9 @@ class TestStreamProtoParser:
         result = parse_stream_proto_message(_build_frame(32, 50, bytes(inner)))
 
         assert result is not None
-        assert result["batt_w"] == 0.0
-        assert result["batt_charge_power_w"] == 0.0
-        assert result["batt_discharge_power_w"] == 0.0
+        assert result["unit_batt_w"] == 0.0
+        for key in _BATTERY_POWER_KEYS:
+            assert key not in result
         assert "batt_charge_discharge_state" not in result
 
     def test_parse_tiny_negative_float_is_normalized_to_zero(self):
@@ -422,11 +422,11 @@ class TestStreamProtoParser:
         assert "batt_charge_power_w" not in result
         assert "batt_discharge_power_w" not in result
 
-    def test_field_602_beside_518_gives_wifi_and_no_battery_power(self):
-        """602 and 518 in one frame: the WiFi reading lands, no battery key does.
+    def test_field_602_beside_518_leaves_battery_power_to_518(self):
+        """602 and 518 in one frame: the WiFi reading lands, 518 alone sets power.
 
-        518 is the group aggregate and is not a per-unit battery reading (#486),
-        and 602 is a radio reading, so neither may reach a battery key.
+        602 is a radio reading, so the battery keys carry the -300 W of 518
+        and never the -66 dBm.
         """
         inner = bytearray()
         inner.extend(_encode_fixed32_field(518, -300.0))
@@ -436,9 +436,9 @@ class TestStreamProtoParser:
 
         assert result is not None
         assert result["wifi_rssi_dbm"] == pytest.approx(-66.0, rel=1e-5)
-        assert "batt_w" not in result
-        assert "batt_charge_power_w" not in result
-        assert "batt_discharge_power_w" not in result
+        assert result["batt_w"] == pytest.approx(-300.0, rel=1e-5)
+        assert result["batt_charge_power_w"] == 0.0
+        assert result["batt_discharge_power_w"] == pytest.approx(300.0, rel=1e-5)
 
     def test_outlet_state_comes_from_relay_fields_only(self):
         """980/982 are the sole source for the outlet flags.
@@ -525,9 +525,9 @@ class TestStreamGroupCaptureReplay:
     ) -> None:
         result = self._parsed(label)
 
-        assert result["batt_charge_power_w"] == charge
-        assert result["batt_discharge_power_w"] == discharge
-        assert result["batt_w"] == charge - discharge
+        assert result["unit_batt_w"] == charge - discharge
+        for key in _BATTERY_POWER_KEYS:
+            assert key not in result
 
     @pytest.mark.parametrize(
         ("label", "cycles"),
@@ -872,47 +872,91 @@ def _bms_frame(
 
 
 class TestStreamUnitBatteryPower:
-    """Per-unit battery power comes from the BMS frame, not from field 518 (#486).
+    """System battery power is field 518, the pack's own figure is 26/27 (#710).
 
-    Field 518 of cmd 254/21 is a group aggregate that only one unit of a
-    multi-unit group publishes. Every other unit sends 0.0, so its battery
-    power stayed at 0 W while it charged or discharged. Cmd 32/50 carries the
-    unit's own pack power in fields 26 (charge) and 27 (discharge).
+    Field 518 of cmd 254/21 is the figure the app shows (AC side, float,
+    positive = charge). Only the unit that computes the system block sends a
+    real value; the others send 0.0 (#486). Cmd 32/50 carries the unit's own
+    DC pack power in fields 26 (charge) and 27 (discharge), published on
+    `unit_batt_w`.
     """
 
-    def test_discharge_frame_gives_negative_battery_power(self) -> None:
+    @staticmethod
+    def _telemetry(fields: dict[int, float]) -> dict:
+        result = parse_stream_proto_message(_status_frame(fields))
+        assert result is not None
+        return result
+
+    def test_charging_518_gives_battery_power_and_charge_split(self) -> None:
+        """Single unit, 15:04:11 of the #710 diagnostics: 518 +35.83 beside
+        pack discharge 12 W."""
+        result = self._telemetry({242: 80.0, 262: 80.0, 518: 35.83})
+
+        assert result["batt_w"] == pytest.approx(35.83, rel=1e-5)
+        assert result["batt_charge_power_w"] == pytest.approx(35.83, rel=1e-5)
+        assert result["batt_discharge_power_w"] == 0.0
+
+    def test_discharging_518_gives_discharge_split(self) -> None:
+        result = self._telemetry({242: 80.0, 262: 80.0, 518: -20.0})
+
+        assert result["batt_w"] == -20.0
+        assert result["batt_charge_power_w"] == 0.0
+        assert result["batt_discharge_power_w"] == 20.0
+
+    def test_idle_518_is_zero_and_not_unknown(self) -> None:
+        """Night frame of the #710 diagnostics: 518 = 0.0 on a single unit."""
+        result = self._telemetry({242: 80.0, 262: 80.0, 518: 0.0})
+
+        assert result["batt_w"] == 0.0
+        assert result["batt_charge_power_w"] == 0.0
+        assert result["batt_discharge_power_w"] == 0.0
+
+    def test_frame_without_518_sets_no_battery_power(self) -> None:
+        result = self._telemetry({242: 80.0, 262: 80.0, 616: 12.0})
+
+        for key in _BATTERY_POWER_KEYS:
+            assert key not in result
+
+    def test_follower_telemetry_frame_clears_battery_power(self) -> None:
+        """A follower sends 518 = 0.0 while the group moves 791 W (#486)."""
+        result = self._telemetry({262: 0.0, 242: 99.0, 518: 0.0, 616: 791.04})
+
+        for key in _BATTERY_POWER_KEYS:
+            assert key in result
+            assert result[key] is None, key
+        assert result["ac_grid_connection_power_w"] == pytest.approx(791.04, rel=1e-5)
+
+    def test_bms_discharge_frame_gives_negative_unit_power(self) -> None:
         result = parse_stream_proto_message(_bms_frame(20343, -43523, 0, 885))
 
         assert result is not None
-        assert result["batt_w"] == -885.0
-        assert result["batt_charge_power_w"] == 0.0
-        assert result["batt_discharge_power_w"] == 885.0
+        assert result["unit_batt_w"] == -885.0
+        for key in _BATTERY_POWER_KEYS:
+            assert key not in result
         # The private staging keys never reach the published data.
         assert "_batt_charge_power_w" not in result
         assert "_batt_discharge_power_w" not in result
 
-    def test_charge_frame_gives_positive_battery_power(self) -> None:
+    def test_bms_charge_frame_gives_positive_unit_power(self) -> None:
         result = parse_stream_proto_message(_bms_frame(20017, 17467, 349, 0))
 
         assert result is not None
-        assert result["batt_w"] == 349.0
-        assert result["batt_charge_power_w"] == 349.0
-        assert result["batt_discharge_power_w"] == 0.0
+        assert result["unit_batt_w"] == 349.0
+        for key in _BATTERY_POWER_KEYS:
+            assert key not in result
 
-    def test_idle_frame_keeps_the_small_discharge_reading(self) -> None:
+    def test_bms_idle_frame_keeps_the_small_discharge_reading(self) -> None:
         result = parse_stream_proto_message(_bms_frame(20100, None, 0, 2))
 
         assert result is not None
-        assert result["batt_w"] == -2.0
-        assert result["batt_charge_power_w"] == 0.0
-        assert result["batt_discharge_power_w"] == 2.0
+        assert result["unit_batt_w"] == -2.0
 
     @pytest.mark.parametrize(
         ("charge_w", "discharge_w"),
         [(349, None), (None, 885)],
         ids=["only-charge", "only-discharge"],
     )
-    def test_one_direction_alone_sets_no_battery_power(
+    def test_one_direction_alone_sets_no_unit_power(
         self, charge_w: int | None, discharge_w: int | None
     ) -> None:
         result = parse_stream_proto_message(
@@ -920,40 +964,13 @@ class TestStreamUnitBatteryPower:
         )
 
         assert result is not None
+        assert "unit_batt_w" not in result
         for key in _BATTERY_POWER_KEYS:
             assert key not in result
         assert "_batt_charge_power_w" not in result
         assert "_batt_discharge_power_w" not in result
         # The rest of the BMS frame still lands.
         assert result["batt_voltage_v"] == pytest.approx(20.017)
-
-    def test_follower_telemetry_frame_publishes_no_battery_power(self) -> None:
-        """A follower sends 518 = 0.0 while the group moves 791 W (#486)."""
-        inner = bytearray()
-        inner.extend(_encode_fixed32_field(518, 0.0))
-        inner.extend(_encode_fixed32_field(616, 791.04))
-        inner.extend(_encode_fixed32_field(1210, 44.71))
-
-        result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
-
-        assert result is not None
-        for key in _BATTERY_POWER_KEYS:
-            assert key not in result
-        assert result["ac_grid_connection_power_w"] == pytest.approx(791.04, rel=1e-5)
-        assert result["ac_outlet_1_w"] == pytest.approx(44.71, rel=1e-5)
-
-    def test_leader_aggregate_518_does_not_become_battery_power(self) -> None:
-        """The one unit that does publish 518 gets no battery power from it."""
-        inner = bytearray()
-        inner.extend(_encode_fixed32_field(518, -600.0))
-        inner.extend(_encode_fixed32_field(616, 600.0))
-
-        result = parse_stream_proto_message(_build_frame(254, 21, bytes(inner)))
-
-        assert result is not None
-        for key in _BATTERY_POWER_KEYS:
-            assert key not in result
-        assert result["ac_grid_connection_power_w"] == pytest.approx(600.0, rel=1e-5)
 
 
 _SYSTEM_KEYS = (
@@ -963,6 +980,9 @@ _SYSTEM_KEYS = (
     "sys_grid_connection_power_w",
     "home_from_batt_w",
     "home_from_grid_w",
+    "batt_w",
+    "batt_charge_power_w",
+    "batt_discharge_power_w",
 )
 
 
@@ -1085,6 +1105,25 @@ class TestStreamFollowerSystemBlock:
         assert result is not None
         assert result["home_w"] == 0.0
         assert result["grid_w"] == 0.0
+
+
+class TestStreamFollowerMirrorFrameKnownLimit:
+    """A follower frame whose 262 mirrors its own 242 reads as an idle leader.
+
+    Known case (#486, seen once): the one frame carries no tell, so the system
+    battery power 518 = 0.0 is published as 0 W instead of unknown. This pins
+    the limit as it is, so a change to it is a decision and not an accident.
+    """
+
+    def test_mirror_frame_publishes_zero_battery_power(self) -> None:
+        fields = {**_FOLLOWER_FIELDS, 262: 97.0, 242: 97.0}
+
+        result = parse_stream_proto_message(_status_frame(fields))
+
+        assert result is not None
+        assert result["batt_w"] == 0.0
+        assert result["batt_charge_power_w"] == 0.0
+        assert result["batt_discharge_power_w"] == 0.0
 
 
 @pytest.mark.parametrize("decode_scalar", [_decode_scalar, _decode_scalar_ac5000])

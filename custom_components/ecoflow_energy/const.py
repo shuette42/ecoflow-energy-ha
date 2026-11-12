@@ -4486,6 +4486,39 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:battery",
         suggested_display_precision=0,
     ),
+    # This unit's own pack power (DC side, from the BMS frame). Battery Power
+    # above is the system figure the app shows; the pack figure also carries
+    # the unit's own consumption, and in a group every unit has its own.
+    EcoFlowSensorDef(
+        "unit_batt_w",
+        "Unit Battery Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:battery-outline",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "unit_batt_charge_power_w",
+        "Unit Battery Charge Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:battery-charging-outline",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "unit_batt_discharge_power_w",
+        "Unit Battery Discharge Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:battery-outline",
+        suggested_display_precision=0,
+        enhanced_only=True,
+    ),
     EcoFlowSensorDef(
         "ac_grid_connection_power_w",
         "AC Grid Connection Power",
@@ -4592,6 +4625,28 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         "total_increasing",
         "mdi:battery",
         suggested_display_precision=2,
+    ),
+    # This unit's share of the two battery counters above, which follow the
+    # system figure and so count the group when units are linked.
+    EcoFlowSensorDef(
+        "unit_batt_charge_energy_kwh",
+        "Unit Battery Charge Energy",
+        "kWh",
+        "energy",
+        "total_increasing",
+        "mdi:battery-charging-outline",
+        suggested_display_precision=2,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "unit_batt_discharge_energy_kwh",
+        "Unit Battery Discharge Energy",
+        "kWh",
+        "energy",
+        "total_increasing",
+        "mdi:battery-outline",
+        suggested_display_precision=2,
+        enhanced_only=True,
     ),
     EcoFlowSensorDef(
         "home_from_batt_w",
@@ -5870,6 +5925,11 @@ STREAM_MICRO_EXCLUDED_KEYS: frozenset[str] = frozenset(
         "batt_discharge_power_w",
         "batt_charge_energy_kwh",
         "batt_discharge_energy_kwh",
+        "unit_batt_w",
+        "unit_batt_charge_power_w",
+        "unit_batt_discharge_power_w",
+        "unit_batt_charge_energy_kwh",
+        "unit_batt_discharge_energy_kwh",
         "batt_voltage_v",
         "batt_temp_c",
         "batt_design_cap_mah",
@@ -10334,6 +10394,8 @@ STREAM_POWER_TO_ENERGY: dict[str, str] = {
     "home_w": "home_energy_kwh",
     "batt_charge_power_w": "batt_charge_energy_kwh",
     "batt_discharge_power_w": "batt_discharge_energy_kwh",
+    "unit_batt_charge_power_w": "unit_batt_charge_energy_kwh",
+    "unit_batt_discharge_power_w": "unit_batt_discharge_energy_kwh",
 }
 
 STREAM_ENERGY_FROM_API: list[tuple[str, str]] = []

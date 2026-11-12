@@ -6,7 +6,7 @@ Full list of all entities created for Stream devices.
 
 **The Stream Micro (`BK01`, `BK02`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01, BK02)](#stream-micro-bk01-bk02) at the end of this page.
 
-**Totals:** 60 sensors, 2 binary sensors, no numbers. Stream AC Pro (`BK31`) adds 2 switches and 4 numbers. Stream Ultra X (`BK61`) adds 1 switch in Standard Mode. Eight of the 60 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
+**Totals:** 65 sensors, 2 binary sensors, no numbers. Stream AC Pro (`BK31`) adds 2 switches and 4 numbers. Stream Ultra X (`BK61`) adds 1 switch in Standard Mode. Eight of the 65 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
@@ -25,13 +25,16 @@ Full list of all entities created for Stream devices.
 | Battery SOC (Precise) | % | diagnostic | disabled | High-resolution SoC |
 | Battery SoH | % | - | enabled | State of health |
 | Battery Cycles | - | - | enabled | Charge cycles the BMS has counted for this unit's pack. It tracks the lifetime energy through the pack divided by its capacity. **Enhanced Mode only.** |
-| Battery Power | W | - | enabled | This unit's own battery, positive = charging, negative = discharging. Measured at the battery (DC side) and updated about once a minute. On linked units each unit shows its own battery, not the group |
-| Battery Charge Power | W | - | enabled | Charging power of this unit's battery (always >= 0) |
-| Battery Discharge Power | W | - | enabled | Discharging power of this unit's battery (always >= 0) |
+| Battery Power | W | - | enabled | Battery power as the app's flow chart shows it, positive = charging, negative = discharging. It is the system figure and leaves out the unit's own consumption, so it balances with Grid, Solar and Home Power in the Energy Dashboard. In Enhanced Mode on linked units, only the unit that computes the system reports it, the others show unknown. One frame of such a unit can still read 0 W, because a follower frame whose system state of charge equals its own cannot be told from an idle leader. In Standard Mode the value comes from the Developer API as before. This unit's own pack figure is Unit Battery Power, available in Enhanced Mode only |
+| Battery Charge Power | W | - | enabled | Charging power (always >= 0), split from Battery Power |
+| Battery Discharge Power | W | - | enabled | Discharging power (always >= 0), split from Battery Power |
+| Unit Battery Power | W | - | enabled | This unit's own battery, positive = charging, negative = discharging. Measured at the battery (DC side) and updated about once a minute, so it includes the unit's own consumption and can differ from Battery Power by tens of watts. On linked units each unit shows its own battery, not the group. **Enhanced Mode only.** |
+| Unit Battery Charge Power | W | - | enabled | Charging power of this unit's battery (always >= 0), split from Unit Battery Power. **Enhanced Mode only.** |
+| Unit Battery Discharge Power | W | - | enabled | Discharging power of this unit's battery (always >= 0), split from Unit Battery Power. **Enhanced Mode only.** |
 | Battery Voltage | V | - | enabled | Pack voltage |
 | Battery Temp | C | - | enabled | Battery temperature |
 | Backup Reserve | % | diagnostic | enabled | Current reserve level. On the Stream AC Pro (`BK31`) it mirrors the Backup Reserve number; the other models show the value only |
-| Battery Charge/Discharge State | - | diagnostic | disabled | `standby`, `charging` or `discharging` |
+| Battery Charge/Discharge State | - | diagnostic | disabled | `standby`, `charging` or `discharging`. It is derived from Battery Power, so on a linked unit that does not report Battery Power it keeps its last value or stays empty |
 
 ## Sensors - Solar
 
@@ -98,8 +101,10 @@ Full list of all entities created for Stream devices.
 
 | Entity | Unit | Default | Dashboard Section |
 |:---|:---:|:---:|:---|
-| Battery Charge Energy | kWh | enabled | Battery charge |
-| Battery Discharge Energy | kWh | enabled | Battery discharge |
+| Battery Charge Energy | kWh | enabled | Battery charge, integrated from Battery Charge Power. On linked units it counts only while this unit reports the system figure, so a unit that does not compute it stops counting. Use the Unit counters for those |
+| Battery Discharge Energy | kWh | enabled | Battery discharge, integrated from Battery Discharge Power. Same limit on linked units |
+| Unit Battery Charge Energy | kWh | enabled | Lifetime energy into this unit's own battery, integrated from Unit Battery Charge Power. Starts at 0 when first created. **Enhanced Mode only.** |
+| Unit Battery Discharge Energy | kWh | enabled | Lifetime energy out of this unit's own battery, integrated from Unit Battery Discharge Power. Starts at 0 when first created. **Enhanced Mode only.** |
 | Solar Energy | kWh | disabled | Solar production (needs a paired meter) |
 | Home Energy | kWh | disabled | Home consumption (needs a paired meter) |
 | PV 1 Energy to PV 4 Energy | kWh | disabled | Per-string solar production. The counters for strings 3 and 4 follow their power readings: *accessory*, so they exist only on a unit that reports those strings |

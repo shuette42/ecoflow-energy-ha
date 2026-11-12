@@ -19,20 +19,24 @@ and field numbers as BK31.
 Current field notes from dump analysis:
 - `grid_w` tracks the summed AC grid intake seen in the app "grid
   connection" view and matches the group AC-side battery power (field
-  518, not mapped, see below) plus `home_from_grid_w` during charging
+  518, `batt_w`, see below) plus `home_from_grid_w` during charging
   cycles.
 - `ac_grid_connection_power_w` is derived from the signed system grid
   connection path and matches the app "grid connection" / "Netz-Anschluss"
   value. It includes battery charging plus AC outlet pass-through load:
   negative = input from grid, positive = output/feed-in.
-- `batt_w` is the signed per-unit battery power (positive = charging),
-  taken from the BMS frame `32/50` as `field 26 - field 27` (charge minus
-  discharge, whole watts, DC pack side). Both fields must be present. The
-  same two fields feed `batt_charge_power_w` / `batt_discharge_power_w`.
-  `254/21 field 518` is NOT used: it is a group aggregate (AC side) that
-  only one unit of a multi-unit group publishes, the others send 0.0
-  (#486). The BMS frame arrives about once a minute. AC outlet activity
-  is exposed separately via `ac_outlet_1_w` / `ac_outlet_2_w`.
+- `batt_w` is the system battery power the app shows (positive =
+  charging), `254/21 field 518`, a float in watts on the AC side. It
+  feeds `batt_charge_power_w` / `batt_discharge_power_w` (max(w, 0) and
+  max(-w, 0)). Only the unit that computes the system block sends it; the
+  other units of a group send 0.0, which is cleared to None like the rest
+  of `_SYSTEM_BLOCK_KEYS` (#486, #710).
+- `unit_batt_w` is this unit's own pack power (positive = charging), from
+  the BMS frame `32/50` as `field 26 - field 27` (charge minus discharge,
+  whole watts, DC pack side, so it includes the unit's own consumption).
+  Both fields must be present. The BMS frame arrives about once a minute.
+  AC outlet activity is exposed separately via `ac_outlet_1_w` /
+  `ac_outlet_2_w`.
 - `grid_w`, `home_w`, `solar_w`, `sys_grid_connection_power_w`,
   `home_from_batt_w` and `home_from_grid_w` are system readings. In a group
   of several units only one unit fills them; the others send 0.0, which is
@@ -121,11 +125,13 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         # this total and is published separately for diagnostics.
         516: ("home_w", _TYPE_FLOAT),
         517: ("solar_w", _TYPE_FLOAT),
-        # Field 518 is deliberately NOT mapped to `batt_w`. It is a group
-        # aggregate (AC side) that only ONE unit of a multi-unit group
-        # publishes; every other unit sends 0.0, so a follower showed 0 W while
-        # charging or discharging (#486). Per-unit battery power comes from the
-        # BMS frame (32/50 fields 26 and 27) instead.
+        # System battery power as the app's flow chart shows it (AC side,
+        # positive = charge). Only the unit that computes the system block
+        # publishes it; every other unit of a group sends 0.0, which
+        # `_finalize_stream_state` clears like the readings above (#486). The
+        # pack's own DC figure from the BMS frame (32/50 fields 26 and 27)
+        # goes to `unit_batt_w` instead (#710).
+        518: ("batt_w", _TYPE_FLOAT),
         # WiFi module signal strength in dBm (negative). This is a radio
         # reading, not a power path: it must never reach a battery key.
         602: ("wifi_rssi_dbm", _TYPE_FLOAT),
@@ -188,8 +194,8 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         # Per-pack power in whole watts, DC side. Both fields are sent
         # explicitly (one of them 0) and equal V x I of fields 7 and 8 within
         # 1 W. Field 8 (signed pack current) is not mapped: these two carry
-        # the same reading already split by direction. Combined into `batt_w`
-        # and the charge/discharge pair in _finalize_stream_state (#486).
+        # the same reading already split by direction. Combined into
+        # `unit_batt_w` in _finalize_stream_state (#486, #710).
         26: ("_batt_charge_power_w", _TYPE_INT),
         27: ("_batt_discharge_power_w", _TYPE_INT),
         32: ("_batt_charge_capacity_ah_rounded", _TYPE_INT),
@@ -206,8 +212,9 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
 }
 
 # The system block of cmd 254/21: readings only the unit that computes the
-# system fills. Field 518 is in the block as well but is not mapped, and the
-# system state of charge (262) is resolved in the coordinator (#336).
+# system fills. Field 518 (`batt_w`) is in the block with its two direction
+# keys, derived in `_finalize_stream_state`. The system state of charge (262)
+# is resolved in the coordinator (#336).
 _SYSTEM_BLOCK_KEYS: tuple[str, ...] = (
     "grid_w",  # 515
     "home_w",  # 516
@@ -215,6 +222,9 @@ _SYSTEM_BLOCK_KEYS: tuple[str, ...] = (
     "sys_grid_connection_power_w",  # 992
     "home_from_batt_w",  # 1003
     "home_from_grid_w",  # 1004
+    "batt_w",  # 518
+    "batt_charge_power_w",  # split of 518
+    "batt_discharge_power_w",  # split of 518
 )
 
 # Grid connection state enum. Values outside this table decode to None so an
@@ -394,6 +404,14 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     if isinstance(discharge_capacity_mah, (int, float)) and discharge_capacity_mah > 0:
         result["batt_discharge_capacity_ah"] = float(discharge_capacity_mah) / 1000.0
 
+    # The system battery power (518, positive = charge) split by direction for
+    # the Energy Dashboard. Only a frame that carries 518 gets the pair, so an
+    # absent field never fakes a 0 W reading; a real 0.0 gives 0 and 0.
+    system_batt_w = result.get("batt_w")
+    if isinstance(system_batt_w, (int, float)):
+        result["batt_charge_power_w"] = max(float(system_batt_w), 0.0)
+        result["batt_discharge_power_w"] = max(-float(system_batt_w), 0.0)
+
     # A unit that does not compute the system block sends it as zeros. In a
     # group of several units only one of them fills fields 515-518, 262, 992,
     # 1003 and 1004; every other unit sends 0.0 in all of them, in every
@@ -428,23 +446,22 @@ def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     if isinstance(grid_connection, (int, float)):
         result["ac_grid_connection_power_w"] = float(grid_connection)
 
-    # Per-unit battery power from the BMS frame. Only a frame that carries BOTH
-    # directions is a reading: each is sent explicitly with one of them 0, so
-    # one alone means a partial or foreign frame and publishing a half would
-    # fake a one-sided state.
+    # This unit's own pack power from the BMS frame (DC side, positive =
+    # charge), on the key every unit of a group has. Only a frame that carries
+    # BOTH directions is a reading: each is sent explicitly with one of them
+    # 0, so one alone means a partial or foreign frame and publishing a half
+    # would fake a one-sided state. The coordinator splits `unit_batt_w` into
+    # the two unit direction keys (`_resolve_unit_power`).
     charge_power = result.pop("_batt_charge_power_w", None)
     discharge_power = result.pop("_batt_discharge_power_w", None)
     if isinstance(charge_power, (int, float)) and isinstance(
         discharge_power, (int, float)
     ):
-        result["batt_charge_power_w"] = float(charge_power)
-        result["batt_discharge_power_w"] = float(discharge_power)
-        result["batt_w"] = float(charge_power) - float(discharge_power)
+        result["unit_batt_w"] = float(charge_power) - float(discharge_power)
         # batt_charge_discharge_state is intentionally NOT set here. The
         # coordinator pops any parser-provided value and derives the state
         # from a hysteresis window over batt_w (see _derive_battery_state,
-        # issue #50). Setting it from instantaneous sign would only be used
-        # by unit tests and never reaches the live entity.
+        # issue #50).
 
     return result
 

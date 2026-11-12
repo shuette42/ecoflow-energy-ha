@@ -479,7 +479,9 @@ class TestBKSeriesSetIsUntouched:
         # BK series itself reports, not an ES22 one. 59 since the voltage and
         # current of strings 3 and 4 joined it (#522), keys of the same BK
         # series. 60 since Battery Cycles, the BK series' own BMS heartbeat.
-        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 60
+        # 65 since the unit's own pack power moved to Unit Battery Power,
+        # its two direction readings and two energy counters (#710).
+        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 65
 
     def test_bk01_still_gets_the_micro_reduced_set(self) -> None:
         defs = _get_sensor_defs(DEVICE_TYPE_STREAM)
@@ -492,6 +494,59 @@ class TestBKSeriesSetIsUntouched:
         defs = _get_sensor_defs(DEVICE_TYPE_STREAM)
 
         assert filter_defs_for_serial(defs, "BK31TEST00000001") == list(defs)
+
+
+_UNIT_BATTERY_KEYS = {
+    "unit_batt_w",
+    "unit_batt_charge_power_w",
+    "unit_batt_discharge_power_w",
+    "unit_batt_charge_energy_kwh",
+    "unit_batt_discharge_energy_kwh",
+}
+
+BK11_DEVICE: dict[str, Any] = {
+    "sn": "BK11TEST00000001",
+    "name": "",
+    "product_name": "",
+    "device_type": DEVICE_TYPE_STREAM,
+    "online": 1,
+}
+
+
+class TestUnitBatteryNeedsEnhancedMode:
+    """The unit battery sensors have a source in Enhanced Mode only (#710).
+
+    The pack's own power comes from the BMS frame of the app-auth stream; the
+    Standard Mode parser maps no `unit_batt_*` key, so a created sensor would
+    stay unknown there for good, and Home Assistant keeps it once created.
+    """
+
+    async def _created_keys(self, hass: HomeAssistant, *, enhanced: bool) -> set[str]:
+        entry = _entry(BK11_DEVICE)
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, BK11_DEVICE)
+        # The sensor setup reads `coordinator.enhanced_mode`.
+        coordinator._enhanced_mode = enhanced
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+            BK11_DEVICE["sn"]: coordinator
+        }
+        created: list[Any] = []
+        await sensor_setup(hass, entry, add_entities_collector(created))
+        return {e._definition.key for e in created if hasattr(e, "_definition")}
+
+    async def test_enhanced_mode_creates_all_five(self, hass: HomeAssistant) -> None:
+        keys = await self._created_keys(hass, enhanced=True)
+
+        assert keys >= _UNIT_BATTERY_KEYS
+
+    async def test_standard_mode_creates_none_of_them(
+        self, hass: HomeAssistant
+    ) -> None:
+        keys = await self._created_keys(hass, enhanced=False)
+
+        assert not keys & _UNIT_BATTERY_KEYS
+        # The system battery readings keep their Standard Mode source.
+        assert {"batt_w", "batt_charge_power_w", "batt_discharge_power_w"} <= keys
 
 
 class TestTaskListShrinkRouting:
