@@ -1663,6 +1663,9 @@
       "scheduled_charge_soc_target": {
         "name": "Geplanter Ziel-Ladestand"
       },
+      "scheduled_tasks": {
+        "name": "Geplante Aufgaben"
+      },
       "ev_charge_power_w": {
         "name": "Wallbox-Ladeleistung"
       },

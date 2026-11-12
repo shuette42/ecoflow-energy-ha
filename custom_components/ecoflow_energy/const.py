@@ -5545,6 +5545,17 @@ STREAMAC5000_SENSORS: list[EcoFlowSensorDef] = [
         "diagnostic",
         suggested_display_precision=0,
     ),
+    # Every schedule task of the unit as read back from it: the state counts
+    # the enabled ones, the `tasks` attribute lists each with its window, kind,
+    # on/off state and setpoints (#681). Display only; the setpoint sensors
+    # above and the power numbers read the same decode.
+    EcoFlowSensorDef(
+        "scheduled_tasks",
+        "Scheduled Tasks",
+        icon="mdi:calendar-clock",
+        enhanced_only=True,
+        suggested_display_precision=0,
+    ),
     # --- battery diagnostics ---
     EcoFlowSensorDef(
         "batt_voltage_v",

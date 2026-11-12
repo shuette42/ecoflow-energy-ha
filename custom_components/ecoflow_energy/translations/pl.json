@@ -1663,6 +1663,9 @@
       "scheduled_charge_soc_target": {
         "name": "Docelowy SoC zaplanowanego ładowania"
       },
+      "scheduled_tasks": {
+        "name": "Zaplanowane zadania"
+      },
       "ev_charge_power_w": {
         "name": "Moc ładowania wallboxa"
       },

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
-from typing import cast
+from typing import Any, cast
 
 import homeassistant.util.dt as dt_util
 from homeassistant.components.sensor import (
@@ -66,6 +67,7 @@ from .const import (
 from .coordinator import EcoFlowDeviceCoordinator
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
 from .ecoflow.const import device_log_tag
+from .ecoflow.parsers.stream_ac5000_proto import TASK_LIST_KEY
 from .entity import (
     EcoFlowWriteGateMixin,
     accessory_ready,
@@ -131,6 +133,9 @@ async def async_setup_entry(
                 continue
             if is_local and sensor_def.key == FAULT_CODES_KEY:
                 entities.append(EcoFlowFaultCodesSensor(coordinator, sensor_def))
+                continue
+            if sensor_def.key == TASK_LIST_KEY:
+                entities.append(EcoFlowTaskListSensor(coordinator, sensor_def))
                 continue
             entities.append(EcoFlowSensor(coordinator, sensor_def))
 
@@ -499,6 +504,54 @@ class EcoFlowFaultCodesSensor(EcoFlowSensor):
         return {
             "faults": [{"code": code, "name": self._names.get(code)} for code in codes]
         }
+
+
+class EcoFlowTaskListSensor(EcoFlowSensor):
+    """The schedule tasks of a STREAM AC 5000, one entry per task as attribute.
+
+    The state is the number of enabled tasks, 0 for an empty list. It is
+    unknown while the unit's list is unknown (no list seen yet, or one block
+    did not decode), because 0 would claim "no task is on". The list is the
+    device's own readback, so it follows an app edit or a write from Home
+    Assistant with the unit's reporting delay.
+    """
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Write when the count or any task changed.
+
+        The state is only the enabled count, so an edit that keeps the count
+        (a power change, a window edit, one task off and another on) would be
+        skipped by a gate that compares the state alone and leave the `tasks`
+        attribute stale. The gate therefore compares the count together with
+        the serialized list.
+        """
+        tasks = self._tasks()
+        signature = (
+            None if tasks is None else json.dumps(tasks, sort_keys=True, default=str)
+        )
+        self._write_state_if_changed((self.native_value, signature))
+
+    def _tasks(self) -> list[dict[str, Any]] | None:
+        data = self.coordinator.data
+        tasks = data.get(TASK_LIST_KEY) if data is not None else None
+        return list(tasks) if isinstance(tasks, list) else None
+
+    @property
+    def native_value(self) -> int | None:
+        """Return how many tasks are enabled; None while the list is unknown."""
+        tasks = self._tasks()
+        if tasks is None:
+            return None
+        return sum(1 for task in tasks if task.get("enabled") is True)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, list[dict[str, Any]]]:
+        """Return every task; empty while the list is unknown."""
+        tasks = self._tasks()
+        if tasks is None:
+            return {}
+        return {"tasks": tasks}
 
 
 class EcoFlowDiagnosticSensor(

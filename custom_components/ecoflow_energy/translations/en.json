@@ -1663,6 +1663,9 @@
       "scheduled_charge_soc_target": {
         "name": "Scheduled Charge Target SoC"
       },
+      "scheduled_tasks": {
+        "name": "Scheduled Tasks"
+      },
       "ev_charge_power_w": {
         "name": "Wallbox Charging Power"
       },

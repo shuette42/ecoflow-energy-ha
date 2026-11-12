@@ -8,7 +8,7 @@ Full list of all entities created for the STREAM AC 5000.
 
 **This is not the Stream entity set.** Despite the shared product name, an `ES22` speaks a different protocol from the BK-series Stream devices: it sends none of their telemetry messages and describes power as a flow matrix rather than as individual readings. It therefore has its own device type, parser and entity list. See [Stream](stream.md) for the BK series.
 
-**Totals:** 64 sensors, 2 binary sensors, 2 switches, 7 numbers, 1 select
+**Totals:** 65 sensors, 2 binary sensors, 2 switches, 7 numbers, 1 select
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow STREAM AC 5000 > Entities** (click the filter icon and show disabled entities).
 
@@ -92,6 +92,19 @@ The settings that also have a control read back here, so an automation can see w
 | Scheduled Discharge Power | W | diagnostic | enabled | Power of the discharge task, mirrors the number of the same name. Unknown when the schedule holds no discharge task or more than one |
 | Scheduled Charge Power | W | diagnostic | enabled | Power of the charge task that charges from solar and grid, mirrors the number of the same name. Unknown when the schedule holds no such task or more than one |
 | Scheduled Charge Target SoC | % | diagnostic | enabled | The charge task's own SoC target, shown in the app as "Charge limit". Preserved on every power write |
+| Scheduled Tasks | - | - | enabled | Number of schedule tasks switched on, 0 when the unit holds none. Every task is listed in the `tasks` attribute |
+
+### Scheduled Tasks
+
+The Scheduled Tasks sensor shows the schedule tasks the unit holds, as the unit reports them. Its state is the number of tasks that are switched on. The `tasks` attribute lists every task, switched on or off, with its `slot`, `kind` (`charge` or `discharge`), `enabled`, `start` and `end` time, and for a charge task its `source` (`grid` or `solar_only`) and `soc_target`. `power_w` is the task's power. It is empty for a solar-only charge task, which has no power in the app. The sensor is read-only: tasks are switched on and off in the EcoFlow app. The repeat setting of a task is not shown.
+
+A template can read one task, for example whether the second task in the list is on (use your own entity id):
+
+```yaml
+{{ state_attr('sensor.stream_ac_5000_scheduled_tasks', 'tasks')[1].enabled }}
+```
+
+The list follows the unit's own report. After a power change made in Home Assistant, the Scheduled Charge Power number shows the new value at once, and the list follows within about two minutes. The state is unknown until the unit has reported its task list.
 
 ## Sensors - Battery Diagnostics
 

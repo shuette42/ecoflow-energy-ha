@@ -947,6 +947,10 @@ _TASK_COUNT_KEYS: tuple[str, ...] = (
     "scheduled_task_slot_max",
 )
 
+# The key of the one published task list: every task of the unit with its
+# on/off state, as read back from the device (#681).
+TASK_LIST_KEY = "scheduled_tasks"
+
 # Charging source on `40.1.8.1`: 1 charges from solar and grid at a set power,
 # 0 is "Solar only" and carries no power in the app.
 TASK_CHARGE_SOURCE_GRID = 1
@@ -962,6 +966,45 @@ def _task_is_settable(task: dict[str, Any], kind: str) -> bool:
     if kind != "charge":
         return True
     return task.get("_task_charge_source_raw") == TASK_CHARGE_SOURCE_GRID
+
+
+def _minutes_text(minutes: int) -> str:
+    """Minutes since midnight as "HH:MM"."""
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def _task_entry(task: dict[str, Any], kind: str) -> dict[str, Any]:
+    """One decoded task as the entry of the published `scheduled_tasks` list.
+
+    A "Solar only" charge task carries no power in the app: its 0 is a zero
+    fill, not a setting, so `power_w` is None there. `source` and `soc_target`
+    exist for charge tasks only. The repeat setting is not decoded (#681).
+    """
+    enabled_raw = task.get("_task_enabled_raw")
+    slot = task.get("_task_slot_raw")
+    window_raw = task.get("_task_window_raw")
+    entry: dict[str, Any] = {
+        "slot": slot if isinstance(slot, int) else None,
+        "kind": kind,
+        "enabled": bool(enabled_raw) if isinstance(enabled_raw, int) else None,
+        "start": None,
+        "end": None,
+    }
+    if isinstance(window_raw, int):
+        # One varint: start in the low 16 bits, end in the high 16, both
+        # minutes since midnight.
+        entry["start"] = _minutes_text(window_raw & 0xFFFF)
+        entry["end"] = _minutes_text((window_raw >> 16) & 0xFFFF)
+    power = task.get(f"_task_{kind}_power_w")
+    if kind == "charge":
+        grid = _task_is_settable(task, kind)
+        entry["source"] = "grid" if grid else "solar_only"
+        entry["power_w"] = power if grid and isinstance(power, int) else None
+        soc_target = task.get("_task_charge_soc_target")
+        entry["soc_target"] = soc_target if isinstance(soc_target, int) else None
+    else:
+        entry["power_w"] = power if isinstance(power, int) else None
+    return entry
 
 
 def _finalize_task(result: dict[str, Any]) -> None:
@@ -1009,13 +1052,14 @@ def _finalize_task(result: dict[str, Any]) -> None:
     # A block that does not decode, or that carries neither power container,
     # leaves the frame unable to say what the list holds. No setpoint is
     # published or cleared from it: one corrupt block would otherwise wipe a
-    # live task's setpoint. The counts are withdrawn instead, because the
-    # merged ones from the last good list may no longer be true, and a write
-    # acting on them could add a task next to one it cannot see. Writes then
-    # refuse as "not ready" until a list decodes in full.
+    # live task's setpoint. The counts and the task list are withdrawn instead,
+    # because the merged ones from the last good list may no longer be true,
+    # and a write acting on them could add a task next to one it cannot see.
+    # Writes then refuse as "not ready" until a list decodes in full.
     if any(not task.get("_task_kinds") for task in tasks):
         for key in _TASK_COUNT_KEYS:
             result[key] = None
+        result[TASK_LIST_KEY] = None
         return
 
     slots = [
@@ -1025,13 +1069,27 @@ def _finalize_task(result: dict[str, Any]) -> None:
     # one in use, the way the app numbered its own add on 2026-10-30.
     result["scheduled_task_slot_max"] = max(slots, default=0)
 
+    # The one published list. Every setpoint key below is read from its
+    # entries, so the display and the write path cannot disagree about a task.
+    paired = [
+        (_task_entry(task, kind), task)
+        for task in tasks
+        for kind, _group in _TASK_BLOCKS
+        if kind in task["_task_kinds"]
+    ]
+    result[TASK_LIST_KEY] = [entry for entry, _task in paired]
+
     for kind, _group in _TASK_BLOCKS:
         prefix = f"scheduled_{kind}_"
         for key in _TASK_KEYS:
             if key.startswith(prefix):
                 result[key] = None
-        of_kind = [task for task in tasks if kind in task["_task_kinds"]]
-        settable = [task for task in of_kind if _task_is_settable(task, kind)]
+        of_kind = [(entry, task) for entry, task in paired if entry["kind"] == kind]
+        settable = [
+            (entry, task)
+            for entry, task in of_kind
+            if kind != "charge" or entry["source"] == "grid"
+        ]
         result[f"{prefix}task_count"] = len(of_kind)
         result[f"{prefix}settable_count"] = len(settable)
         if len(settable) != 1:
@@ -1042,28 +1100,25 @@ def _finalize_task(result: dict[str, Any]) -> None:
                     kind,
                 )
             continue
-        task = settable[0]
-        power = task.get(f"_task_{kind}_power_w")
-        if isinstance(power, int):
-            result[f"{prefix}power_w"] = power
-        if kind == "charge":
-            soc_target = task.get("_task_charge_soc_target")
-            if isinstance(soc_target, int):
-                result["scheduled_charge_soc_target"] = soc_target
-        slot_raw = task.get("_task_slot_raw")
-        if isinstance(slot_raw, int):
-            result[f"{prefix}task_slot"] = slot_raw
-        enabled_raw = task.get("_task_enabled_raw")
-        if isinstance(enabled_raw, int):
-            result[f"{prefix}enabled"] = bool(enabled_raw)
+        entry, task = settable[0]
+        if isinstance(entry["power_w"], int):
+            result[f"{prefix}power_w"] = entry["power_w"]
+        if kind == "charge" and isinstance(entry["soc_target"], int):
+            result["scheduled_charge_soc_target"] = entry["soc_target"]
+        if isinstance(entry["slot"], int):
+            result[f"{prefix}task_slot"] = entry["slot"]
+        if isinstance(entry["enabled"], bool):
+            result[f"{prefix}enabled"] = entry["enabled"]
+        # The repeat and its parameter have no entry key: they are only
+        # carried back unchanged by an update.
         for suffix in ("time_mode", "time_param"):
             raw = task.get(f"_task_{suffix}_raw")
             if isinstance(raw, int):
                 result[f"{prefix}{suffix}"] = raw
         window_raw = task.get("_task_window_raw")
         if isinstance(window_raw, int):
-            # One varint: start in the low 16 bits, end in the high 16,
-            # both minutes since midnight.
+            # The raw minutes, not the entry's "HH:MM" text: a write sends
+            # back exactly what the device reported.
             result[f"{prefix}start_min"] = window_raw & 0xFFFF
             result[f"{prefix}end_min"] = (window_raw >> 16) & 0xFFFF
 
