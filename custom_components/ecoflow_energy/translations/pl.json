@@ -2823,12 +2823,6 @@
       },
       "other_vehicle_energy": {
         "name": "Energia zakończonych ładowań wallboxa (nieprzypisana)"
-      },
-      "grid_l3_power_w": {
-        "name": "Moc sieci L3"
-      },
-      "wifi_signal_reported": {
-        "name": "Reported Wi-Fi Signal"
       }
     },
     "binary_sensor": {

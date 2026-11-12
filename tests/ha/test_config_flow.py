@@ -242,9 +242,9 @@ SMART_METER_DEVICE = {
 
 SMART_METER_DUAL_DEVICE = {
     "sn": "ES81TEST00000001",
-    "name": "",
+    "name": "Smart Meter Dual CT",
     "product_name": "",
-    "device_type": "unknown",
+    "device_type": "smart_meter",
     "online": 1,
 }
 
@@ -317,14 +317,14 @@ SMART_HOME_PANEL_2_DEVICE = {
 # case, so this list is the thing to extend when another type joins it.
 ENHANCED_ONLY_DEVICE_CASES = [
     pytest.param(
-        SMART_METER_DUAL_DEVICE,
-        "Smart Meter Dual (0001) (ES81...0001) - requires Enhanced Mode",
-        id="smart_meter_dual",
-    ),
-    pytest.param(
         SMART_METER_DEVICE,
         "Smart Meter (0001) (BK21...0001) - requires Enhanced Mode",
         id="smart_meter",
+    ),
+    pytest.param(
+        SMART_METER_DUAL_DEVICE,
+        "Smart Meter Dual CT (0001) (ES81...0001) - requires Enhanced Mode",
+        id="smart_meter_dual",
     ),
     pytest.param(
         SOLAR_TRACKER_DEVICE,

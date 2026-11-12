@@ -109,11 +109,6 @@ class TestDeltaProfileRouting:
 
 
 class TestDeviceTypeRouting:
-    def test_smart_meter_dual_prefix_is_distinct_from_bk21(self) -> None:
-        assert get_device_type("Dual", "ES81TEST00000001") == "smart_meter_dual"
-        assert get_device_type("", "ES81TEST00000001") == "smart_meter_dual"
-        assert get_device_type("", "BK21TEST00000001") == "smart_meter"
-
     def test_powerstream_is_not_a_stream(self) -> None:
         """ "PowerStream" contains "stream", and the match is by substring.
 
@@ -378,16 +373,18 @@ class TestDeviceTypeRouting:
             ), powerstream_keyword
             assert get_device_type(powerstream_keyword, "") == "powerstream"
 
-    def test_bk21_is_the_smart_meter(self) -> None:
-        """The Smart Meter is reached by prefix only (#331).
-
-        Its product name arrives empty from the app API, and "Smart Meter"
-        matches none of the keyword lists, so without the prefix entry the
-        device is skipped as unsupported.
-        """
-        assert get_device_type("", "BK21TEST00000001") == "smart_meter"
-        assert _SN_PREFIX_MAP["BK21"] == "smart_meter"
-        assert get_device_name("", "BK21TEST00000001") == "Smart Meter (0001)"
+    @pytest.mark.parametrize(
+        ("prefix", "name"),
+        [("BK21", "Smart Meter"), ("ES81", "Smart Meter Dual CT")],
+    )
+    def test_smart_meter_models_are_reached_by_prefix(
+        self, prefix: str, name: str
+    ) -> None:
+        """An empty app product name still selects the shared Smart Meter path."""
+        serial = f"{prefix}TEST00000001"
+        assert get_device_type("", serial) == "smart_meter"
+        assert _SN_PREFIX_MAP[prefix] == "smart_meter"
+        assert get_device_name("", serial) == f"{name} (0001)"
 
     def test_an_unmapped_bk_prefix_still_stays_unknown(self) -> None:
         # The BK prefixes are enumerated one by one on purpose: a family

@@ -2823,12 +2823,6 @@
       },
       "other_vehicle_energy": {
         "name": "Energie voltooide laadsessies laadpaal (niet toegewezen)"
-      },
-      "grid_l3_power_w": {
-        "name": "Vermogen net L3"
-      },
-      "wifi_signal_reported": {
-        "name": "Reported Wi-Fi Signal"
       }
     },
     "binary_sensor": {
