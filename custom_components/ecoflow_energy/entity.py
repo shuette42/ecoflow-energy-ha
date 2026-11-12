@@ -255,7 +255,12 @@ class EcoFlowWriteGateMixin:
         self._last_written_available = self.available  # type: ignore[attr-defined]
 
     def _write_state_if_changed(self, new_value: Any) -> None:
-        """Write HA state when the value or the availability changed."""
+        """Write HA state when the value or the availability changed.
+
+        Sensors whose definition sets `write_on_report` bypass this gate for
+        an applied report that carried their key (`sensor.py`, #700), so
+        `last_reported` advances on every report; all others stay gated.
+        """
         new_available = self.available  # type: ignore[attr-defined]
         if (
             # Unseeded sentinel (entity not fully added yet): write, never

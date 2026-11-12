@@ -921,6 +921,8 @@ class MqttIngestMixin(_Base):
         # question this answers is how often the choice of copy mattered, and
         # a bundle with three copies still only made one choice.
         bundle_diverged = False
+        # A 212/33 that carried neither the total nor a share (#700).
+        bare_power_source = False
         for result in results:
             try:
                 header = result.headers[0] if result.headers else {}
@@ -973,11 +975,13 @@ class MqttIngestMixin(_Base):
                 if result.mapped.get("_is_heating_rod_param"):
                     rod = remap_heating_rod_keys(raw)
                     merged.update(rod)
-                    # The 212/33 report may stop when the rod stops, which
-                    # would leave the shares at their last value. A rod
-                    # drawing 0 W draws nothing from any source, so a share
-                    # already published drops to 0. Never created from here:
-                    # a rod that never sent 212/33 gets no share sensors.
+                    # A rod drawing 0 W draws nothing from any source, so a
+                    # share already published drops to 0 with it, without
+                    # waiting for the next 212/33. Never created from here:
+                    # this is the power report, not the share report, and a
+                    # rod that never sent 212/33 gets no share sensors. The
+                    # bare-212/33 rule after the loop does create them,
+                    # because there the rod itself sent the share report.
                     if rod.get("heating_rod_power_w") == 0.0:
                         for share_key in HEATING_ROD_POWER_SOURCE_TO_SENSOR.values():
                             if (
@@ -988,6 +992,13 @@ class MqttIngestMixin(_Base):
                     continue
                 if result.mapped.get("_is_heating_rod_power_source"):
                     merged.update(remap_heating_rod_power_source_keys(raw))
+                    # The bare serial: no total and no share. Decided after
+                    # the loop, where a 212/8 in the same envelope is known
+                    # whatever the header order.
+                    if "hr_total_power" not in raw and not (
+                        raw.keys() & HEATING_ROD_POWER_SOURCE_TO_SENSOR.keys()
+                    ):
+                        bare_power_source = True
                     continue
                 # The scheduled charge tasks, the whole list at once. An empty
                 # payload is an empty list rather than a header with nothing
@@ -1023,6 +1034,23 @@ class MqttIngestMixin(_Base):
 
         if bundle_diverged:
             self._schedule_divergent_bundles += 1
+
+        # The rod sends 212/33 on a ~5 s timer, idle or not, and at idle every
+        # frame is the bare serial: all sources at 0 W (#700). Applied only
+        # while Heating Rod Power is known at 0 W, so a bare frame during a
+        # run never drops the shares (the v1.26.0 promise). Unknown power
+        # (absent, e.g. right after a restart before the get-all reply) does
+        # nothing. Unlike the 212/8 rule above, this creates the share keys:
+        # the rod itself sent the share report, which turns `unavailable`
+        # into 0 W after a restart.
+        if bare_power_source:
+            rod_power = merged.get(
+                "heating_rod_power_w", self._device_data.get("heating_rod_power_w")
+            )
+            if isinstance(rod_power, (int, float)) and rod_power == 0.0:
+                for share_key in HEATING_ROD_POWER_SOURCE_TO_SENSOR.values():
+                    if share_key not in merged:
+                        merged[share_key] = 0.0
 
         # A coupled PowerPulse 2's settings, relayed on `241/3` (#553). They
         # belong to the wallbox, not to this device: `_apply_data` pops the

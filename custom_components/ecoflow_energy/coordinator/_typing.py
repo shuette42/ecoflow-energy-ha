@@ -101,6 +101,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _last_unit_batt_get_all_ts: float
     _last_mqtt_event_ts: float
     _last_flush_ts: float
+    _last_applied_keys: frozenset[str]
     _surplus_sync_record: SurplusSyncRecord | None
     _dev_soc_352_seen: bool
     _dev_soc_352_unapplied: int

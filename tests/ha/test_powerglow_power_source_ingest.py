@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.ecoflow_energy.const import DEVICE_TYPE_POWEROCEAN
@@ -193,3 +194,102 @@ async def test_a_212_8_without_power_leaves_the_published_shares_alone(
     assert POWER not in coordinator._device_data
     data = coordinator._device_data
     assert (data[PV], data[BATTERY], data[GRID]) == (116.0, 33.0, 3.0)
+
+
+# The bare 212/33 rule (#700): the rod sends 212/33 every ~5 s, idle or not, and
+# at idle every frame is the bare serial. It reads as 0 W for all three sources
+# only while Heating Rod Power is known at 0 W.
+SHARES = (PV, BATTERY, GRID)
+
+
+async def test_a_bare_report_after_a_restart_at_zero_watt_sets_the_shares_to_zero(
+    hass: HomeAssistant,
+) -> None:
+    """After a restart the store is empty. The get-all reply lands the rod at
+    0 W (real frame, no shares), and the next bare 212/33 turns the shares from
+    unknown into 0 W."""
+    coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
+    _ingest(coordinator, "rod_off_212_8")
+    assert coordinator._device_data[POWER] == 0.0
+    assert not set(SHARES) & set(coordinator._device_data)
+
+    parsed = _ingest(coordinator, "serial_only")
+
+    assert parsed is not None
+    assert [parsed[key] for key in SHARES] == [0.0, 0.0, 0.0]
+    assert [coordinator._device_data[key] for key in SHARES] == [0.0, 0.0, 0.0]
+
+
+async def test_a_bare_report_while_the_rod_draws_power_leaves_the_shares_unset(
+    hass: HomeAssistant,
+) -> None:
+    """The v1.26.0 promise: a bare frame during a run never drops the shares."""
+    coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
+    coordinator._device_data[POWER] = 2159.0
+
+    parsed = _ingest(coordinator, "serial_only")
+
+    assert not set(SHARES) & set(parsed or {})
+    assert not set(SHARES) & set(coordinator._device_data)
+
+
+async def test_a_bare_report_while_the_rod_draws_power_keeps_the_stored_shares(
+    hass: HomeAssistant,
+) -> None:
+    coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
+    _ingest(coordinator, "pv_battery_grid")
+    coordinator._device_data[POWER] = 2159.0
+
+    _ingest(coordinator, "serial_only")
+
+    assert [coordinator._device_data[key] for key in SHARES] == [116.0, 33.0, 3.0]
+
+
+async def test_a_bare_report_with_unknown_rod_power_sets_nothing(
+    hass: HomeAssistant,
+) -> None:
+    """Right after a restart, before the get-all reply: unknown stays unknown."""
+    coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
+    assert POWER not in coordinator._device_data
+
+    parsed = _ingest(coordinator, "serial_only")
+
+    assert not set(SHARES) & set(parsed or {})
+    assert not set(SHARES) & set(coordinator._device_data)
+
+
+@pytest.mark.parametrize("bare_first", [True, False])
+async def test_the_bare_rule_does_not_depend_on_the_header_order(
+    hass: HomeAssistant, bare_first: bool
+) -> None:
+    """No capture holds both reports in one envelope, so the two real frames are
+    joined: an envelope is a repeated field 1, and concatenating two messages
+    is a valid message. The rod's 0 W arrives in the same envelope as the bare
+    serial, in either order, so the rule must read the rod after the loop."""
+    coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
+    bare, rod = _frame("serial_only"), _frame("rod_off_212_8")
+
+    parsed = coordinator._parse_message(TOPIC, bare + rod if bare_first else rod + bare)
+    assert parsed is not None
+    coordinator._apply_data(parsed)
+
+    assert coordinator._device_data[POWER] == 0.0
+    assert [coordinator._device_data[key] for key in SHARES] == [0.0, 0.0, 0.0]
+
+
+async def test_the_zeroed_shares_count_as_reported_at_notify_time(
+    hass: HomeAssistant,
+) -> None:
+    """`last_applied_keys` is cleared after the notify, so a listener is the
+    only place to see it: the shares dropped by the 0 W report must be in it,
+    or the share sensors would not write on report."""
+    coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
+    _ingest(coordinator, "pv_battery_grid")
+    seen: list[frozenset[str]] = []
+    coordinator.async_add_listener(lambda: seen.append(coordinator.last_applied_keys))
+
+    _ingest(coordinator, "rod_off_212_8")
+
+    assert seen, "the apply never notified a listener"
+    assert {POWER, *SHARES} <= seen[-1]
+    assert coordinator.last_applied_keys == frozenset()

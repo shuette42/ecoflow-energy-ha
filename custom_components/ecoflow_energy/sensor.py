@@ -399,7 +399,18 @@ class EcoFlowSensor(
 
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
+        """Handle updated data from the coordinator.
+
+        A `write_on_report` sensor writes on every applied report that carried
+        its key, so `last_reported` advances even when the value is the same
+        (#700); every other update takes the write gate.
+        """
+        if (
+            self._definition.write_on_report
+            and self._definition.key in self.coordinator.last_applied_keys
+        ):
+            self._write_state_always(self.native_value)
+            return
         self._write_state_if_changed(self.native_value)
 
     @property

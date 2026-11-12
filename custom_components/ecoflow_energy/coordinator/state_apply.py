@@ -827,6 +827,9 @@ class StateApplyMixin(_Base):
 
         self._note_value_change(parsed)
 
+        # The keys this report really applies, for `write_on_report` sensors
+        # (#700). Cleared right after the notify below.
+        self._last_applied_keys = frozenset(parsed)
         self._device_data.update(parsed)
 
         # Ocean 2 writes (PLAN-151, PLAN-192): a Backup Reserve write waits for a
@@ -877,7 +880,12 @@ class StateApplyMixin(_Base):
             source="mqtt",
             key_count=len(self._device_data),
         )
-        self.async_set_updated_data(dict(self._device_data))
+        try:
+            self.async_set_updated_data(dict(self._device_data))
+        finally:
+            # Availability and SET paths notify listeners without an apply;
+            # they must not replay this report's keys as a new report.
+            self._last_applied_keys = frozenset()
 
         # PowerOcean Enhanced Mode: detect cloud-only app changes to the
         # solar-surplus slider via the EmsParamChangeReport.dev_soc echo

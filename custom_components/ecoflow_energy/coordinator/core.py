@@ -267,6 +267,9 @@ class EcoFlowDeviceCoordinator(
         self._shutdown_task: asyncio.Task[None] | None = None
         self._shutdown_complete = asyncio.Event()
         self._last_flush_ts: float = 0.0
+        # Keys of the report `_apply_data` is notifying listeners about; empty
+        # outside that notify (#700, read by `write_on_report` sensors).
+        self._last_applied_keys: frozenset[str] = frozenset()
         self._last_mqtt_event_ts: float = 0.0
         self._consecutive_http_failures: int = 0
         # Polls the API answered with an error code of its own, in a row.
@@ -604,6 +607,16 @@ class EcoFlowDeviceCoordinator(
     def device_data(self) -> dict[str, Any]:
         """Return the current device data dict."""
         return self._device_data
+
+    @property
+    def last_applied_keys(self) -> frozenset[str]:
+        """Return the keys of the report being applied right now (#700).
+
+        Set by `_apply_data` for the duration of its listener notify and empty
+        otherwise, so a notify from the availability or SET paths never reads
+        as a fresh report.
+        """
+        return self._last_applied_keys
 
     def _powerocean_coordinators(self) -> list[EcoFlowDeviceCoordinator] | None:
         """The entry's PowerOcean coordinators, read fresh from `hass.data`.
