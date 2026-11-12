@@ -31,6 +31,9 @@ TOGGLE = json.loads((FIXTURES / "es22_681_task_toggle_masked.json").read_text())
     "frames"
 ]
 LIST_KEY = "scheduled_tasks"
+# Published beside the list since the pin was written (#681 switch); it is not
+# one of the scalars the pin holds.
+ECHO_KEY = "scheduled_task_echo"
 
 
 def _sub(field_number: int, inner: bytes) -> bytes:
@@ -55,7 +58,7 @@ def _scalars(result: dict | None) -> dict | None:
     return {
         key: value
         for key, value in result.items()
-        if key.startswith("scheduled_") and key != LIST_KEY
+        if key.startswith("scheduled_") and key not in (LIST_KEY, ECHO_KEY)
     }
 
 

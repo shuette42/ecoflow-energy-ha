@@ -61,6 +61,13 @@ _LOGGER = logging.getLogger(__name__)
 # so a rollback has to be able to put absence back.
 _UNSET = object()
 
+# How long a STREAM AC 5000 task on/off write holds its value against a report
+# that disagrees (#681). The first report after every write is stale (+0.13 s
+# in the recording); the fresh list follows about 1 s later when the unit
+# pushes and about 2 min later when it does not. A report that agrees ends the
+# hold at once, the first one after this window ends it either way.
+STREAM_AC5000_TASK_ENABLED_HOLD_S = 150.0
+
 # Ocean 2 read-back (Backup Reserve, PLAN-151; Storm Guard, PLAN-192). The read
 # before a reserve write waits at most 5 s for a get-all answer; the follow-up
 # requests go out 8 s and 30 s after either write and the pre-write value comes
@@ -1666,6 +1673,110 @@ class SetCommandsMixin(_Base):
             )
             return True
 
+    async def async_set_stream_ac5000_task_enabled(
+        self, slot: int, kind: str, enabled: bool
+    ) -> bool:
+        """Switch one scheduled task on or off by its number and kind (#681).
+
+        One update entry, built from the task as the device last listed it:
+        number, window, repeat and charging source come from the list and its
+        echo (`scheduled_task_echo`), only `.3` changes. That is the app's own
+        entry for this toggle. For the kind's settable task the power and the
+        charge limit come from the `scheduled_{kind}_*` values instead, which
+        also carry a power write the list has not shown yet.
+
+        After a send the settable task's `scheduled_{kind}_enabled` is seeded
+        and held against a disagreeing report for
+        `STREAM_AC5000_TASK_ENABLED_HOLD_S` (the arming-flag hold): the first
+        report after the write is stale, and a power write that read it would
+        send the old state back. Another task has no such value to hold. A
+        failed send seeds and holds nothing.
+
+        Raises:
+            DeviceValueNotReported: no decoded task list, or no task with this
+                number and kind in it.
+            ValueError: the number is listed twice, the repeat is not daily
+                or once, or a charge task has an unknown charging source.
+        """
+        from ..ecoflow.stream_ac5000_commands import TASK_UPDATE, build_task_payload
+
+        if self._shutdown:
+            return False
+        async with self._device_config_lock:
+            data = self.data or {}
+            tasks = data.get("scheduled_tasks")
+            echoes = data.get("scheduled_task_echo")
+            if not isinstance(tasks, list) or not isinstance(echoes, dict):
+                raise DeviceValueNotReported("scheduled_tasks")
+            listed = [
+                task
+                for task in tasks
+                if isinstance(task, dict) and task.get("slot") == slot
+            ]
+            entry = next((task for task in listed if task.get("kind") == kind), None)
+            if entry is None:
+                raise DeviceValueNotReported(f"scheduled task {slot} {kind}")
+            if len(listed) > 1:
+                raise ValueError(f"scheduled task {slot} is listed more than once")
+            echo = echoes.get(slot)
+            if not isinstance(echo, dict):
+                raise DeviceValueNotReported(f"scheduled task {slot} {kind}")
+            time_mode = echo.get("time_mode")
+            if type(time_mode) is not int or time_mode not in (1, 4):
+                # Only daily and once are decoded; the app reads a missing
+                # repeat as weekly, so a guess would change the task.
+                raise ValueError("repeat not supported")
+            # A discharge task has no charging source; the builder ignores it.
+            charge_source = echo.get("charge_source") if kind == "charge" else 1
+            if (
+                not isinstance(charge_source, int)
+                or isinstance(charge_source, bool)
+                or charge_source not in (0, 1)
+            ):
+                raise ValueError(f"charging source {charge_source} not supported")
+            start = as_known_int(echo.get("start_min"))
+            end = as_known_int(echo.get("end_min"))
+            if start is None or end is None:
+                raise DeviceValueNotReported(f"scheduled task {slot} {kind}")
+            time_param = as_known_int(echo.get("time_param"))
+
+            settable = slot == as_known_int(data.get(f"scheduled_{kind}_task_slot"))
+            power_w = soc_target = None
+            if settable:
+                power_w = as_known_int(data.get(f"scheduled_{kind}_power_w"))
+                soc_target = as_known_int(data.get("scheduled_charge_soc_target"))
+            if power_w is None:
+                power_w = as_known_int(entry.get("power_w"))
+            if soc_target is None:
+                soc_target = as_known_int(entry.get("soc_target"))
+
+            payload = build_task_payload(
+                kind,
+                start,
+                end,
+                0 if power_w is None else power_w,
+                self.device_sn,
+                operation=TASK_UPDATE,
+                enabled=enabled,
+                charge_soc_target=100 if soc_target is None else soc_target,
+                task_slot=slot,
+                time_mode=time_mode,
+                time_param=0 if time_param is None else time_param,
+                charge_source=charge_source,
+            )
+            if not await self.async_send_proto_set_command(
+                payload, label=f"stream_ac5000_{kind}_task_enabled"
+            ):
+                return False
+            if settable:
+                state_key = f"scheduled_{kind}_enabled"
+                self._seed_device_values(**{state_key: enabled})
+                self._schedule_armed_latch[state_key] = (
+                    enabled,
+                    time.monotonic() + STREAM_AC5000_TASK_ENABLED_HOLD_S,
+                )
+            return True
+
     def _seed_device_values(self, **values: Any) -> None:
         """Record values just sent, in both the store and the snapshot.
 
@@ -1724,6 +1835,8 @@ class SetCommandsMixin(_Base):
             self.set_device_value(state_key, None)
             if self.data is not None:
                 self.data[state_key] = None
+        # A switch write's hold belongs to the task just removed.
+        self.clear_schedule_armed_latch(f"scheduled_{kind}_enabled")
         # The kind's only task is gone, which is a known zero, not an unknown.
         self._seed_device_values(
             **{f"scheduled_{kind}_task_count": 0, f"scheduled_{kind}_settable_count": 0}

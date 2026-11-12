@@ -91,6 +91,9 @@ _LOGGER = logging.getLogger(__name__)
 
 OPTIMISTIC_LOCK_S = 5.0
 
+# The two kinds a STREAM AC 5000 task list entry carries (#681).
+STREAM_TASK_KINDS = ("charge", "discharge")
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -145,7 +148,66 @@ async def async_setup_entry(
         if pending:
             _watch_for_accessory(entry, coordinator, pending, async_add_entities)
 
+        if (
+            coordinator.device_type == DEVICE_TYPE_STREAM_AC5000
+            and supports_stream_ac5000_controls(coordinator.device_sn)
+            and coordinator.enhanced_mode
+        ):
+            entities.extend(
+                _watch_for_stream_tasks(entry, coordinator, async_add_entities)
+            )
+
     async_add_entities(entities)
+
+
+def _stream_task_ids(coordinator: EcoFlowDeviceCoordinator) -> list[tuple[int, str]]:
+    """Return (number, kind) of every task in the decoded STREAM AC 5000 list."""
+    tasks = (coordinator.data or {}).get("scheduled_tasks")
+    if not isinstance(tasks, list):
+        return []
+    found: list[tuple[int, str]] = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        slot = task.get("slot")
+        kind = task.get("kind")
+        if type(slot) is not int or kind not in STREAM_TASK_KINDS:
+            continue
+        if (slot, kind) not in found:
+            found.append((slot, kind))
+    return found
+
+
+@callback
+def _watch_for_stream_tasks(
+    config_entry: ConfigEntry,
+    coordinator: EcoFlowDeviceCoordinator,
+    async_add_entities: AddEntitiesCallback,
+) -> list[SwitchEntity]:
+    """Give every STREAM AC 5000 task its switch, also one added in the app later.
+
+    Returns the switches for the tasks listed now and keeps watching the list
+    for a (number, kind) it has not seen, the same way `_watch_for_accessory`
+    waits for a reading. A task that leaves the list keeps its switch, which
+    then reads unavailable; nothing is removed.
+    """
+    created: set[tuple[int, str]] = set()
+
+    def _new_switches() -> list[SwitchEntity]:
+        fresh = [key for key in _stream_task_ids(coordinator) if key not in created]
+        created.update(fresh)
+        return [
+            EcoFlowStreamTaskSwitch(coordinator, slot, kind) for slot, kind in fresh
+        ]
+
+    @callback
+    def _check_for_tasks() -> None:
+        new = _new_switches()
+        if new:
+            async_add_entities(new)
+
+    config_entry.async_on_unload(coordinator.async_add_listener(_check_for_tasks))
+    return _new_switches()
 
 
 @callback
@@ -607,6 +669,143 @@ class EcoFlowSwitch(
                 # changes.
                 self._optimistic_lock_until = 0.0
         self._write_state_if_changed(self.is_on)
+
+
+class EcoFlowStreamTaskSwitch(
+    EcoFlowWriteGateMixin,
+    CoordinatorEntity[EcoFlowDeviceCoordinator],
+    SwitchEntity,
+):
+    """One STREAM AC 5000 schedule task, switched on or off by number and kind (#681).
+
+    The task is the entry with this number and kind in `scheduled_tasks`, the
+    list the Scheduled Tasks sensor shows. For the kind's settable task the
+    state is `scheduled_{kind}_enabled`, which the coordinator holds after a
+    write against the stale report that follows it; for every other task it
+    is the list entry. Unavailable while the list is unknown and while it has
+    no entry with this number and kind.
+    """
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:calendar-clock"
+
+    def __init__(
+        self, coordinator: EcoFlowDeviceCoordinator, slot: int, kind: str
+    ) -> None:
+        """Initialize the switch for task `slot` of `kind`."""
+        super().__init__(coordinator)
+        self._slot = slot
+        self._kind = kind
+        self._attr_unique_id = (
+            f"{coordinator.device_sn}_scheduled_task_{slot}_{kind}_enabled"
+        )
+        self._attr_translation_key = (
+            "scheduled_charge_task" if kind == "charge" else "scheduled_discharge_task"
+        )
+        self._attr_translation_placeholders = {"slot": str(slot)}
+        self._optimistic_value: bool | None = None
+        self._optimistic_lock_until: float = 0.0
+
+    def _task(self) -> dict[str, Any] | None:
+        """Return this task's entry from the decoded list, None when absent."""
+        tasks = (self.coordinator.data or {}).get("scheduled_tasks")
+        if not isinstance(tasks, list):
+            return None
+        return next(
+            (
+                task
+                for task in tasks
+                if isinstance(task, dict)
+                and task.get("slot") == self._slot
+                and task.get("kind") == self._kind
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return True while the device is reachable and lists this task."""
+        if not (self.coordinator.device_available and super().available):
+            return False
+        return self._task() is not None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info from coordinator."""
+        return self.coordinator.device_info
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return the task's on/off state, the sent one during the lock."""
+        if time.monotonic() < self._optimistic_lock_until:
+            return self._optimistic_value
+        task = self._task()
+        if task is None:
+            return None
+        data = self.coordinator.data or {}
+        if as_known_int(data.get(f"scheduled_{self._kind}_task_slot")) == self._slot:
+            held = data.get(f"scheduled_{self._kind}_enabled")
+            if isinstance(held, bool):
+                return held
+        enabled = task.get("enabled")
+        return enabled if isinstance(enabled, bool) else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return the task's window and charging source."""
+        task = self._task()
+        if task is None:
+            return None
+        return {key: task.get(key) for key in ("start", "end", "source")}
+
+    def _gate_value(self) -> tuple[Any, ...]:
+        """The state plus attributes, so a window edit reaches the recorder."""
+        attributes = self.extra_state_attributes or {}
+        return (
+            self.is_on,
+            attributes.get("start"),
+            attributes.get("end"),
+            attributes.get("source"),
+        )
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Switch the task on."""
+        await self._send_command(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Switch the task off."""
+        await self._send_command(False)
+
+    async def _send_command(self, turn_on: bool) -> None:
+        """Send the task's update entry; apply the optimistic lock only on success."""
+        try:
+            ok = await self.coordinator.async_set_stream_ac5000_task_enabled(
+                self._slot, self._kind, turn_on
+            )
+        except DeviceValueNotReported:
+            if not isinstance(
+                (self.coordinator.data or {}).get("scheduled_tasks"), list
+            ):
+                # No list decoded yet: temporary.
+                raise_set_not_ready(self.entity_id)
+            # The list is known and this task is not in it any more.
+            raise_set_gone(self.entity_id)
+        except ValueError as err:
+            raise_set_rejected(self.entity_id, str(err))
+        if not ok:
+            raise_set_failed(self.entity_id)
+        self._apply_optimistic(turn_on)
+
+    def _apply_optimistic(self, turn_on: bool) -> None:
+        """Show the sent state at once and hold it for the lock window."""
+        self._optimistic_value = turn_on
+        self._optimistic_lock_until = time.monotonic() + OPTIMISTIC_LOCK_S
+        self._write_state_always(self._gate_value())
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator."""
+        self._write_state_if_changed(self._gate_value())
 
 
 class EcoFlowLocalControlSwitch(

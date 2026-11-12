@@ -3152,6 +3152,12 @@
       }
     },
     "switch": {
+      "scheduled_charge_task": {
+        "name": "Tâche de charge planifiée {slot}"
+      },
+      "scheduled_discharge_task": {
+        "name": "Tâche de décharge planifiée {slot}"
+      },
       "ac_switch": {
         "name": "Sortie AC"
       },

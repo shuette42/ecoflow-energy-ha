@@ -823,9 +823,10 @@ class TestScheduledTasks:
         assert result is not None
         assert {k for k in result if k.startswith("scheduled_")} == set(
             _TASK_COUNT_KEYS
-        ) | {"scheduled_tasks"}
+        ) | {"scheduled_tasks", "scheduled_task_echo"}
         assert all(result[k] is None for k in _TASK_COUNT_KEYS)
         assert result["scheduled_tasks"] is None
+        assert result["scheduled_task_echo"] is None
 
     @pytest.mark.parametrize(
         ("present", "block", "absent"),
@@ -2067,9 +2068,10 @@ class TestTaskListShrink:
         assert result is not None
         assert {k for k in result if k.startswith("scheduled_")} == set(
             _TASK_COUNT_KEYS
-        ) | {"scheduled_tasks"}
+        ) | {"scheduled_tasks", "scheduled_task_echo"}
         assert all(result[k] is None for k in _TASK_COUNT_KEYS)
         assert result["scheduled_tasks"] is None
+        assert result["scheduled_task_echo"] is None
 
 
 def _unit_frames(unit: str) -> list[dict]:
