@@ -60,6 +60,7 @@ Field notes:
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .stream_proto import SOC_FALLBACK_KEY
@@ -122,6 +123,44 @@ STREAM_HTTP_INT_FIELD_MAP: dict[str, str] = {
 STREAM_FEED_IN_MODE_KEY = "feedGridMode"
 STREAM_FEED_IN_STATE_KEY = "feed_in_control_enabled"
 _FEED_IN_MODE_TO_ENABLED: dict[int, bool] = {2: True, 1: False}
+
+
+# Every quota key `parse_stream_quota` reads. Anything else in a push is
+# dropped there, and `unmapped_stream_quota_keys` names it instead.
+_STREAM_READ_KEYS: frozenset[str] = frozenset(
+    (
+        *STREAM_HTTP_FIELD_MAP,
+        *STREAM_HTTP_INT_FIELD_MAP,
+        *STREAM_HTTP_RELAY_MAP,
+        STREAM_FEED_IN_MODE_KEY,
+    )
+)
+# A key is reported by name only, and only when it looks like a field name:
+# a letter first, at most 48 characters, no spaces or punctuation beyond `_`
+# and `.`. A run of eight or more upper-case letters and digits is serial
+# shaped (EcoFlow serials are 16 of them) and never a camelCase field name.
+_KEY_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_.]{0,47}")
+_SERIAL_SHAPED = re.compile(r"[A-Z0-9]{8,}")
+UNMAPPED_KEYS_PER_CALL_MAX = 64
+
+
+def unmapped_stream_quota_keys(raw: Any) -> list[str]:
+    """Return the sorted top-level keys of a Stream quota the parser does not read.
+
+    Names only, never values. A name that does not look like a field name,
+    or looks like a serial, is left out rather than reported.
+    """
+    if not isinstance(raw, dict):
+        return []
+    names = sorted(
+        key
+        for key in raw
+        if isinstance(key, str)
+        and key not in _STREAM_READ_KEYS
+        and _KEY_NAME.fullmatch(key)
+        and not _SERIAL_SHAPED.search(key)
+    )
+    return names[:UNMAPPED_KEYS_PER_CALL_MAX]
 
 
 def _feed_in_enabled(value: Any) -> bool | None:

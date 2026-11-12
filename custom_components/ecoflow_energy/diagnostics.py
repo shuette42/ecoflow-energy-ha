@@ -835,6 +835,17 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
             "values": dict(sorted(raw_quota.items())),
         }
 
+    # Stream in Standard Mode: the names of `/quota` push keys the parser
+    # drops (#702). The raw quota above is the HTTP snapshot, and a key that
+    # only the push carries would otherwise leave no trace. Names only.
+    if coordinator.device_type == DEVICE_TYPE_STREAM:
+        push_keys = coordinator.stream_push_unmapped_keys
+        if push_keys:
+            diag["stream_push_unmapped_keys"] = {
+                "count": len(push_keys),
+                "names": push_keys,
+            }
+
     # Enhanced Mode: the field numbers the device sent that our protobuf
     # binding does not declare. A field the binding does not know is dropped
     # silently before it reaches any sensor, so without this there is no way

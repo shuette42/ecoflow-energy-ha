@@ -4,7 +4,10 @@ import json
 from pathlib import Path
 
 import pytest
-from ecoflow_energy.ecoflow.parsers.stream_http import parse_stream_quota
+from ecoflow_energy.ecoflow.parsers.stream_http import (
+    parse_stream_quota,
+    unmapped_stream_quota_keys,
+)
 from ecoflow_energy.ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
 
 
@@ -461,3 +464,57 @@ class TestGridConnectionAndSockets:
 
         assert result["ac_outlet_1_enabled"] is False
         assert result["ac_outlet_2_enabled"] is True
+
+
+class TestUnmappedKeys:
+    """Names of push keys the parser drops, for the diagnostics download (#702)."""
+
+    def test_bk41_quota_names_only_the_keys_the_parser_skips(self) -> None:
+        result = unmapped_stream_quota_keys(TestBackupReserve.BK41_QUOTA)
+
+        # The 60-character schedule-mode key is over the 48-character name
+        # limit and left out on purpose.
+        assert result == [
+            "cmsMaxChgSoc",
+            "cmsMinDsgSoc",
+            "energyStrategyOperateMode.operateSelfPoweredOpen",
+            "quota_cloud_ts",
+        ]
+
+    def test_battery_keys_in_a_push_are_named_and_read_keys_are_not(self) -> None:
+        push = {
+            "temp": 23,
+            "vol": 51200,
+            "remainCap": 4100,
+            "fullCap": 5120,
+            "soc": 80,
+            "soh": 100,
+            "cycles": 12,
+        }
+
+        result = unmapped_stream_quota_keys(push)
+
+        assert result == ["cycles", "fullCap", "remainCap", "temp", "vol"]
+
+    def test_serial_shaped_and_overlong_names_are_left_out(self) -> None:
+        push = {
+            "HJ31TESTDUMMY01": 1,
+            "bpSn.HJ31TESTDUMMY01": 1,
+            "a" * 80: 1,
+            "has space": 1,
+            "1leadingDigit": 1,
+            "temp": 23,
+        }
+
+        assert unmapped_stream_quota_keys(push) == ["temp"]
+
+    def test_at_most_64_names_per_call(self) -> None:
+        push = {f"key{i:03d}": i for i in range(100)}
+
+        result = unmapped_stream_quota_keys(push)
+
+        assert len(result) == 64
+        assert result[0] == "key000"
+
+    def test_not_a_dict_yields_nothing(self) -> None:
+        assert unmapped_stream_quota_keys(["temp"]) == []

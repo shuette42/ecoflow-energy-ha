@@ -91,6 +91,9 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+# Total cap on the Stream push key names kept for diagnostics (#702).
+STREAM_PUSH_UNMAPPED_KEYS_MAX = 128
+
 
 @dataclass(frozen=True)
 class DeviceSnapshot:
@@ -510,6 +513,12 @@ class EcoFlowDeviceCoordinator(
         # see `unknown_field_summary`.
         self._unknown_proto_fields: dict[str, dict[int, Any]] = {}
         self._unknown_proto_fields_lock = threading.Lock()
+        # Stream in Standard Mode: names of `/quota` push keys the parser
+        # drops (#702). Names only, never values, and kept out of
+        # `_device_data`: this answers whether the push carries a field the
+        # HTTP quota does not, which a raw quota snapshot cannot show.
+        self._stream_push_unmapped_keys: set[str] = set()
+        self._stream_push_unmapped_keys_lock = threading.Lock()
         # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
         # Each heartbeat contains only one pack; this map ensures the same
         # physical pack always maps to the same pack{n}_* sensor keys.
@@ -971,6 +980,27 @@ class EcoFlowDeviceCoordinator(
             for number, value in fields.items():
                 if number in known or len(known) < UNKNOWN_FIELD_NUMBERS_MAX:
                     known[number] = value
+
+    def _note_stream_push_unmapped_keys(self, names: list[str]) -> None:
+        """Add push key names the Stream parser drops, for diagnostics.
+
+        Called from the Paho thread. Capped in total: once the set is full,
+        new names are ignored and the ones already held stay.
+        """
+        if not names:
+            return
+        with self._stream_push_unmapped_keys_lock:
+            for name in names:
+                held = self._stream_push_unmapped_keys
+                if len(held) >= STREAM_PUSH_UNMAPPED_KEYS_MAX:
+                    return
+                held.add(name)
+
+    @property
+    def stream_push_unmapped_keys(self) -> list[str]:
+        """Return the sorted push key names the Stream parser dropped."""
+        with self._stream_push_unmapped_keys_lock:
+            return sorted(self._stream_push_unmapped_keys)
 
     @property
     def unknown_proto_fields(self) -> dict[str, dict[str, Any]]:

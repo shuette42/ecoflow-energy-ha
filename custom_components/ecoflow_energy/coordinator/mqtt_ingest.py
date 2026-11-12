@@ -81,7 +81,10 @@ from ..ecoflow.parsers.smartplug import (
 )
 from ..ecoflow.parsers.solar_tracker_proto import parse_solar_tracker_message
 from ..ecoflow.parsers.stream_ac5000_proto import parse_stream_ac5000_message
-from ..ecoflow.parsers.stream_http import parse_stream_quota
+from ..ecoflow.parsers.stream_http import (
+    parse_stream_quota,
+    unmapped_stream_quota_keys,
+)
 from ..ecoflow.parsers.stream_proto import parse_stream_proto_message
 from ..ecoflow.parsers.wave3_proto import parse_wave3_message
 from ..ecoflow.proto.runtime import (
@@ -612,6 +615,9 @@ class MqttIngestMixin(_Base):
                     if self.device_type == DEVICE_TYPE_POWEROCEAN:
                         return parse_powerocean_http_quota(quota_map)
                     if self.device_type == DEVICE_TYPE_STREAM:
+                        self._note_stream_push_unmapped_keys(
+                            unmapped_stream_quota_keys(quota_map)
+                        )
                         parsed = parse_stream_quota(quota_map)
                         return parsed if parsed else None
                     return quota_map
@@ -703,6 +709,9 @@ class MqttIngestMixin(_Base):
                         payload_obj = data.get("params")
                     if not isinstance(payload_obj, dict):
                         payload_obj = data
+                    self._note_stream_push_unmapped_keys(
+                        unmapped_stream_quota_keys(payload_obj)
+                    )
                     parsed = parse_stream_quota(payload_obj)
                     return parsed if parsed else None
                 # PowerStream in Standard mode: the vendor documents the
