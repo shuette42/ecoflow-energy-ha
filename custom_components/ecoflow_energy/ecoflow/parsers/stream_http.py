@@ -136,31 +136,50 @@ _STREAM_READ_KEYS: frozenset[str] = frozenset(
     )
 )
 # A key is reported by name only, and only when it looks like a field name:
-# a letter first, at most 48 characters, no spaces or punctuation beyond `_`
-# and `.`. A run of eight or more upper-case letters and digits is serial
-# shaped (EcoFlow serials are 16 of them) and never a camelCase field name.
-_KEY_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_.]{0,47}")
-_SERIAL_SHAPED = re.compile(r"[A-Z0-9]{8,}")
+# a letter first, at most 64 characters, no spaces or punctuation beyond `_`
+# and `.`, at most two dots, no run of four digits. A run of eight upper-case
+# letters and digits, or of eight lower-case letters and digits with a digit
+# in it, is serial shaped (EcoFlow serials are 16 such characters) and never
+# a camelCase field name.
+_KEY_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_.]{0,63}")
+_DIGIT_RUN = re.compile(r"[0-9]{4,}")
+_UPPER_RUN = re.compile(r"[A-Z0-9]{8,}")
+_LOWER_RUN = re.compile(r"[a-z0-9]{8,}")
 UNMAPPED_KEYS_PER_CALL_MAX = 64
 
 
-def unmapped_stream_quota_keys(raw: Any) -> list[str]:
-    """Return the sorted top-level keys of a Stream quota the parser does not read.
+def _reportable_key_name(key: str) -> bool:
+    """Return True when a key may be shown by name in a diagnostics download."""
+    if not _KEY_NAME.fullmatch(key) or key.count(".") > 2:
+        return False
+    if _DIGIT_RUN.search(key) or _UPPER_RUN.search(key):
+        return False
+    return not any(
+        any(char.isdigit() for char in run) for run in _LOWER_RUN.findall(key)
+    )
 
-    Names only, never values. A name that does not look like a field name,
-    or looks like a serial, is left out rather than reported.
+
+def unmapped_stream_quota_keys(raw: Any) -> tuple[list[str], list[str]]:
+    """Return the top-level keys of a Stream quota the parser does not read.
+
+    The first list holds at most 64 names that look like field names, sorted.
+    The second holds every other unread key: a name that looks like a serial
+    or not like a field name, and any name past the 64. That one is for
+    counting only and never leaves the process.
     """
     if not isinstance(raw, dict):
-        return []
-    names = sorted(
-        key
-        for key in raw
-        if isinstance(key, str)
-        and key not in _STREAM_READ_KEYS
-        and _KEY_NAME.fullmatch(key)
-        and not _SERIAL_SHAPED.search(key)
-    )
-    return names[:UNMAPPED_KEYS_PER_CALL_MAX]
+        return [], []
+    names: list[str] = []
+    withheld: list[str] = []
+    for key in raw:
+        if not isinstance(key, str) or key in _STREAM_READ_KEYS:
+            continue
+        if len(names) < UNMAPPED_KEYS_PER_CALL_MAX and _reportable_key_name(key):
+            names.append(key)
+        else:
+            withheld.append(key)
+    names.sort()
+    return names, withheld
 
 
 def _feed_in_enabled(value: Any) -> bool | None:

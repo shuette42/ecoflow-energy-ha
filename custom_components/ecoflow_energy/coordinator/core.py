@@ -514,10 +514,11 @@ class EcoFlowDeviceCoordinator(
         self._unknown_proto_fields: dict[str, dict[int, Any]] = {}
         self._unknown_proto_fields_lock = threading.Lock()
         # Stream in Standard Mode: names of `/quota` push keys the parser
-        # drops (#702). Names only, never values, and kept out of
+        # drops in Standard Mode (#702). Names only, never values, kept out of
         # `_device_data`: this answers whether the push carries a field the
         # HTTP quota does not, which a raw quota snapshot cannot show.
         self._stream_push_unmapped_keys: set[str] = set()
+        self._stream_push_withheld_keys: set[str] = set()
         self._stream_push_unmapped_keys_lock = threading.Lock()
         # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
         # Each heartbeat contains only one pack; this map ensures the same
@@ -981,26 +982,51 @@ class EcoFlowDeviceCoordinator(
                 if number in known or len(known) < UNKNOWN_FIELD_NUMBERS_MAX:
                     known[number] = value
 
-    def _note_stream_push_unmapped_keys(self, names: list[str]) -> None:
+    def _note_stream_push_unmapped_keys(
+        self, names: list[str], withheld: list[str]
+    ) -> None:
         """Add push key names the Stream parser drops, for diagnostics.
 
-        Called from the Paho thread. Capped in total: once the set is full,
-        new names are ignored and the ones already held stay.
+        Called from the Paho thread. Both sets hold distinct keys and are
+        capped at 128. A name that no longer fits the shown set is withheld.
+        The withheld keys are only ever counted, never shown.
         """
-        if not names:
-            return
         with self._stream_push_unmapped_keys_lock:
+            held = self._stream_push_unmapped_keys
+            hidden = self._stream_push_withheld_keys
             for name in names:
-                held = self._stream_push_unmapped_keys
-                if len(held) >= STREAM_PUSH_UNMAPPED_KEYS_MAX:
-                    return
-                held.add(name)
+                if name in held:
+                    continue
+                if len(held) < STREAM_PUSH_UNMAPPED_KEYS_MAX:
+                    held.add(name)
+                    # A key counted as withheld earlier is shown now: it
+                    # must not be counted in both.
+                    hidden.discard(name)
+                elif len(hidden) < STREAM_PUSH_UNMAPPED_KEYS_MAX:
+                    hidden.add(name)
+            for name in withheld:
+                if name in held:
+                    continue
+                if len(hidden) >= STREAM_PUSH_UNMAPPED_KEYS_MAX:
+                    break
+                hidden.add(name)
+
+    @property
+    def stream_push_unmapped_keys_full(self) -> bool:
+        """Return True once no further push key name can be shown."""
+        return len(self._stream_push_unmapped_keys) >= STREAM_PUSH_UNMAPPED_KEYS_MAX
 
     @property
     def stream_push_unmapped_keys(self) -> list[str]:
         """Return the sorted push key names the Stream parser dropped."""
         with self._stream_push_unmapped_keys_lock:
             return sorted(self._stream_push_unmapped_keys)
+
+    @property
+    def stream_push_withheld_count(self) -> int:
+        """Return how many dropped push keys are not shown by name."""
+        with self._stream_push_unmapped_keys_lock:
+            return len(self._stream_push_withheld_keys)
 
     @property
     def unknown_proto_fields(self) -> dict[str, dict[str, Any]]:

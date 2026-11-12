@@ -470,16 +470,16 @@ class TestUnmappedKeys:
     """Names of push keys the parser drops, for the diagnostics download (#702)."""
 
     def test_bk41_quota_names_only_the_keys_the_parser_skips(self) -> None:
-        result = unmapped_stream_quota_keys(TestBackupReserve.BK41_QUOTA)
+        names, withheld = unmapped_stream_quota_keys(TestBackupReserve.BK41_QUOTA)
 
-        # The 60-character schedule-mode key is over the 48-character name
-        # limit and left out on purpose.
-        assert result == [
+        assert names == [
             "cmsMaxChgSoc",
             "cmsMinDsgSoc",
+            "energyStrategyOperateMode.operateIntelligentScheduleModeOpen",
             "energyStrategyOperateMode.operateSelfPoweredOpen",
             "quota_cloud_ts",
         ]
+        assert withheld == []
 
     def test_battery_keys_in_a_push_are_named_and_read_keys_are_not(self) -> None:
         push = {
@@ -492,29 +492,46 @@ class TestUnmappedKeys:
             "cycles": 12,
         }
 
-        result = unmapped_stream_quota_keys(push)
+        names, withheld = unmapped_stream_quota_keys(push)
 
-        assert result == ["cycles", "fullCap", "remainCap", "temp", "vol"]
+        assert names == ["cycles", "fullCap", "remainCap", "temp", "vol"]
+        assert withheld == []
 
-    def test_serial_shaped_and_overlong_names_are_left_out(self) -> None:
+    def test_serial_shaped_and_odd_names_are_withheld(self) -> None:
         push = {
             "HJ31TESTDUMMY01": 1,
+            "hj31xxxxxxxxxxxx": 1,
             "bpSn.HJ31TESTDUMMY01": 1,
-            "a" * 80: 1,
+            "a" * 65: 1,
             "has space": 1,
+            "user@example": 1,
+            "powSlot2026": 1,
+            "a.b.c.d": 1,
             "1leadingDigit": 1,
             "temp": 23,
+            "powGetPv2": 1,
+            "plugInInfoPv4Vol": 1,
         }
 
-        assert unmapped_stream_quota_keys(push) == ["temp"]
+        names, withheld = unmapped_stream_quota_keys(push)
 
-    def test_at_most_64_names_per_call(self) -> None:
-        push = {f"key{i:03d}": i for i in range(100)}
+        # `powGetPv2` is read by the parser and named nowhere.
+        assert names == ["plugInInfoPv4Vol", "temp"]
+        assert len(withheld) == 9
 
-        result = unmapped_stream_quota_keys(push)
+    def test_a_64_character_name_is_shown(self) -> None:
+        names, _ = unmapped_stream_quota_keys({"a" * 64: 1})
 
-        assert len(result) == 64
-        assert result[0] == "key000"
+        assert names == ["a" * 64]
+
+    def test_at_most_64_names_per_call_and_the_rest_withheld(self) -> None:
+        push = {f"key{chr(97 + i // 26)}{chr(97 + i % 26)}": i for i in range(100)}
+
+        names, withheld = unmapped_stream_quota_keys(push)
+
+        assert len(names) == 64
+        assert names[0] == "keyaa"
+        assert len(withheld) == 36
 
     def test_not_a_dict_yields_nothing(self) -> None:
-        assert unmapped_stream_quota_keys(["temp"]) == []
+        assert unmapped_stream_quota_keys(["temp"]) == ([], [])

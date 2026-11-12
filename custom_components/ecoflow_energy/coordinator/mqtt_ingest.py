@@ -615,9 +615,6 @@ class MqttIngestMixin(_Base):
                     if self.device_type == DEVICE_TYPE_POWEROCEAN:
                         return parse_powerocean_http_quota(quota_map)
                     if self.device_type == DEVICE_TYPE_STREAM:
-                        self._note_stream_push_unmapped_keys(
-                            unmapped_stream_quota_keys(quota_map)
-                        )
                         parsed = parse_stream_quota(quota_map)
                         return parsed if parsed else None
                     return quota_map
@@ -709,9 +706,16 @@ class MqttIngestMixin(_Base):
                         payload_obj = data.get("params")
                     if not isinstance(payload_obj, dict):
                         payload_obj = data
-                    self._note_stream_push_unmapped_keys(
-                        unmapped_stream_quota_keys(payload_obj)
-                    )
+                    # Names of the keys the parser drops, for diagnostics
+                    # (#702). Standard Mode only: this is the Developer API
+                    # push, and Enhanced Mode has no such quota.
+                    if (
+                        not self._enhanced_mode
+                        and not self.stream_push_unmapped_keys_full
+                    ):
+                        self._note_stream_push_unmapped_keys(
+                            *unmapped_stream_quota_keys(payload_obj)
+                        )
                     parsed = parse_stream_quota(payload_obj)
                     return parsed if parsed else None
                 # PowerStream in Standard mode: the vendor documents the
