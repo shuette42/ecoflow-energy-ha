@@ -47,7 +47,7 @@
 | **Delta 2 Max** | `R351` `R331` | Standard, MQTT push | 94 + 4 binary | 7 switches · 8 numbers | 4 | ~30 s |
 | **Delta 3** | `D3M1` `D3N1` `P321` `P231` `P351` | Standard, Enhanced | 47 (`D3M`: + 1 binary) | 7 switches · 4 numbers · 5 selects (`D3M`: 10 · 7 · 5) | 4 | ~30 s / ~2 s |
 | **Smart Plug** | `HW52` | Standard, Enhanced | 11 + 1 binary | 1 switch · 2 numbers | 1 | ~30 s / ~3 s |
-| **Stream** | `BK31` `BK11` `BK41` `BK51` `BK61` | Standard, Enhanced | 60 + 2 binary | 0 numbers (`BK31`: 2 switches · 4 numbers; `BK61`: 1 switch) | 2 + 6 optional | ~30 s / ~3 s |
+| **Stream** | `BK31` `BK11` `BK41` `BK51` `BK61` | Standard, Enhanced | 65 + 2 binary | 0 numbers (`BK31`: 2 switches · 4 numbers; `BK61`: 1 switch) | 2 + 6 optional | ~30 s / ~3 s |
 | **Stream Pro** | `BK12` | Enhanced (Standard untested) | not counted yet | none | not counted yet | ~3 s |
 | **Stream Micro** | `BK01` | Enhanced only | 25 | none | 2 optional | ~3 s |
 | **Stream Micro** | `BK02` | Standard | 25 | none | 2 optional | MQTT bursts |

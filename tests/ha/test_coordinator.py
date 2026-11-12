@@ -5785,13 +5785,14 @@ class TestParseMessageGetReply:
         assert result is not None
         assert result.get("unit_soc_pct") == 19
         assert result.get("backup_reserve_pct") == 20
-        # Field 518 is a group aggregate, not this unit's battery (#486).
-        assert "batt_w" not in result
-        assert "batt_discharge_power_w" not in result
+        # Field 518 is the system battery power the app shows (#710).
+        assert result.get("batt_w") == pytest.approx(-304.15, rel=1e-5)
+        assert result.get("batt_discharge_power_w") == pytest.approx(304.15, rel=1e-5)
         assert result.get("ac_voltage_v") == pytest.approx(227.8, rel=1e-5)
         assert result.get("ac_frequency_hz") == pytest.approx(49.99, rel=1e-5)
 
-        # The unit's own battery power arrives in the BMS frame (cmd 32/50).
+        # The unit's own pack power arrives in the BMS frame (cmd 32/50) and
+        # stays on the unit key, never on the system one.
         bms = bytearray()
         bms.extend(encode_field_varint(26, 0))
         bms.extend(encode_field_varint(27, 304))
@@ -5800,9 +5801,9 @@ class TestParseMessageGetReply:
         )
 
         assert bms_result is not None
-        assert bms_result.get("batt_w") == -304.0
-        assert bms_result.get("batt_discharge_power_w") == 304.0
-        assert bms_result.get("batt_charge_power_w") == 0.0
+        assert bms_result.get("unit_batt_w") == -304.0
+        assert "batt_w" not in bms_result
+        assert "batt_discharge_power_w" not in bms_result
 
     async def test_stream_coordinator_power_to_energy_mapping(
         self,
@@ -5838,15 +5839,25 @@ class TestParseMessageGetReply:
             coordinator._power_to_energy["batt_discharge_power_w"]
             == "batt_discharge_energy_kwh"
         )
+        assert (
+            coordinator._power_to_energy["unit_batt_charge_power_w"]
+            == "unit_batt_charge_energy_kwh"
+        )
+        assert (
+            coordinator._power_to_energy["unit_batt_discharge_power_w"]
+            == "unit_batt_discharge_energy_kwh"
+        )
 
     async def test_stream_follower_battery_power_survives_telemetry_frames(
         self,
         hass: HomeAssistant,
     ) -> None:
-        """A follower's battery power comes from the BMS frame and stays put (#486).
+        """A follower's own pack power comes from the BMS frame and stays put.
 
-        The telemetry frame of a follower carries 0.0 in the group fields, and
-        a BMS frame without the power fields must not wipe the held reading.
+        The telemetry frame of a follower carries 0.0 in the group fields
+        (#486): the system battery power reads unknown, and the unit reading
+        from the BMS frame, split and integrated on the unit keys (#710),
+        stays. A BMS frame without the power fields must not wipe it.
         """
         from custom_components.ecoflow_energy.ecoflow.parsers.stream_proto import (
             parse_stream_proto_message,
@@ -5884,7 +5895,10 @@ class TestParseMessageGetReply:
         follower_telemetry = _parsed(
             254,
             21,
-            encode_field_fixed32(518, 0.0) + encode_field_fixed32(616, 791.04),
+            encode_field_fixed32(262, 0.0)
+            + encode_field_fixed32(242, 99.0)
+            + encode_field_fixed32(518, 0.0)
+            + encode_field_fixed32(616, 791.04),
         )
         bms_without_power = _parsed(32, 50, encode_field_varint(7, 20343))
 
@@ -5893,23 +5907,27 @@ class TestParseMessageGetReply:
         ) as mock_mono:
             mock_mono.return_value = 1000.0
             coordinator._apply_data(bms_discharge)
-            assert coordinator._device_data["batt_w"] == -885.0
-            assert coordinator._device_data["batt_discharge_power_w"] == 885.0
+            assert coordinator._device_data["unit_batt_w"] == -885.0
+            assert coordinator._device_data["unit_batt_discharge_power_w"] == 885.0
+            assert coordinator._device_data["unit_batt_charge_power_w"] == 0.0
+            assert "batt_w" not in coordinator._device_data
 
             mock_mono.return_value = 1003.0
             coordinator._apply_data(follower_telemetry)
             coordinator._apply_data(bms_without_power)
-            assert coordinator._device_data["batt_w"] == -885.0
-            assert coordinator._device_data["batt_discharge_power_w"] == 885.0
+            assert coordinator._device_data["unit_batt_w"] == -885.0
+            assert coordinator._device_data["unit_batt_discharge_power_w"] == 885.0
+            assert coordinator._device_data.get("batt_w") is None
+            assert coordinator._device_data.get("batt_discharge_power_w") is None
 
             # A minute later the next BMS frame integrates the elapsed time.
             mock_mono.return_value = 1063.0
             coordinator._apply_data(bms_discharge)
 
         # 885 W over 63 s is 0.0155 kWh; the counter is rounded to 2 decimals.
-        assert coordinator._device_data["batt_discharge_energy_kwh"] == pytest.approx(
-            885.0 * 63.0 / 3_600_000.0, abs=0.005
-        )
+        assert coordinator._device_data[
+            "unit_batt_discharge_energy_kwh"
+        ] == pytest.approx(885.0 * 63.0 / 3_600_000.0, abs=0.005)
 
     async def test_get_reply_empty_quota_map_returns_none(
         self,
