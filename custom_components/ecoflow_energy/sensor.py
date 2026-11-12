@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from typing import Any, cast
@@ -514,6 +515,22 @@ class EcoFlowTaskListSensor(EcoFlowSensor):
     device's own readback, so it follows an app edit or a write from Home
     Assistant with the unit's reporting delay.
     """
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Write when the count or any task changed.
+
+        The state is only the enabled count, so an edit that keeps the count
+        (a power change, a window edit, one task off and another on) would be
+        skipped by a gate that compares the state alone and leave the `tasks`
+        attribute stale. The gate therefore compares the count together with
+        the serialized list.
+        """
+        tasks = self._tasks()
+        signature = (
+            None if tasks is None else json.dumps(tasks, sort_keys=True, default=str)
+        )
+        self._write_state_if_changed((self.native_value, signature))
 
     def _tasks(self) -> list[dict[str, Any]] | None:
         data = self.coordinator.data
