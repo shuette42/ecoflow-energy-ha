@@ -341,6 +341,12 @@ _ES22_FIELD_MAP: dict[tuple[int, int], dict[str, tuple[str, str, float]]] = {
         # kind. See `_TASK_BLOCKS` for the frames that settled it.
         "40.1.2": ("_task_slot_raw", _TYPE_INT, 1),
         "40.1.3": ("_task_enabled_raw", _TYPE_INT, 1),
+        # `.5` is the repeat (1 daily, 2 weekly, 3 monthly, 4 once) and `.6`
+        # its parameter, the date of a once task. Kept raw and undecoded: an
+        # update sends both back exactly as reported, so a power write keeps
+        # the owner's repeat (#653).
+        "40.1.5": ("_task_time_mode_raw", _TYPE_INT, 1),
+        "40.1.6": ("_task_time_param_raw", _TYPE_INT, 1),
         "40.1.7": ("_task_window_raw", _TYPE_PACKED, 1),
         # `.2` is the task's target SoC, shown in the app as "Charge limit".
         # A power write has to carry it back unchanged or it would reset the
@@ -919,11 +925,15 @@ _TASK_KEYS: tuple[str, ...] = (
     "scheduled_charge_start_min",
     "scheduled_charge_end_min",
     "scheduled_charge_task_slot",
+    "scheduled_charge_time_mode",
+    "scheduled_charge_time_param",
     "scheduled_discharge_power_w",
     "scheduled_discharge_enabled",
     "scheduled_discharge_start_min",
     "scheduled_discharge_end_min",
     "scheduled_discharge_task_slot",
+    "scheduled_discharge_time_mode",
+    "scheduled_discharge_time_param",
 )
 
 # What the list holds, written whenever a list arrives. Never cleared to None:
@@ -1046,6 +1056,10 @@ def _finalize_task(result: dict[str, Any]) -> None:
         enabled_raw = task.get("_task_enabled_raw")
         if isinstance(enabled_raw, int):
             result[f"{prefix}enabled"] = bool(enabled_raw)
+        for suffix in ("time_mode", "time_param"):
+            raw = task.get(f"_task_{suffix}_raw")
+            if isinstance(raw, int):
+                result[f"{prefix}{suffix}"] = raw
         window_raw = task.get("_task_window_raw")
         if isinstance(window_raw, int):
             # One varint: start in the low 16 bits, end in the high 16,

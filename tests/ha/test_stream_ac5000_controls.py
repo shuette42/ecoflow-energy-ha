@@ -52,6 +52,9 @@ TASK_FRAMES = (
     / "es22_task_frames_masked.json"
 )
 ISSUE_653_FRAMES = TASK_FRAMES.with_name("es22_653_task_list_masked.json")
+# A get-all reply from an ES21 whose list holds a once task (repeat 4, dated
+# 2026-08-16) beside a daily one.
+ES21_ONCE_TASK = TASK_FRAMES.with_name("es21_once_task_masked.json")
 
 # A task the device already reports: discharge, 00:00-23:00, 600 W, number 2.
 REPORTED: dict[str, Any] = {
@@ -63,6 +66,7 @@ REPORTED: dict[str, Any] = {
     "scheduled_discharge_end_min": 1380,
     "scheduled_discharge_enabled": True,
     "scheduled_discharge_task_slot": 2,
+    "scheduled_discharge_time_mode": 1,
     "scheduled_discharge_task_count": 1,
     "scheduled_discharge_settable_count": 1,
     "scheduled_charge_task_count": 0,
@@ -407,6 +411,8 @@ WHOLE_DAY_CHARGE: dict[str, Any] = {
     "scheduled_charge_start_min": 0,
     "scheduled_charge_end_min": 1439,
     "scheduled_charge_task_slot": 1,
+    "scheduled_charge_time_mode": 1,
+    "scheduled_charge_time_param": 0,
     "scheduled_charge_soc_target": 80,
     "scheduled_charge_task_count": 1,
     "scheduled_charge_settable_count": 1,
@@ -478,8 +484,58 @@ class TestPowerSetpoints:
         await entity.async_set_native_value(300)
 
         _header, pdata = _sent(coordinator)
-        # enabled = 0, its inverse = 1
-        assert bytes.fromhex("18002001") in pdata
+        # enabled = 0, and field 4 stays 0 as in every app write: it is the
+        # device's own "active now" flag, not the inverse of field 3
+        assert bytes.fromhex("18002000") in pdata
+        assert bytes.fromhex("18002001") not in pdata
+
+    async def test_a_once_task_keeps_its_repeat_and_date(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """A power write sends the repeat back as reported, not daily (#653).
+
+        The once task is the recorded block from an ES21 list, unchanged. It
+        is framed alone because its list also holds a daily charge task, and
+        with two settable charge tasks no setpoint is reported at all.
+        """
+        frame = json.loads(ES21_ONCE_TASK.read_text(encoding="utf-8"))["frames"][0]
+        headers, _ = decode_header_message(bytes.fromhex(frame["hex"]))
+        reply = next(
+            h for h in headers if (h.get("cmd_func"), h.get("cmd_id")) == (254, 39)
+        )
+        once = _task_block(bytes.fromhex(reply["pdata"]), 1)
+        parsed = parse_stream_ac5000_message(
+            _frame_254_39(encode_field_bytes(40, encode_field_bytes(1, once)))
+        )
+        assert parsed is not None
+        assert parsed["scheduled_charge_time_mode"] == 4
+        assert parsed["scheduled_charge_time_param"] == 1037584
+        coordinator = _coordinator(
+            hass, enhanced_config_entry, data=dict(parsed, work_mode="custom")
+        )
+
+        await _number(coordinator, "scheduled_charge_power_w").async_set_native_value(
+            1000
+        )
+
+        _header, pdata = _sent(coordinator)
+        fields = dict(_walk(_task_block(pdata)))
+        assert (fields[2], fields[4], fields[5], fields[6]) == (2, 0, 4, 1037584)
+
+    async def test_an_unreported_repeat_refuses_the_write(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """No repeat reported yet: refuse, never fall back to daily."""
+        data = dict(REPORTED)
+        del data["scheduled_discharge_time_mode"]
+        coordinator = _coordinator(hass, enhanced_config_entry, data=data)
+        entity = _number(coordinator, "scheduled_discharge_power_w")
+
+        with pytest.raises(HomeAssistantError) as err:
+            await entity.async_set_native_value(300)
+
+        assert err.value.translation_key == "set_command_not_ready"
+        _sender(coordinator).assert_not_called()
 
     async def test_the_reporters_charge_task_keeps_its_window(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
@@ -538,7 +594,7 @@ class TestPowerSetpoints:
         _header, pdata = _sent(coordinator)
         # operation 1 (add), numbered 1, the next free number
         assert bytes([0x08, 1, 0x10, 1]) in pdata
-        # enabled = 1, its inverse = 0
+        # enabled = 1, field 4 = 0
         assert bytes.fromhex("18012000") in pdata
         # 00:00 to 23:59
         assert encode_field_bytes(7, encode_varint((1439 << 16) | 0)) in pdata
@@ -699,6 +755,7 @@ class TestPowerSetpoints:
             scheduled_discharge_start_min=0,
             scheduled_discharge_end_min=1439,
             scheduled_discharge_task_slot=2,
+            scheduled_discharge_time_mode=1,
             scheduled_discharge_task_count=1,
             scheduled_discharge_settable_count=1,
             scheduled_task_slot_max=2,
@@ -724,6 +781,7 @@ class TestPowerSetpoints:
             scheduled_discharge_start_min=0,
             scheduled_discharge_end_min=1439,
             scheduled_discharge_task_slot=2,
+            scheduled_discharge_time_mode=1,
             scheduled_discharge_task_count=1,
             scheduled_discharge_settable_count=1,
         )
@@ -772,6 +830,7 @@ class TestPowerSetpoints:
             scheduled_discharge_start_min=420,
             scheduled_discharge_end_min=480,
             scheduled_discharge_task_slot=2,
+            scheduled_discharge_time_mode=1,
             scheduled_discharge_task_count=1,
             scheduled_discharge_settable_count=1,
         )
@@ -824,6 +883,8 @@ class TestPowerSetpoints:
             "scheduled_charge_start_min",
             "scheduled_charge_end_min",
             "scheduled_charge_task_slot",
+            "scheduled_charge_time_mode",
+            "scheduled_charge_time_param",
         ):
             assert coordinator.data[key] is None
             assert coordinator.device_data[key] is None
