@@ -47,6 +47,9 @@ _CMD_ID_HEARTBEAT = 177
 
 #: "Not installed" value the unit puts on fields it has no sensor for.
 _NOT_INSTALLED = 0xFFFFFF
+#: Never published as a reading: the placeholder above and the u32 maximum
+#: (it would show stored energy as 4.29 GWh).
+_UNUSABLE_VALUES = (_NOT_INSTALLED, 0xFFFFFFFF)
 
 # `254/21` fields only this unit reads, on top of `CMS_CORE_FIELD_MAP`.
 # Source: the 52 recorded frames of #427, decoded field by field.
@@ -101,11 +104,12 @@ _LIFETIME_WH_KEYS = (
 
 def _drop_unusable(walked: dict[str, Any]) -> None:
     """Remove NaN/inf (they abort Home Assistant's rounding) and the
-    0xFFFFFF "not installed" value, in place."""
+    0xFFFFFF "not installed" value and the unsigned-32 maximum (an unread
+    u32 register), in place."""
     for key in [
         k
         for k, v in walked.items()
-        if (isinstance(v, float) and not isfinite(v)) or v == _NOT_INSTALLED
+        if (isinstance(v, float) and not isfinite(v)) or v in _UNUSABLE_VALUES
     ]:
         del walked[key]
 

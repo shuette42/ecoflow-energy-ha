@@ -14,7 +14,6 @@ from pathlib import Path
 
 from ecoflow_energy.const import (
     _SN_PREFIX_EXCLUDED_KEYS,
-    CMSCORE_SENSORS,
     DEVICE_TYPE_DISPLAY_NAMES,
     ENHANCED_ONLY_DEVICE_TYPES,
     OCEANPRO_SENSORS,
@@ -96,10 +95,40 @@ def test_keys_are_unique_across_the_ocean_pro_definitions() -> None:
     assert not duplicates, f"duplicate keys: {duplicates}"
 
 
+# The HR61 panel's first six definitions and core field rows as they were
+# before the OCEAN Pro lift (written out, not derived from the shared
+# containers, so a change to the panel's own list or table turns this red).
+# (key, unit, device_class, state_class, enabled by default)
+_HR61_FIRST_SIX = (
+    ("grid_power_w", "W", "power", "measurement", True),
+    ("load_power_w", "W", "power", "measurement", True),
+    ("pv_power_w", "W", "power", "measurement", True),
+    ("battery_power_w", "W", "power", "measurement", True),
+    ("battery_soc_pct", "%", "battery", "measurement", True),
+    ("grid_l1_voltage_v", "V", "voltage", "measurement", True),
+)
+# (field number, key, type, scale), sorted by field number as text
+_HR61_CORE_ROWS = [
+    ("262", "battery_soc_pct", "float", 1),
+    ("461", "backup_reserve_pct", "int", 1),
+    ("515", "grid_power_w", "float", 1),
+    ("516", "load_power_w", "float", 1),
+    ("517", "pv_power_w", "float", 1),
+    ("518", "battery_power_w", "float", 1),
+]
+
+
 def test_the_panel_definitions_and_field_table_are_untouched() -> None:
-    core_keys = [d.key for d in CMSCORE_SENSORS]
-    assert core_keys, "CMSCORE_SENSORS is empty"
-    assert [d.key for d in SMARTPANEL40_SENSORS][: len(core_keys)] == core_keys
+    first_six = tuple(
+        (d.key, d.unit, d.device_class, d.state_class, not d.disabled_by_default)
+        for d in SMARTPANEL40_SENSORS[:6]
+    )
+    assert first_six == _HR61_FIRST_SIX
+    rows = sorted(
+        (field, *_HR61_FIELD_MAP[field])
+        for field in ("515", "516", "517", "518", "262", "461")
+    )
+    assert rows == _HR61_CORE_ROWS
     assert len(CMS_CORE_FIELD_MAP) == 6
     for field, entry in CMS_CORE_FIELD_MAP.items():
         assert _HR61_FIELD_MAP[field] == entry, field

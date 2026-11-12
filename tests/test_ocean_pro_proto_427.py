@@ -198,6 +198,14 @@ class TestRuntimeAndUnusable:
         data = parse_hr51_proto_message(_frame(254, 21, inner))
         assert data == {"pv_string_2_power_w": pytest.approx(12.5)}
 
+    def test_u32_maximum_is_dropped_on_an_int_field(self) -> None:
+        """No recorded frame carries 0xFFFFFFFF, so it is hand-built beside a
+        good value on the same field family: stored energy must not read
+        4.29 GWh, and the neighbouring reading must survive."""
+        inner = encode_field_varint(1682, 0xFFFFFFFF) + encode_field_fixed32(1477, 12.5)
+        data = parse_hr51_proto_message(_frame(254, 21, inner))
+        assert data == {"pv_string_2_power_w": pytest.approx(12.5)}
+
     def test_safety_only_frame_returns_none(self) -> None:
         assert parse_hr51_proto_message(_FRAMES["safety_only"]) is None
 

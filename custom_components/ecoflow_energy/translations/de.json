@@ -2828,7 +2828,7 @@
         "name": "Wallbox-Energie abgeschlossener Ladevorgänge nicht zugeordnet"
       },
       "battery_pack_soc_pct": {
-        "name": "Batteriepack Ladestand"
+        "name": "Batteriepack-Ladezustand"
       },
       "inverter_ac_l1_voltage_v": {
         "name": "Wechselrichter L1 Spannung"

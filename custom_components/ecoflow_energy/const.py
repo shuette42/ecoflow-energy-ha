@@ -9464,7 +9464,7 @@ SMARTPANEL40_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 # OCEAN Pro inverter and battery (`HR51`, #427). Enhanced mode only and
 # read-only: both recordings came over the app channel. The six system figures
 # are the panel's own definitions (`CMSCORE_SENSORS`), so a home with both
-# units shows the same Battery figure on both device pages. The battery's
+# units shows the same Battery SOC figure on both device pages. The battery's
 # lifetime counters come from the pack's own heartbeat; there are no PV, grid
 # or load energy counters, for the same reason as on the panel.
 def _build_ocean_pro_pv_string_sensor(string: int) -> EcoFlowSensorDef:

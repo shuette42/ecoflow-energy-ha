@@ -1,9 +1,9 @@
 {
- "description": "Real HR51 (OCEAN Pro) frames from the two #427 captures, serial masked as 16 X. Taken from the masked copies in tests/fixtures/hr51/ (same frames, same indices). The two 32/177 heartbeats of one frame come from one pack about 30 s apart.",
+ "description": "Real HR51 (OCEAN Pro) frames from the two #427 captures, serial masked as 16 X. Taken from the masked copies in tests/fixtures/hr51/ (same frames; index is the i field of the frame in the file named by source). The two 32/177 heartbeats of one frame come from one pack about 30 s apart.",
  "frames": [
   {
    "name": "core_with_soc_and_grid_hz",
-   "source": "docs/captures/issue-427/hr51-frames.json",
+   "source": "tests/fixtures/hr51/hr51_frames.json",
    "index": 0,
    "ts_iso": "2026-09-16T19:27:42.405255+00:00",
    "topic": "property",
@@ -17,7 +17,7 @@
   },
   {
    "name": "full_state_bundle",
-   "source": "docs/captures/issue-427/hr51-frames.json",
+   "source": "tests/fixtures/hr51/hr51_frames.json",
    "index": 5,
    "ts_iso": "2026-09-16T20:42:43.032225+00:00",
    "topic": "get_reply",
@@ -36,7 +36,7 @@
   },
   {
    "name": "core_without_soc",
-   "source": "docs/captures/issue-427/hr51-frames.json",
+   "source": "tests/fixtures/hr51/hr51_frames.json",
    "index": 13,
    "ts_iso": "2026-09-16T21:40:42.457067+00:00",
    "topic": "property",
@@ -48,7 +48,7 @@
   },
   {
    "name": "core_soc_at_floor_50",
-   "source": "docs/captures/issue-427/hr51-frames.json",
+   "source": "tests/fixtures/hr51/hr51_frames.json",
    "index": 41,
    "ts_iso": "2026-09-17T10:58:50.156590+00:00",
    "topic": "property",
@@ -60,7 +60,7 @@
   },
   {
    "name": "soc_80_charging",
-   "source": "docs/captures/issue-427/mr13five-diagnostics-20261001.json (skipped_devices[0].raw_capture.frames)",
+   "source": "tests/fixtures/hr51/hr51_frames_20261001.json",
    "index": 35,
    "ts_iso": "2026-10-01T12:58:44.543813+00:00",
    "topic": "property",
@@ -72,7 +72,7 @@
   },
   {
    "name": "heartbeat_pair_full",
-   "source": "docs/captures/issue-427/hr51-frames.json",
+   "source": "tests/fixtures/hr51/hr51_frames.json",
    "index": 10,
    "ts_iso": "2026-09-16T21:38:52.298627+00:00",
    "topic": "property",
@@ -85,7 +85,7 @@
   },
   {
    "name": "heartbeat_pair_at_floor",
-   "source": "docs/captures/issue-427/mr13five-diagnostics-20261001.json (skipped_devices[0].raw_capture.frames)",
+   "source": "tests/fixtures/hr51/hr51_frames_20261001.json",
    "index": 11,
    "ts_iso": "2026-10-01T01:05:50.379043+00:00",
    "topic": "property",
@@ -98,7 +98,7 @@
   },
   {
    "name": "safety_only",
-   "source": "docs/captures/issue-427/hr51-frames.json",
+   "source": "tests/fixtures/hr51/hr51_frames.json",
    "index": 1,
    "ts_iso": "2026-09-16T19:27:42.661179+00:00",
    "topic": "property",
