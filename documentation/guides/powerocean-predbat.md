@@ -288,14 +288,14 @@ pred_bat:
   soc_kw: sensor.ecoflow_powerocean_battery_remaining_capacity
 
   # --- Battery model ---
-  soc_max: 25.0
+  soc_max: 25.0 # usable kWh of your PowerOcean battery
   battery_size: 25.0 # usable kWh of your PowerOcean battery
   inverter_limit: 5000 # max AC output (W)
   inverter_limit_charge:
     - 6000 # max AC charge (W)
   inverter_limit_discharge:
     - 5000 # max AC discharge (W)
-  battery_rate_max: 6000
+  battery_rate_max: 6000 # max charge rate
   battery_charge_power_curve:
     100: 1.0
   battery_discharge_power_curve:
@@ -355,6 +355,22 @@ postcode.
   carbon_postcode: "SW1A 1AA"
   carbon_automatic: true
 ```
+
+If you would like predbat to backfill its data with billing data from Octopus
+(this may happen over a day behind especially with export data), add a section
+like this with your Octopus account id and the api key in the `secrets.yaml`
+file:-
+
+```yaml
+  # Octopus API key - needed for billing info (otherwise HA integration works)
+  octopus_api_account: "A-????????"
+  octopus_api_key: !secret octopus_api_key
+```
+
+You can also add information so predbat can generate comparison data against
+other tariffs - look at
+[Comparing Energy Tariffs](https://springfall2008.github.io/batpred/compare/)
+for information.
 
 For car charging you may need to set up configuration for your car charger. In
 my case all the defaults work and all I need to set are the battery size (58kWh)
@@ -432,3 +448,15 @@ Once you are comfortable with the plan and there are no errors being logged, you
 can change PredBat into `Control charge` mode. At present there is no point in
 setting to `Control charge & discharge` because we have no forced
 discharge/export controls.
+
+## Issues
+
+- Currently export control is not configured
+- On my system there is a discrepancy between the charge rate requested and the
+  power seen going to the batteries - the delivered charge is only 80% of that
+  requested across the range, although all other figures are consistent with the
+  reported battery power. I am investigating this.
+
+## Changes
+
+I will summarise changes to this document here.
