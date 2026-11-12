@@ -148,14 +148,17 @@ class TestSwitchDefsRouting:
         assert _get_switch_defs(DEVICE_TYPE_DELTA) is DELTA2MAX_SWITCHES
 
     def test_stream_switches(self) -> None:
-        """The outlet switches sit behind the same write gate as the limits,
-        so an empty serial withholds them exactly as it does there: a write
-        with no serial cannot be addressed anyway."""
+        """The outlet switches sit behind their own gate, which the Stream
+        Ultra (BK11) shares with the AC Pro (#677). An empty serial withholds
+        them as it does the limits: a write with no serial cannot be
+        addressed anyway."""
         assert _get_switch_defs(DEVICE_TYPE_STREAM) == []
         assert (
             _get_switch_defs(DEVICE_TYPE_STREAM, "BK31TEST00000001") is STREAM_SWITCHES
         )
-        assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK11TEST00000001") == []
+        assert (
+            _get_switch_defs(DEVICE_TYPE_STREAM, "BK11TEST00000001") is STREAM_SWITCHES
+        )
         assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK12TEST00000001") == []
 
     def test_powerocean_switches_are_the_schedule_slots(self):

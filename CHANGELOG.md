@@ -2,7 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.27.1] - 2026-11-11
+## [1.28.0] - 2026-11-12
+
+### Added
+
+- The STREAM Ultra (`BK11`) has the AC Outlet 1 and AC Outlet 2 switches in Enhanced Mode, as the STREAM AC Pro does. Switching outlet 1 is confirmed by a recording of the app: the unit acknowledges the write and reports the new outlet state about two seconds later, and the integration sends the same bytes the app does. Outlet 2 uses the same message with its own field, which is recorded on a STREAM AC Pro but not yet on a STREAM Ultra. Thanks to @KEV-github for the recording and to @aharder3 for testing both outlets. (Ref #677)
 
 ### Changed
 

@@ -6122,6 +6122,21 @@ def supports_stream_controls(device_sn: str) -> bool:
     return device_sn[:4].upper() in STREAM_CONTROL_PREFIXES
 
 
+# Stream variants that get the two AC outlet switches. Its own set, not a rider
+# on STREAM_CONTROL_PREFIXES: the BK11 (Stream Ultra) has the outlet write on
+# record (app frame and device acknowledgement identical to the BK31 write,
+# read-back field 980 following within two seconds, #677) but none of the
+# SoC limits, LED brightness or Backup Reserve floor that set also claims.
+STREAM_OUTLET_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31", "BK11"})
+
+
+def supports_stream_outlet_switches(device_sn: str) -> bool:
+    """Return whether this Stream variant gets the AC outlet switches."""
+    if not device_sn:
+        return False
+    return device_sn[:4].upper() in STREAM_OUTLET_CONTROL_PREFIXES
+
+
 # Stream variants whose Feed-in control switch is offered. It is its own set,
 # not a rider on STREAM_CONTROL_PREFIXES: that set claims writes reproduced from
 # frames on a Stream AC Pro, and the BK61 (Stream Ultra X) has only the

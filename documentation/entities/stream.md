@@ -2,11 +2,11 @@
 
 Full list of all entities created for Stream devices.
 
-**Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Pro (`BK12`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All six share the sensor and binary-sensor set below. The hardware-confirmed writable controls are limited to the AC Pro. On the other five models Backup Reserve is no longer a number. The Backup Reserve sensor shows the value. The Stream Pro (`BK12`) has been seen in Enhanced Mode only, in two reports. It has not been tried in Standard Mode. Which of the entities below fill on it is not confirmed yet. On one Stream Pro in Enhanced Mode, AC Current stayed unknown, also while the unit reported about 800 W at its grid connection: the unit did not send a current reading.
+**Models:** Stream AC Pro (`BK31`), Stream Ultra (`BK11`), Stream Pro (`BK12`), Stream Max (`BK41`), Stream AC (`BK51`), Stream Ultra X (`BK61`). All six share the sensor and binary-sensor set below. The hardware-confirmed writable controls are limited to the AC Pro, apart from the two AC outlet switches, which the Stream Ultra (`BK11`) has as well: outlet 1 is confirmed on the Ultra by a recording of the app, outlet 2 so far only on the AC Pro. On the other five models Backup Reserve is no longer a number. The Backup Reserve sensor shows the value. The Stream Pro (`BK12`) has been seen in Enhanced Mode only, in two reports. It has not been tried in Standard Mode. Which of the entities below fill on it is not confirmed yet. On one Stream Pro in Enhanced Mode, AC Current stayed unknown, also while the unit reported about 800 W at its grid connection: the unit did not send a current reading.
 
 **The Stream Micro (`BK01`, `BK02`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01, BK02)](#stream-micro-bk01-bk02) at the end of this page.
 
-**Totals:** 65 sensors, 2 binary sensors, no numbers. Stream AC Pro (`BK31`) adds 2 switches and 4 numbers. Stream Ultra X (`BK61`) adds 1 switch in Standard Mode. Eight of the 65 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
+**Totals:** 65 sensors, 2 binary sensors, no numbers. Stream AC Pro (`BK31`) adds 2 switches and 4 numbers. Stream Ultra (`BK11`) adds 2 switches in Enhanced Mode. Stream Ultra X (`BK61`) adds 1 switch in Standard Mode. Eight of the 65 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
@@ -126,12 +126,12 @@ Also available as disabled diagnostics: **Battery Charge Capacity** and **Batter
 
 ## Switches
 
-Stream AC Pro (`BK31`): two switches, `AC Outlet 1` and `AC Outlet 2`, confirmed writable on live hardware. Stream Ultra X (`BK61`): one switch, `Feed-in Control`, in Standard Mode only. The other models keep the read-only binary sensors above, since nothing confirms their write path.
+Stream AC Pro (`BK31`) and Stream Ultra (`BK11`): two switches, `AC Outlet 1` and `AC Outlet 2`, in Enhanced Mode. Both are confirmed writable on a live AC Pro. On the Ultra, switching outlet 1 is confirmed by a recording of the app; outlet 2 uses the same message with its own field and has not been recorded on the Ultra yet. Stream Ultra X (`BK61`): one switch, `Feed-in Control`, in Standard Mode only. The other models keep the read-only binary sensors above, since nothing confirms their write path.
 
 | Entity | Default | Description |
 |:---|:---:|:---|
-| AC Outlet 1 | enabled | Outlet 1 on/off control (BK31 only) |
-| AC Outlet 2 | enabled | Outlet 2 on/off control (BK31 only) |
+| AC Outlet 1 | enabled | Outlet 1 on/off control (BK31 and BK11, Enhanced Mode) |
+| AC Outlet 2 | enabled | Outlet 2 on/off control (BK31 and BK11, Enhanced Mode) |
 | Feed-in Control | enabled | Feed-in control on/off (BK61 only, **Standard Mode only**). Reads the unit's feed-in mode (2 = on, 1 = off, any other value shows as unknown). The write follows the IoT Developer API description of the feed-in command. Switching off from Home Assistant has been confirmed on a unit, and the app followed. Switching on from Home Assistant has not been reported yet, so a note from an owner would settle it. After a change the switch keeps the new state and follows the next report from the unit; if the unit did not take the change, the next poll (about every 30 seconds) puts the old state back. Tested only on a system with a single unit: in a system with several Stream units the setting may have to be sent to the main unit, which is not handled yet, so if the switch returns to its old state there, please report it. |
 
 ---

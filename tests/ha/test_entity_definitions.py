@@ -148,6 +148,7 @@ SERIALS: tuple[str, ...] = ("", "ZZZZ" + _FILLER) + tuple(
     for prefix in sorted(
         C.STREAM_AC5000_CONTROL_PREFIXES
         | C.STREAM_CONTROL_PREFIXES
+        | C.STREAM_OUTLET_CONTROL_PREFIXES
         | C.STREAM_FEED_IN_CONTROL_PREFIXES
         | set(C.OCEAN2_CONTROLS)
     )
