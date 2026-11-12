@@ -830,17 +830,6 @@ EXCLUDE_FROM_UNDOCUMENTED: tuple[Exclusion, ...] = (
         "'## Binary Sensors' section at all",
     ),
     Exclusion(
-        "STREAM",
-        "switches",
-        re.compile(r"^AC Outlet [12]$"),
-        "FINDING: stream.md's '## Switches' section reads 'None. The AC "
-        "outlets are exposed read-only as binary sensors...', but "
-        "STREAM_SWITCHES defines AC Outlet 1/2 as enhanced_only switches. "
-        "The doc line predates that write path; see stream-ac-pro.md's "
-        "'## Outlet Controls' for the same two switches documented as "
-        "controls, under a different file",
-    ),
-    Exclusion(
         "STREAMAC5000",
         "sensors",
         re.compile(r"^BMS SoC$"),
@@ -1297,7 +1286,7 @@ def test_readme_stream_primary_and_footnote_counts_match_const_py():
     both sides checked against the real per-serial counts."""
     doc_text = README_DOC_PATH.read_text(encoding="utf-8")
     primary, footnote = _primary_and_footnote(_bullet_segment(doc_text, "Stream"))
-    base = _real_counts(const.DEVICE_TYPE_STREAM, "BK11XXXXXXXXXXXX")
+    base = _real_counts(const.DEVICE_TYPE_STREAM, "BK41XXXXXXXXXXXX")
     bk31 = _real_counts(const.DEVICE_TYPE_STREAM, "BK31XXXXXXXXXXXX")
 
     stated_primary = _parse_counts(primary)

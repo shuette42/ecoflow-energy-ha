@@ -60,8 +60,8 @@ from .const import (
     supports_ocean2_storm_guard,
     supports_powerpulse_controls,
     supports_stream_ac5000_controls,
-    supports_stream_controls,
     supports_stream_feed_in_control,
+    supports_stream_outlet_switches,
 )
 from .coordinator import DeviceValueNotReported, EcoFlowDeviceCoordinator
 from .coordinator.local_modbus import EcoFlowLocalModbusCoordinator
@@ -675,7 +675,7 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
 
     ``device_sn`` gates the STREAM AC 5000, Stream and Ocean 2 controls, which
     are confirmed on the variants that have produced a write frame of their
-    own. See STREAM_AC5000_CONTROL_PREFIXES, STREAM_CONTROL_PREFIXES,
+    own. See STREAM_AC5000_CONTROL_PREFIXES, STREAM_OUTLET_CONTROL_PREFIXES,
     STREAM_FEED_IN_CONTROL_PREFIXES and
     OCEAN2_CONTROLS (the Storm Guard switch is gated on the row's
     ``storm_param_full``).
@@ -687,7 +687,7 @@ def _get_switch_defs(device_type: str, device_sn: str = "") -> list[EcoFlowSwitc
     if device_type == DEVICE_TYPE_SMARTPLUG:
         return SMARTPLUG_SWITCHES
     if device_type == DEVICE_TYPE_STREAM:
-        defs = STREAM_SWITCHES if supports_stream_controls(device_sn) else []
+        defs = STREAM_SWITCHES if supports_stream_outlet_switches(device_sn) else []
         if supports_stream_feed_in_control(device_sn):
             defs = defs + STREAMFEEDIN_SWITCHES
         return defs

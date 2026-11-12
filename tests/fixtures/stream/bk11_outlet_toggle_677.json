@@ -1,0 +1,47 @@
+{
+ "source": "issue #677 diagnostics, one Stream Ultra (BK11) with AC outlet 1 switched on and off in the app; the integration masked the serial bytes as X",
+ "frames": [
+  {
+   "label": "app_outlet_1_on",
+   "frame_index": 4,
+   "ts_iso": "2026-11-07T10:02:31.562775+00:00",
+   "topic": "set",
+   "hex": "0a390a03e017011020180220012801380340fe01481150035801700f800103880101ba0103696f73ca011058585858585858585858585858585858"
+  },
+  {
+   "label": "device_ack_on",
+   "frame_index": 5,
+   "ts_iso": "2026-11-07T10:02:31.752180+00:00",
+   "topic": "set_reply",
+   "hex": "0a2a0a0808fc021001e017011002182020012801380340fe014812500858016001700f788270800103880101"
+  },
+  {
+   "label": "readback_outlet_1_on",
+   "frame_index": 6,
+   "ts_iso": "2026-11-07T10:02:33.574395+00:00",
+   "topic": "property",
+   "hex": "0a250a0c981018c5268b3f1c43a03d01100218202001280140fe014815500c5801800103880101"
+  },
+  {
+   "label": "app_outlet_1_off",
+   "frame_index": 8,
+   "ts_iso": "2026-11-07T10:02:35.888617+00:00",
+   "topic": "set",
+   "hex": "0a390a03e017001020180220012801380340fe014811500358017010800103880101ba0103696f73ca011058585858585858585858585858585858"
+  },
+  {
+   "label": "device_ack_off",
+   "frame_index": 9,
+   "ts_iso": "2026-11-07T10:02:36.065487+00:00",
+   "topic": "set_reply",
+   "hex": "0a2a0a0808fc021001e017001002182020012801380340fe0148125008580160017010788270800103880101"
+  },
+  {
+   "label": "readback_outlet_1_off",
+   "frame_index": 10,
+   "ts_iso": "2026-11-07T10:02:37.774451+00:00",
+   "topic": "property",
+   "hex": "0a1c0a03a03d00100218202001280140fe01481550035801800103880101"
+  }
+ ]
+}
