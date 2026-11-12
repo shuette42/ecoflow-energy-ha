@@ -604,3 +604,100 @@ class TestDelta3ControlRouting:
         warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
         assert len(warnings) == 1
         assert "rejected a setting" in warnings[0].getMessage()
+
+
+# A P231, the one Delta 3 variant with the USB output switch (#685). Fictional
+# serial, real frames from tests/fixtures/delta3/p231_usb_toggle_685.json.
+MOCK_P231_DEVICE: dict = {**MOCK_DELTA3_DEVICE, "sn": "P231TESTDUMMY001"}
+
+
+class TestDelta3UsbSwitch:
+    async def test_read_back_follows_the_recorded_frames(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Real status frames through the MQTT ingest drive usb_out_flow."""
+        import json
+        from pathlib import Path
+
+        from custom_components.ecoflow_energy.const import (
+            AUTH_METHOD_APP,
+            CONF_EMAIL,
+            CONF_PASSWORD,
+            CONF_USER_ID,
+            MODE_ENHANCED,
+        )
+        from custom_components.ecoflow_energy.coordinator import (
+            EcoFlowDeviceCoordinator,
+        )
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [MOCK_P231_DEVICE],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_P231_DEVICE)
+        fixture = (
+            Path(__file__).parent.parent
+            / "fixtures"
+            / "delta3"
+            / "p231_usb_toggle_685.json"
+        )
+        frames = {
+            (f["recording"], f["frame_index"]): bytes.fromhex(f["hex"])
+            for f in json.loads(fixture.read_text())["frames"]
+        }
+        topic = f"/app/device/property/{MOCK_P231_DEVICE['sn']}"
+
+        # 7.11.: on at the start (14), on after the app write (15), off after
+        # a panel press (5, the value the {0, 4} rule would read as on).
+        for key, expected in (
+            (("2026-11-07", 9), 1),
+            (("2026-11-07", 22), 0),
+            (("2026-11-07", 19), 1),
+            (("2026-11-08", 0), 0),
+        ):
+            coordinator._on_mqtt_message(topic, frames[key])
+            await hass.async_block_till_done()
+            assert coordinator.data["usb_out_flow"] == expected, key
+
+    async def test_standard_mode_gets_no_usb_switch(
+        self, hass: HomeAssistant, mock_mqtt_client
+    ) -> None:
+        """Enhanced only, and the existing P231 switches keep their unique ids."""
+        entry = _delta3_config_entry(MOCK_P231_DEVICE)
+        entry.add_to_hass(hass)
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.setup.IoTApiClient",
+            ) as iot_cls,
+            patch(
+                "custom_components.ecoflow_energy.coordinator.setup.EcoFlowHTTPQuota",
+            ) as http_cls,
+        ):
+            iot = iot_cls.return_value
+            iot.get_mqtt_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
+            iot.get_device_list = AsyncMock(return_value=[MOCK_P231_DEVICE])
+            iot.refresh_credentials = AsyncMock(return_value=MOCK_MQTT_CREDENTIALS)
+            http = http_cls.return_value
+            http.get_quota_all = AsyncMock(return_value=dict(DELTA3_QUOTA_FIXTURE))
+            http.last_error_code = None
+            assert await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        sn = MOCK_P231_DEVICE["sn"]
+        registry = er.async_get(hass)
+        assert (
+            registry.async_get_entity_id("switch", DOMAIN, f"{sn}_usb_out_switch")
+            is None
+        )
+        for key in ("ac_out_switch", "ac2_out_switch", "dc_12v_out_switch"):
+            assert registry.async_get_entity_id("switch", DOMAIN, f"{sn}_{key}"), key

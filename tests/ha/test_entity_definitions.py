@@ -150,6 +150,7 @@ SERIALS: tuple[str, ...] = ("", "ZZZZ" + _FILLER) + tuple(
         | C.STREAM_CONTROL_PREFIXES
         | C.STREAM_OUTLET_CONTROL_PREFIXES
         | C.STREAM_FEED_IN_CONTROL_PREFIXES
+        | C.DELTA3_USB_CONTROL_PREFIXES
         | set(C.OCEAN2_CONTROLS)
     )
 )

@@ -72,6 +72,7 @@ DELTA3_SWITCH_PARAMS: dict[str, Delta3Switch] = {
     "xboost_switch": Delta3Switch("cfgXboostEn", 25),
     "beeper_switch": Delta3Switch("cfgBeepEn", 9),
     "bypass_out_disable_switch": Delta3Switch("cfgBypassOutDisable", 26),
+    "usb_out_switch": Delta3Switch("cfgUsbOpen", 19),
 }
 
 # Energy backup is the only nested payload:

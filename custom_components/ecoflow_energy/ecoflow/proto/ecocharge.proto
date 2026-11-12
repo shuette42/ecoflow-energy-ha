@@ -707,6 +707,10 @@ message Delta3DisplayProperty {
   oneof _flow_info_ac_out { uint32 flow_info_ac_out = 367; }
   oneof _flow_info_ac2_out { uint32 flow_info_ac2_out = 971; }
   oneof _flow_info_12v { uint32 flow_info_12v = 33; }
+  // USB master output (#685). Fields 14-16 (second USB-A, both USB-C) always
+  // carry the same value, so only the first is read. On is bit 1, not "not 4":
+  // a P231 reports 14/15 while on and 4/5 while off.
+  oneof _flow_info_qcusb1 { uint32 flow_info_qcusb1 = 13; }
 
   // --- Battery state ---
   oneof _cms_batt_soc { float cms_batt_soc = 262; }

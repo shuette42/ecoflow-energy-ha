@@ -80,14 +80,23 @@ _DELTA3_REMAIN_TIME_FIELDS: dict[str, tuple[str, frozenset[int]]] = {
 # Output flow states are NOT booleans. The official docs give 4 = no flow,
 # and a D3M1 reports 14 while a port is on. A RIVER 3 reports 0 for an output
 # switched off in the app and 2 once it is back on (#296), so both 0 and 4
-# read as off and every other value as on. Values 1, 3, 8 and 12 have never
-# been recorded; a rule reading bit 1 as "on" would fit the recordings too and
-# differs only on those. Emit a derived 0/1 per flow.
+# read as off and every other value as on. Emit a derived 0/1 per flow.
+#
+# The USB output decodes by a second rule, bit 1 = on. A P231 reported 5 for
+# its USB output twice, both times right after it was switched off, and 14/15
+# while on (#685); the {0, 4} rule would read that 5 as on. For AC, 12 V and
+# AC2 no recording shows a value on which the two rules disagree (1, 5, 8, 9,
+# 12, 13), so they keep the {0, 4} rule until one does. Converging is moving a
+# row from the first map to the second.
 _DELTA3_FLOW_OFF_VALUES: frozenset[int] = frozenset({0, 4})
 _DELTA3_FLOW_FIELD_MAP: dict[str, str] = {
     "flowInfoAcOut": "ac_out_flow",
     "flowInfoAc2Out": "ac2_out_flow",
     "flowInfo12v": "dc_12v_out_flow",
+}
+_DELTA3_FLOW_ON_BIT = 0x02
+_DELTA3_FLOW_BIT1_FIELD_MAP: dict[str, str] = {
+    "flowInfoQcusb1": "usb_out_flow",
 }
 
 # Mapping: flat HTTP quota key -> sensor key. All values are direct-scaled
@@ -200,6 +209,11 @@ def parse_delta3_http_quota(quota_data: dict) -> dict[str, Any]:
             v = _safe_float(quota_data[http_key])
             if v is not None:
                 result[sensor_key] = 0 if int(v) in _DELTA3_FLOW_OFF_VALUES else 1
+    for http_key, sensor_key in _DELTA3_FLOW_BIT1_FIELD_MAP.items():
+        if http_key in quota_data:
+            v = _safe_float(quota_data[http_key])
+            if v is not None:
+                result[sensor_key] = 1 if int(v) & _DELTA3_FLOW_ON_BIT else 0
 
     # Per-outlet AC power: signed array, item[0]=AC1, item[2]=AC2. Both indices
     # were confirmed on hardware by loading each socket on its own.

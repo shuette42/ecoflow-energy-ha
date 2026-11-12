@@ -3137,6 +3137,9 @@
       "ac_out_switch": {
         "name": "AC-Ausgang"
       },
+      "usb_out_switch": {
+        "name": "USB-Ausgang"
+      },
       "ac2_out_switch": {
         "name": "AC-Ausgang 2"
       },
