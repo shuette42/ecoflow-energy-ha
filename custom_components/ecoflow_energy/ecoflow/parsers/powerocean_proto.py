@@ -901,10 +901,12 @@ def remap_ems_state_keys(raw: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-# The device's own numbering of a schedule slot, 1-based. Only slot 1 has ever
-# been observed on the wire, so nothing here assumes how many exist - the cap
-# below only stops a malformed list from producing keys without end.
-SCHEDULE_MAX_INDEX = 8
+# The device's own numbering of a schedule slot, 1-based. A unit numbers its
+# slots itself and does not count from 1: indices up to 18 were seen on a
+# PowerOcean Plus (#714 debug log), and a limit of 32 was tested by the
+# reporter. Nothing here assumes how many slots exist - the cap below only
+# stops a malformed list from producing keys without end.
+SCHEDULE_MAX_INDEX = 32
 
 # Minutes in a day. A window edge is minutes since local midnight, so 1440 is
 # the last value that can mean anything (midnight at the end of the day).

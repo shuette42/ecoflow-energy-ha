@@ -1854,6 +1854,78 @@
       "schedule_8_window": {
         "name": "Zeitplan 8 Zeitfenster"
       },
+      "schedule_9_window": {
+        "name": "Zeitplan 9 Zeitfenster"
+      },
+      "schedule_10_window": {
+        "name": "Zeitplan 10 Zeitfenster"
+      },
+      "schedule_11_window": {
+        "name": "Zeitplan 11 Zeitfenster"
+      },
+      "schedule_12_window": {
+        "name": "Zeitplan 12 Zeitfenster"
+      },
+      "schedule_13_window": {
+        "name": "Zeitplan 13 Zeitfenster"
+      },
+      "schedule_14_window": {
+        "name": "Zeitplan 14 Zeitfenster"
+      },
+      "schedule_15_window": {
+        "name": "Zeitplan 15 Zeitfenster"
+      },
+      "schedule_16_window": {
+        "name": "Zeitplan 16 Zeitfenster"
+      },
+      "schedule_17_window": {
+        "name": "Zeitplan 17 Zeitfenster"
+      },
+      "schedule_18_window": {
+        "name": "Zeitplan 18 Zeitfenster"
+      },
+      "schedule_19_window": {
+        "name": "Zeitplan 19 Zeitfenster"
+      },
+      "schedule_20_window": {
+        "name": "Zeitplan 20 Zeitfenster"
+      },
+      "schedule_21_window": {
+        "name": "Zeitplan 21 Zeitfenster"
+      },
+      "schedule_22_window": {
+        "name": "Zeitplan 22 Zeitfenster"
+      },
+      "schedule_23_window": {
+        "name": "Zeitplan 23 Zeitfenster"
+      },
+      "schedule_24_window": {
+        "name": "Zeitplan 24 Zeitfenster"
+      },
+      "schedule_25_window": {
+        "name": "Zeitplan 25 Zeitfenster"
+      },
+      "schedule_26_window": {
+        "name": "Zeitplan 26 Zeitfenster"
+      },
+      "schedule_27_window": {
+        "name": "Zeitplan 27 Zeitfenster"
+      },
+      "schedule_28_window": {
+        "name": "Zeitplan 28 Zeitfenster"
+      },
+      "schedule_29_window": {
+        "name": "Zeitplan 29 Zeitfenster"
+      },
+      "schedule_30_window": {
+        "name": "Zeitplan 30 Zeitfenster"
+      },
+      "schedule_31_window": {
+        "name": "Zeitplan 31 Zeitfenster"
+      },
+      "schedule_32_window": {
+        "name": "Zeitplan 32 Zeitfenster"
+      },
       "feed_schedule_1_window": {
         "name": "Einspeise-Zeitplan 1 Zeitfenster"
       },
@@ -1877,6 +1949,78 @@
       },
       "feed_schedule_8_window": {
         "name": "Einspeise-Zeitplan 8 Zeitfenster"
+      },
+      "feed_schedule_9_window": {
+        "name": "Einspeise-Zeitplan 9 Zeitfenster"
+      },
+      "feed_schedule_10_window": {
+        "name": "Einspeise-Zeitplan 10 Zeitfenster"
+      },
+      "feed_schedule_11_window": {
+        "name": "Einspeise-Zeitplan 11 Zeitfenster"
+      },
+      "feed_schedule_12_window": {
+        "name": "Einspeise-Zeitplan 12 Zeitfenster"
+      },
+      "feed_schedule_13_window": {
+        "name": "Einspeise-Zeitplan 13 Zeitfenster"
+      },
+      "feed_schedule_14_window": {
+        "name": "Einspeise-Zeitplan 14 Zeitfenster"
+      },
+      "feed_schedule_15_window": {
+        "name": "Einspeise-Zeitplan 15 Zeitfenster"
+      },
+      "feed_schedule_16_window": {
+        "name": "Einspeise-Zeitplan 16 Zeitfenster"
+      },
+      "feed_schedule_17_window": {
+        "name": "Einspeise-Zeitplan 17 Zeitfenster"
+      },
+      "feed_schedule_18_window": {
+        "name": "Einspeise-Zeitplan 18 Zeitfenster"
+      },
+      "feed_schedule_19_window": {
+        "name": "Einspeise-Zeitplan 19 Zeitfenster"
+      },
+      "feed_schedule_20_window": {
+        "name": "Einspeise-Zeitplan 20 Zeitfenster"
+      },
+      "feed_schedule_21_window": {
+        "name": "Einspeise-Zeitplan 21 Zeitfenster"
+      },
+      "feed_schedule_22_window": {
+        "name": "Einspeise-Zeitplan 22 Zeitfenster"
+      },
+      "feed_schedule_23_window": {
+        "name": "Einspeise-Zeitplan 23 Zeitfenster"
+      },
+      "feed_schedule_24_window": {
+        "name": "Einspeise-Zeitplan 24 Zeitfenster"
+      },
+      "feed_schedule_25_window": {
+        "name": "Einspeise-Zeitplan 25 Zeitfenster"
+      },
+      "feed_schedule_26_window": {
+        "name": "Einspeise-Zeitplan 26 Zeitfenster"
+      },
+      "feed_schedule_27_window": {
+        "name": "Einspeise-Zeitplan 27 Zeitfenster"
+      },
+      "feed_schedule_28_window": {
+        "name": "Einspeise-Zeitplan 28 Zeitfenster"
+      },
+      "feed_schedule_29_window": {
+        "name": "Einspeise-Zeitplan 29 Zeitfenster"
+      },
+      "feed_schedule_30_window": {
+        "name": "Einspeise-Zeitplan 30 Zeitfenster"
+      },
+      "feed_schedule_31_window": {
+        "name": "Einspeise-Zeitplan 31 Zeitfenster"
+      },
+      "feed_schedule_32_window": {
+        "name": "Einspeise-Zeitplan 32 Zeitfenster"
       },
       "tilt_angle_deg": {
         "name": "Neigungswinkel"
@@ -2760,6 +2904,78 @@
       "schedule_8_running": {
         "name": "Zeitplan 8 läuft"
       },
+      "schedule_9_running": {
+        "name": "Zeitplan 9 läuft"
+      },
+      "schedule_10_running": {
+        "name": "Zeitplan 10 läuft"
+      },
+      "schedule_11_running": {
+        "name": "Zeitplan 11 läuft"
+      },
+      "schedule_12_running": {
+        "name": "Zeitplan 12 läuft"
+      },
+      "schedule_13_running": {
+        "name": "Zeitplan 13 läuft"
+      },
+      "schedule_14_running": {
+        "name": "Zeitplan 14 läuft"
+      },
+      "schedule_15_running": {
+        "name": "Zeitplan 15 läuft"
+      },
+      "schedule_16_running": {
+        "name": "Zeitplan 16 läuft"
+      },
+      "schedule_17_running": {
+        "name": "Zeitplan 17 läuft"
+      },
+      "schedule_18_running": {
+        "name": "Zeitplan 18 läuft"
+      },
+      "schedule_19_running": {
+        "name": "Zeitplan 19 läuft"
+      },
+      "schedule_20_running": {
+        "name": "Zeitplan 20 läuft"
+      },
+      "schedule_21_running": {
+        "name": "Zeitplan 21 läuft"
+      },
+      "schedule_22_running": {
+        "name": "Zeitplan 22 läuft"
+      },
+      "schedule_23_running": {
+        "name": "Zeitplan 23 läuft"
+      },
+      "schedule_24_running": {
+        "name": "Zeitplan 24 läuft"
+      },
+      "schedule_25_running": {
+        "name": "Zeitplan 25 läuft"
+      },
+      "schedule_26_running": {
+        "name": "Zeitplan 26 läuft"
+      },
+      "schedule_27_running": {
+        "name": "Zeitplan 27 läuft"
+      },
+      "schedule_28_running": {
+        "name": "Zeitplan 28 läuft"
+      },
+      "schedule_29_running": {
+        "name": "Zeitplan 29 läuft"
+      },
+      "schedule_30_running": {
+        "name": "Zeitplan 30 läuft"
+      },
+      "schedule_31_running": {
+        "name": "Zeitplan 31 läuft"
+      },
+      "schedule_32_running": {
+        "name": "Zeitplan 32 läuft"
+      },
       "feed_schedule_1_running": {
         "name": "Einspeise-Zeitplan 1 läuft"
       },
@@ -2783,6 +2999,78 @@
       },
       "feed_schedule_8_running": {
         "name": "Einspeise-Zeitplan 8 läuft"
+      },
+      "feed_schedule_9_running": {
+        "name": "Einspeise-Zeitplan 9 läuft"
+      },
+      "feed_schedule_10_running": {
+        "name": "Einspeise-Zeitplan 10 läuft"
+      },
+      "feed_schedule_11_running": {
+        "name": "Einspeise-Zeitplan 11 läuft"
+      },
+      "feed_schedule_12_running": {
+        "name": "Einspeise-Zeitplan 12 läuft"
+      },
+      "feed_schedule_13_running": {
+        "name": "Einspeise-Zeitplan 13 läuft"
+      },
+      "feed_schedule_14_running": {
+        "name": "Einspeise-Zeitplan 14 läuft"
+      },
+      "feed_schedule_15_running": {
+        "name": "Einspeise-Zeitplan 15 läuft"
+      },
+      "feed_schedule_16_running": {
+        "name": "Einspeise-Zeitplan 16 läuft"
+      },
+      "feed_schedule_17_running": {
+        "name": "Einspeise-Zeitplan 17 läuft"
+      },
+      "feed_schedule_18_running": {
+        "name": "Einspeise-Zeitplan 18 läuft"
+      },
+      "feed_schedule_19_running": {
+        "name": "Einspeise-Zeitplan 19 läuft"
+      },
+      "feed_schedule_20_running": {
+        "name": "Einspeise-Zeitplan 20 läuft"
+      },
+      "feed_schedule_21_running": {
+        "name": "Einspeise-Zeitplan 21 läuft"
+      },
+      "feed_schedule_22_running": {
+        "name": "Einspeise-Zeitplan 22 läuft"
+      },
+      "feed_schedule_23_running": {
+        "name": "Einspeise-Zeitplan 23 läuft"
+      },
+      "feed_schedule_24_running": {
+        "name": "Einspeise-Zeitplan 24 läuft"
+      },
+      "feed_schedule_25_running": {
+        "name": "Einspeise-Zeitplan 25 läuft"
+      },
+      "feed_schedule_26_running": {
+        "name": "Einspeise-Zeitplan 26 läuft"
+      },
+      "feed_schedule_27_running": {
+        "name": "Einspeise-Zeitplan 27 läuft"
+      },
+      "feed_schedule_28_running": {
+        "name": "Einspeise-Zeitplan 28 läuft"
+      },
+      "feed_schedule_29_running": {
+        "name": "Einspeise-Zeitplan 29 läuft"
+      },
+      "feed_schedule_30_running": {
+        "name": "Einspeise-Zeitplan 30 läuft"
+      },
+      "feed_schedule_31_running": {
+        "name": "Einspeise-Zeitplan 31 läuft"
+      },
+      "feed_schedule_32_running": {
+        "name": "Einspeise-Zeitplan 32 läuft"
       },
       "grid_l1_connected": {
         "name": "Phase A verbunden"
@@ -2912,6 +3200,78 @@
       "schedule_8_enabled": {
         "name": "Zeitplan 8 aktiv"
       },
+      "schedule_9_enabled": {
+        "name": "Zeitplan 9 aktiv"
+      },
+      "schedule_10_enabled": {
+        "name": "Zeitplan 10 aktiv"
+      },
+      "schedule_11_enabled": {
+        "name": "Zeitplan 11 aktiv"
+      },
+      "schedule_12_enabled": {
+        "name": "Zeitplan 12 aktiv"
+      },
+      "schedule_13_enabled": {
+        "name": "Zeitplan 13 aktiv"
+      },
+      "schedule_14_enabled": {
+        "name": "Zeitplan 14 aktiv"
+      },
+      "schedule_15_enabled": {
+        "name": "Zeitplan 15 aktiv"
+      },
+      "schedule_16_enabled": {
+        "name": "Zeitplan 16 aktiv"
+      },
+      "schedule_17_enabled": {
+        "name": "Zeitplan 17 aktiv"
+      },
+      "schedule_18_enabled": {
+        "name": "Zeitplan 18 aktiv"
+      },
+      "schedule_19_enabled": {
+        "name": "Zeitplan 19 aktiv"
+      },
+      "schedule_20_enabled": {
+        "name": "Zeitplan 20 aktiv"
+      },
+      "schedule_21_enabled": {
+        "name": "Zeitplan 21 aktiv"
+      },
+      "schedule_22_enabled": {
+        "name": "Zeitplan 22 aktiv"
+      },
+      "schedule_23_enabled": {
+        "name": "Zeitplan 23 aktiv"
+      },
+      "schedule_24_enabled": {
+        "name": "Zeitplan 24 aktiv"
+      },
+      "schedule_25_enabled": {
+        "name": "Zeitplan 25 aktiv"
+      },
+      "schedule_26_enabled": {
+        "name": "Zeitplan 26 aktiv"
+      },
+      "schedule_27_enabled": {
+        "name": "Zeitplan 27 aktiv"
+      },
+      "schedule_28_enabled": {
+        "name": "Zeitplan 28 aktiv"
+      },
+      "schedule_29_enabled": {
+        "name": "Zeitplan 29 aktiv"
+      },
+      "schedule_30_enabled": {
+        "name": "Zeitplan 30 aktiv"
+      },
+      "schedule_31_enabled": {
+        "name": "Zeitplan 31 aktiv"
+      },
+      "schedule_32_enabled": {
+        "name": "Zeitplan 32 aktiv"
+      },
       "feed_schedule_1_enabled": {
         "name": "Einspeise-Zeitplan 1 aktiv"
       },
@@ -2935,6 +3295,78 @@
       },
       "feed_schedule_8_enabled": {
         "name": "Einspeise-Zeitplan 8 aktiv"
+      },
+      "feed_schedule_9_enabled": {
+        "name": "Einspeise-Zeitplan 9 aktiv"
+      },
+      "feed_schedule_10_enabled": {
+        "name": "Einspeise-Zeitplan 10 aktiv"
+      },
+      "feed_schedule_11_enabled": {
+        "name": "Einspeise-Zeitplan 11 aktiv"
+      },
+      "feed_schedule_12_enabled": {
+        "name": "Einspeise-Zeitplan 12 aktiv"
+      },
+      "feed_schedule_13_enabled": {
+        "name": "Einspeise-Zeitplan 13 aktiv"
+      },
+      "feed_schedule_14_enabled": {
+        "name": "Einspeise-Zeitplan 14 aktiv"
+      },
+      "feed_schedule_15_enabled": {
+        "name": "Einspeise-Zeitplan 15 aktiv"
+      },
+      "feed_schedule_16_enabled": {
+        "name": "Einspeise-Zeitplan 16 aktiv"
+      },
+      "feed_schedule_17_enabled": {
+        "name": "Einspeise-Zeitplan 17 aktiv"
+      },
+      "feed_schedule_18_enabled": {
+        "name": "Einspeise-Zeitplan 18 aktiv"
+      },
+      "feed_schedule_19_enabled": {
+        "name": "Einspeise-Zeitplan 19 aktiv"
+      },
+      "feed_schedule_20_enabled": {
+        "name": "Einspeise-Zeitplan 20 aktiv"
+      },
+      "feed_schedule_21_enabled": {
+        "name": "Einspeise-Zeitplan 21 aktiv"
+      },
+      "feed_schedule_22_enabled": {
+        "name": "Einspeise-Zeitplan 22 aktiv"
+      },
+      "feed_schedule_23_enabled": {
+        "name": "Einspeise-Zeitplan 23 aktiv"
+      },
+      "feed_schedule_24_enabled": {
+        "name": "Einspeise-Zeitplan 24 aktiv"
+      },
+      "feed_schedule_25_enabled": {
+        "name": "Einspeise-Zeitplan 25 aktiv"
+      },
+      "feed_schedule_26_enabled": {
+        "name": "Einspeise-Zeitplan 26 aktiv"
+      },
+      "feed_schedule_27_enabled": {
+        "name": "Einspeise-Zeitplan 27 aktiv"
+      },
+      "feed_schedule_28_enabled": {
+        "name": "Einspeise-Zeitplan 28 aktiv"
+      },
+      "feed_schedule_29_enabled": {
+        "name": "Einspeise-Zeitplan 29 aktiv"
+      },
+      "feed_schedule_30_enabled": {
+        "name": "Einspeise-Zeitplan 30 aktiv"
+      },
+      "feed_schedule_31_enabled": {
+        "name": "Einspeise-Zeitplan 31 aktiv"
+      },
+      "feed_schedule_32_enabled": {
+        "name": "Einspeise-Zeitplan 32 aktiv"
       },
       "power": {
         "name": "Betrieb"
@@ -3073,6 +3505,78 @@
       "schedule_8_power_w": {
         "name": "Zeitplan 8 Ladeleistung"
       },
+      "schedule_9_power_w": {
+        "name": "Zeitplan 9 Ladeleistung"
+      },
+      "schedule_10_power_w": {
+        "name": "Zeitplan 10 Ladeleistung"
+      },
+      "schedule_11_power_w": {
+        "name": "Zeitplan 11 Ladeleistung"
+      },
+      "schedule_12_power_w": {
+        "name": "Zeitplan 12 Ladeleistung"
+      },
+      "schedule_13_power_w": {
+        "name": "Zeitplan 13 Ladeleistung"
+      },
+      "schedule_14_power_w": {
+        "name": "Zeitplan 14 Ladeleistung"
+      },
+      "schedule_15_power_w": {
+        "name": "Zeitplan 15 Ladeleistung"
+      },
+      "schedule_16_power_w": {
+        "name": "Zeitplan 16 Ladeleistung"
+      },
+      "schedule_17_power_w": {
+        "name": "Zeitplan 17 Ladeleistung"
+      },
+      "schedule_18_power_w": {
+        "name": "Zeitplan 18 Ladeleistung"
+      },
+      "schedule_19_power_w": {
+        "name": "Zeitplan 19 Ladeleistung"
+      },
+      "schedule_20_power_w": {
+        "name": "Zeitplan 20 Ladeleistung"
+      },
+      "schedule_21_power_w": {
+        "name": "Zeitplan 21 Ladeleistung"
+      },
+      "schedule_22_power_w": {
+        "name": "Zeitplan 22 Ladeleistung"
+      },
+      "schedule_23_power_w": {
+        "name": "Zeitplan 23 Ladeleistung"
+      },
+      "schedule_24_power_w": {
+        "name": "Zeitplan 24 Ladeleistung"
+      },
+      "schedule_25_power_w": {
+        "name": "Zeitplan 25 Ladeleistung"
+      },
+      "schedule_26_power_w": {
+        "name": "Zeitplan 26 Ladeleistung"
+      },
+      "schedule_27_power_w": {
+        "name": "Zeitplan 27 Ladeleistung"
+      },
+      "schedule_28_power_w": {
+        "name": "Zeitplan 28 Ladeleistung"
+      },
+      "schedule_29_power_w": {
+        "name": "Zeitplan 29 Ladeleistung"
+      },
+      "schedule_30_power_w": {
+        "name": "Zeitplan 30 Ladeleistung"
+      },
+      "schedule_31_power_w": {
+        "name": "Zeitplan 31 Ladeleistung"
+      },
+      "schedule_32_power_w": {
+        "name": "Zeitplan 32 Ladeleistung"
+      },
       "feed_schedule_1_power_w": {
         "name": "Einspeise-Zeitplan 1 Einspeiseleistung"
       },
@@ -3096,6 +3600,78 @@
       },
       "feed_schedule_8_power_w": {
         "name": "Einspeise-Zeitplan 8 Einspeiseleistung"
+      },
+      "feed_schedule_9_power_w": {
+        "name": "Einspeise-Zeitplan 9 Einspeiseleistung"
+      },
+      "feed_schedule_10_power_w": {
+        "name": "Einspeise-Zeitplan 10 Einspeiseleistung"
+      },
+      "feed_schedule_11_power_w": {
+        "name": "Einspeise-Zeitplan 11 Einspeiseleistung"
+      },
+      "feed_schedule_12_power_w": {
+        "name": "Einspeise-Zeitplan 12 Einspeiseleistung"
+      },
+      "feed_schedule_13_power_w": {
+        "name": "Einspeise-Zeitplan 13 Einspeiseleistung"
+      },
+      "feed_schedule_14_power_w": {
+        "name": "Einspeise-Zeitplan 14 Einspeiseleistung"
+      },
+      "feed_schedule_15_power_w": {
+        "name": "Einspeise-Zeitplan 15 Einspeiseleistung"
+      },
+      "feed_schedule_16_power_w": {
+        "name": "Einspeise-Zeitplan 16 Einspeiseleistung"
+      },
+      "feed_schedule_17_power_w": {
+        "name": "Einspeise-Zeitplan 17 Einspeiseleistung"
+      },
+      "feed_schedule_18_power_w": {
+        "name": "Einspeise-Zeitplan 18 Einspeiseleistung"
+      },
+      "feed_schedule_19_power_w": {
+        "name": "Einspeise-Zeitplan 19 Einspeiseleistung"
+      },
+      "feed_schedule_20_power_w": {
+        "name": "Einspeise-Zeitplan 20 Einspeiseleistung"
+      },
+      "feed_schedule_21_power_w": {
+        "name": "Einspeise-Zeitplan 21 Einspeiseleistung"
+      },
+      "feed_schedule_22_power_w": {
+        "name": "Einspeise-Zeitplan 22 Einspeiseleistung"
+      },
+      "feed_schedule_23_power_w": {
+        "name": "Einspeise-Zeitplan 23 Einspeiseleistung"
+      },
+      "feed_schedule_24_power_w": {
+        "name": "Einspeise-Zeitplan 24 Einspeiseleistung"
+      },
+      "feed_schedule_25_power_w": {
+        "name": "Einspeise-Zeitplan 25 Einspeiseleistung"
+      },
+      "feed_schedule_26_power_w": {
+        "name": "Einspeise-Zeitplan 26 Einspeiseleistung"
+      },
+      "feed_schedule_27_power_w": {
+        "name": "Einspeise-Zeitplan 27 Einspeiseleistung"
+      },
+      "feed_schedule_28_power_w": {
+        "name": "Einspeise-Zeitplan 28 Einspeiseleistung"
+      },
+      "feed_schedule_29_power_w": {
+        "name": "Einspeise-Zeitplan 29 Einspeiseleistung"
+      },
+      "feed_schedule_30_power_w": {
+        "name": "Einspeise-Zeitplan 30 Einspeiseleistung"
+      },
+      "feed_schedule_31_power_w": {
+        "name": "Einspeise-Zeitplan 31 Einspeiseleistung"
+      },
+      "feed_schedule_32_power_w": {
+        "name": "Einspeise-Zeitplan 32 Einspeiseleistung"
       },
       "target_temp_c": {
         "name": "Zieltemperatur"

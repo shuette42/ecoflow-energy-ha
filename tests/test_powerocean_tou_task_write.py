@@ -22,6 +22,7 @@ from ecoflow_energy.ecoflow.energy_stream import (
     POWEROCEAN_TASK_POWER_MAX_W,
     build_tou_task_set_payload,
 )
+from ecoflow_energy.ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX
 from ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
@@ -423,6 +424,22 @@ def test_a_window_past_the_end_of_day_is_refused():
     bad_window = 1260 | (1441 << 16)
     with pytest.raises(ValueError, match="time_table window"):
         build_power(watts=1300, time_table=[bad_window])
+
+
+@pytest.mark.parametrize("index", [0, -1, SCHEDULE_MAX_INDEX + 1])
+def test_the_task_index_is_bounded(index):
+    with pytest.raises(ValueError, match="task_index"):
+        build_tou_task_set_payload("disarm", index, device_sn=CAPTURE_SN)
+
+
+def test_the_highest_slot_the_parser_reads_can_be_written():
+    """#714: a unit numbers its slots itself, so the write bound is the read bound."""
+    frame = build_tou_task_set_payload(
+        "disarm", SCHEDULE_MAX_INDEX, device_sn=CAPTURE_SN
+    )
+
+    # is_cfg=2, then task_index=32.
+    assert pdata_of(frame).startswith(bytes.fromhex("10021820"))
 
 
 def test_the_serial_is_required():

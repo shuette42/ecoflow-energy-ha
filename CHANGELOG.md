@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.27.1] - 2026-11-11
+
+### Fixed
+
+- PowerOcean schedules that the unit numbers above 8 (seen up to 18 on a PowerOcean Plus) now get their schedule entities. Until now every schedule with a number above 8 was dropped, so its controls never appeared. Thanks to @rhaschke for the debug log and for testing the larger limit. A newly created schedule can still show an unknown time window, which is tracked in #714 and not changed here. (Ref #714)
+
 ## [1.27.0] - 2026-11-08
 
 ### Added

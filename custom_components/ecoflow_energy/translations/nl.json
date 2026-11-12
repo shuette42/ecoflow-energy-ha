@@ -1854,6 +1854,78 @@
       "schedule_8_window": {
         "name": "Tijdvenster schema 8"
       },
+      "schedule_9_window": {
+        "name": "Tijdvenster schema 9"
+      },
+      "schedule_10_window": {
+        "name": "Tijdvenster schema 10"
+      },
+      "schedule_11_window": {
+        "name": "Tijdvenster schema 11"
+      },
+      "schedule_12_window": {
+        "name": "Tijdvenster schema 12"
+      },
+      "schedule_13_window": {
+        "name": "Tijdvenster schema 13"
+      },
+      "schedule_14_window": {
+        "name": "Tijdvenster schema 14"
+      },
+      "schedule_15_window": {
+        "name": "Tijdvenster schema 15"
+      },
+      "schedule_16_window": {
+        "name": "Tijdvenster schema 16"
+      },
+      "schedule_17_window": {
+        "name": "Tijdvenster schema 17"
+      },
+      "schedule_18_window": {
+        "name": "Tijdvenster schema 18"
+      },
+      "schedule_19_window": {
+        "name": "Tijdvenster schema 19"
+      },
+      "schedule_20_window": {
+        "name": "Tijdvenster schema 20"
+      },
+      "schedule_21_window": {
+        "name": "Tijdvenster schema 21"
+      },
+      "schedule_22_window": {
+        "name": "Tijdvenster schema 22"
+      },
+      "schedule_23_window": {
+        "name": "Tijdvenster schema 23"
+      },
+      "schedule_24_window": {
+        "name": "Tijdvenster schema 24"
+      },
+      "schedule_25_window": {
+        "name": "Tijdvenster schema 25"
+      },
+      "schedule_26_window": {
+        "name": "Tijdvenster schema 26"
+      },
+      "schedule_27_window": {
+        "name": "Tijdvenster schema 27"
+      },
+      "schedule_28_window": {
+        "name": "Tijdvenster schema 28"
+      },
+      "schedule_29_window": {
+        "name": "Tijdvenster schema 29"
+      },
+      "schedule_30_window": {
+        "name": "Tijdvenster schema 30"
+      },
+      "schedule_31_window": {
+        "name": "Tijdvenster schema 31"
+      },
+      "schedule_32_window": {
+        "name": "Tijdvenster schema 32"
+      },
       "feed_schedule_1_window": {
         "name": "Tijdvenster terugleverschema 1"
       },
@@ -1877,6 +1949,78 @@
       },
       "feed_schedule_8_window": {
         "name": "Tijdvenster terugleverschema 8"
+      },
+      "feed_schedule_9_window": {
+        "name": "Tijdvenster terugleverschema 9"
+      },
+      "feed_schedule_10_window": {
+        "name": "Tijdvenster terugleverschema 10"
+      },
+      "feed_schedule_11_window": {
+        "name": "Tijdvenster terugleverschema 11"
+      },
+      "feed_schedule_12_window": {
+        "name": "Tijdvenster terugleverschema 12"
+      },
+      "feed_schedule_13_window": {
+        "name": "Tijdvenster terugleverschema 13"
+      },
+      "feed_schedule_14_window": {
+        "name": "Tijdvenster terugleverschema 14"
+      },
+      "feed_schedule_15_window": {
+        "name": "Tijdvenster terugleverschema 15"
+      },
+      "feed_schedule_16_window": {
+        "name": "Tijdvenster terugleverschema 16"
+      },
+      "feed_schedule_17_window": {
+        "name": "Tijdvenster terugleverschema 17"
+      },
+      "feed_schedule_18_window": {
+        "name": "Tijdvenster terugleverschema 18"
+      },
+      "feed_schedule_19_window": {
+        "name": "Tijdvenster terugleverschema 19"
+      },
+      "feed_schedule_20_window": {
+        "name": "Tijdvenster terugleverschema 20"
+      },
+      "feed_schedule_21_window": {
+        "name": "Tijdvenster terugleverschema 21"
+      },
+      "feed_schedule_22_window": {
+        "name": "Tijdvenster terugleverschema 22"
+      },
+      "feed_schedule_23_window": {
+        "name": "Tijdvenster terugleverschema 23"
+      },
+      "feed_schedule_24_window": {
+        "name": "Tijdvenster terugleverschema 24"
+      },
+      "feed_schedule_25_window": {
+        "name": "Tijdvenster terugleverschema 25"
+      },
+      "feed_schedule_26_window": {
+        "name": "Tijdvenster terugleverschema 26"
+      },
+      "feed_schedule_27_window": {
+        "name": "Tijdvenster terugleverschema 27"
+      },
+      "feed_schedule_28_window": {
+        "name": "Tijdvenster terugleverschema 28"
+      },
+      "feed_schedule_29_window": {
+        "name": "Tijdvenster terugleverschema 29"
+      },
+      "feed_schedule_30_window": {
+        "name": "Tijdvenster terugleverschema 30"
+      },
+      "feed_schedule_31_window": {
+        "name": "Tijdvenster terugleverschema 31"
+      },
+      "feed_schedule_32_window": {
+        "name": "Tijdvenster terugleverschema 32"
       },
       "tilt_angle_deg": {
         "name": "Kantelhoek"
@@ -2760,6 +2904,78 @@
       "schedule_8_running": {
         "name": "Schema 8 actief"
       },
+      "schedule_9_running": {
+        "name": "Schema 9 actief"
+      },
+      "schedule_10_running": {
+        "name": "Schema 10 actief"
+      },
+      "schedule_11_running": {
+        "name": "Schema 11 actief"
+      },
+      "schedule_12_running": {
+        "name": "Schema 12 actief"
+      },
+      "schedule_13_running": {
+        "name": "Schema 13 actief"
+      },
+      "schedule_14_running": {
+        "name": "Schema 14 actief"
+      },
+      "schedule_15_running": {
+        "name": "Schema 15 actief"
+      },
+      "schedule_16_running": {
+        "name": "Schema 16 actief"
+      },
+      "schedule_17_running": {
+        "name": "Schema 17 actief"
+      },
+      "schedule_18_running": {
+        "name": "Schema 18 actief"
+      },
+      "schedule_19_running": {
+        "name": "Schema 19 actief"
+      },
+      "schedule_20_running": {
+        "name": "Schema 20 actief"
+      },
+      "schedule_21_running": {
+        "name": "Schema 21 actief"
+      },
+      "schedule_22_running": {
+        "name": "Schema 22 actief"
+      },
+      "schedule_23_running": {
+        "name": "Schema 23 actief"
+      },
+      "schedule_24_running": {
+        "name": "Schema 24 actief"
+      },
+      "schedule_25_running": {
+        "name": "Schema 25 actief"
+      },
+      "schedule_26_running": {
+        "name": "Schema 26 actief"
+      },
+      "schedule_27_running": {
+        "name": "Schema 27 actief"
+      },
+      "schedule_28_running": {
+        "name": "Schema 28 actief"
+      },
+      "schedule_29_running": {
+        "name": "Schema 29 actief"
+      },
+      "schedule_30_running": {
+        "name": "Schema 30 actief"
+      },
+      "schedule_31_running": {
+        "name": "Schema 31 actief"
+      },
+      "schedule_32_running": {
+        "name": "Schema 32 actief"
+      },
       "feed_schedule_1_running": {
         "name": "Terugleverschema 1 actief"
       },
@@ -2783,6 +2999,78 @@
       },
       "feed_schedule_8_running": {
         "name": "Terugleverschema 8 actief"
+      },
+      "feed_schedule_9_running": {
+        "name": "Terugleverschema 9 actief"
+      },
+      "feed_schedule_10_running": {
+        "name": "Terugleverschema 10 actief"
+      },
+      "feed_schedule_11_running": {
+        "name": "Terugleverschema 11 actief"
+      },
+      "feed_schedule_12_running": {
+        "name": "Terugleverschema 12 actief"
+      },
+      "feed_schedule_13_running": {
+        "name": "Terugleverschema 13 actief"
+      },
+      "feed_schedule_14_running": {
+        "name": "Terugleverschema 14 actief"
+      },
+      "feed_schedule_15_running": {
+        "name": "Terugleverschema 15 actief"
+      },
+      "feed_schedule_16_running": {
+        "name": "Terugleverschema 16 actief"
+      },
+      "feed_schedule_17_running": {
+        "name": "Terugleverschema 17 actief"
+      },
+      "feed_schedule_18_running": {
+        "name": "Terugleverschema 18 actief"
+      },
+      "feed_schedule_19_running": {
+        "name": "Terugleverschema 19 actief"
+      },
+      "feed_schedule_20_running": {
+        "name": "Terugleverschema 20 actief"
+      },
+      "feed_schedule_21_running": {
+        "name": "Terugleverschema 21 actief"
+      },
+      "feed_schedule_22_running": {
+        "name": "Terugleverschema 22 actief"
+      },
+      "feed_schedule_23_running": {
+        "name": "Terugleverschema 23 actief"
+      },
+      "feed_schedule_24_running": {
+        "name": "Terugleverschema 24 actief"
+      },
+      "feed_schedule_25_running": {
+        "name": "Terugleverschema 25 actief"
+      },
+      "feed_schedule_26_running": {
+        "name": "Terugleverschema 26 actief"
+      },
+      "feed_schedule_27_running": {
+        "name": "Terugleverschema 27 actief"
+      },
+      "feed_schedule_28_running": {
+        "name": "Terugleverschema 28 actief"
+      },
+      "feed_schedule_29_running": {
+        "name": "Terugleverschema 29 actief"
+      },
+      "feed_schedule_30_running": {
+        "name": "Terugleverschema 30 actief"
+      },
+      "feed_schedule_31_running": {
+        "name": "Terugleverschema 31 actief"
+      },
+      "feed_schedule_32_running": {
+        "name": "Terugleverschema 32 actief"
       },
       "grid_l1_connected": {
         "name": "Fase A verbonden"
@@ -2912,6 +3200,78 @@
       "schedule_8_enabled": {
         "name": "Schema 8 ingeschakeld"
       },
+      "schedule_9_enabled": {
+        "name": "Schema 9 ingeschakeld"
+      },
+      "schedule_10_enabled": {
+        "name": "Schema 10 ingeschakeld"
+      },
+      "schedule_11_enabled": {
+        "name": "Schema 11 ingeschakeld"
+      },
+      "schedule_12_enabled": {
+        "name": "Schema 12 ingeschakeld"
+      },
+      "schedule_13_enabled": {
+        "name": "Schema 13 ingeschakeld"
+      },
+      "schedule_14_enabled": {
+        "name": "Schema 14 ingeschakeld"
+      },
+      "schedule_15_enabled": {
+        "name": "Schema 15 ingeschakeld"
+      },
+      "schedule_16_enabled": {
+        "name": "Schema 16 ingeschakeld"
+      },
+      "schedule_17_enabled": {
+        "name": "Schema 17 ingeschakeld"
+      },
+      "schedule_18_enabled": {
+        "name": "Schema 18 ingeschakeld"
+      },
+      "schedule_19_enabled": {
+        "name": "Schema 19 ingeschakeld"
+      },
+      "schedule_20_enabled": {
+        "name": "Schema 20 ingeschakeld"
+      },
+      "schedule_21_enabled": {
+        "name": "Schema 21 ingeschakeld"
+      },
+      "schedule_22_enabled": {
+        "name": "Schema 22 ingeschakeld"
+      },
+      "schedule_23_enabled": {
+        "name": "Schema 23 ingeschakeld"
+      },
+      "schedule_24_enabled": {
+        "name": "Schema 24 ingeschakeld"
+      },
+      "schedule_25_enabled": {
+        "name": "Schema 25 ingeschakeld"
+      },
+      "schedule_26_enabled": {
+        "name": "Schema 26 ingeschakeld"
+      },
+      "schedule_27_enabled": {
+        "name": "Schema 27 ingeschakeld"
+      },
+      "schedule_28_enabled": {
+        "name": "Schema 28 ingeschakeld"
+      },
+      "schedule_29_enabled": {
+        "name": "Schema 29 ingeschakeld"
+      },
+      "schedule_30_enabled": {
+        "name": "Schema 30 ingeschakeld"
+      },
+      "schedule_31_enabled": {
+        "name": "Schema 31 ingeschakeld"
+      },
+      "schedule_32_enabled": {
+        "name": "Schema 32 ingeschakeld"
+      },
       "feed_schedule_1_enabled": {
         "name": "Terugleverschema 1 ingeschakeld"
       },
@@ -2935,6 +3295,78 @@
       },
       "feed_schedule_8_enabled": {
         "name": "Terugleverschema 8 ingeschakeld"
+      },
+      "feed_schedule_9_enabled": {
+        "name": "Terugleverschema 9 ingeschakeld"
+      },
+      "feed_schedule_10_enabled": {
+        "name": "Terugleverschema 10 ingeschakeld"
+      },
+      "feed_schedule_11_enabled": {
+        "name": "Terugleverschema 11 ingeschakeld"
+      },
+      "feed_schedule_12_enabled": {
+        "name": "Terugleverschema 12 ingeschakeld"
+      },
+      "feed_schedule_13_enabled": {
+        "name": "Terugleverschema 13 ingeschakeld"
+      },
+      "feed_schedule_14_enabled": {
+        "name": "Terugleverschema 14 ingeschakeld"
+      },
+      "feed_schedule_15_enabled": {
+        "name": "Terugleverschema 15 ingeschakeld"
+      },
+      "feed_schedule_16_enabled": {
+        "name": "Terugleverschema 16 ingeschakeld"
+      },
+      "feed_schedule_17_enabled": {
+        "name": "Terugleverschema 17 ingeschakeld"
+      },
+      "feed_schedule_18_enabled": {
+        "name": "Terugleverschema 18 ingeschakeld"
+      },
+      "feed_schedule_19_enabled": {
+        "name": "Terugleverschema 19 ingeschakeld"
+      },
+      "feed_schedule_20_enabled": {
+        "name": "Terugleverschema 20 ingeschakeld"
+      },
+      "feed_schedule_21_enabled": {
+        "name": "Terugleverschema 21 ingeschakeld"
+      },
+      "feed_schedule_22_enabled": {
+        "name": "Terugleverschema 22 ingeschakeld"
+      },
+      "feed_schedule_23_enabled": {
+        "name": "Terugleverschema 23 ingeschakeld"
+      },
+      "feed_schedule_24_enabled": {
+        "name": "Terugleverschema 24 ingeschakeld"
+      },
+      "feed_schedule_25_enabled": {
+        "name": "Terugleverschema 25 ingeschakeld"
+      },
+      "feed_schedule_26_enabled": {
+        "name": "Terugleverschema 26 ingeschakeld"
+      },
+      "feed_schedule_27_enabled": {
+        "name": "Terugleverschema 27 ingeschakeld"
+      },
+      "feed_schedule_28_enabled": {
+        "name": "Terugleverschema 28 ingeschakeld"
+      },
+      "feed_schedule_29_enabled": {
+        "name": "Terugleverschema 29 ingeschakeld"
+      },
+      "feed_schedule_30_enabled": {
+        "name": "Terugleverschema 30 ingeschakeld"
+      },
+      "feed_schedule_31_enabled": {
+        "name": "Terugleverschema 31 ingeschakeld"
+      },
+      "feed_schedule_32_enabled": {
+        "name": "Terugleverschema 32 ingeschakeld"
       },
       "power": {
         "name": "Aan/uit"
@@ -3073,6 +3505,78 @@
       "schedule_8_power_w": {
         "name": "Schema 8 laadvermogen"
       },
+      "schedule_9_power_w": {
+        "name": "Schema 9 laadvermogen"
+      },
+      "schedule_10_power_w": {
+        "name": "Schema 10 laadvermogen"
+      },
+      "schedule_11_power_w": {
+        "name": "Schema 11 laadvermogen"
+      },
+      "schedule_12_power_w": {
+        "name": "Schema 12 laadvermogen"
+      },
+      "schedule_13_power_w": {
+        "name": "Schema 13 laadvermogen"
+      },
+      "schedule_14_power_w": {
+        "name": "Schema 14 laadvermogen"
+      },
+      "schedule_15_power_w": {
+        "name": "Schema 15 laadvermogen"
+      },
+      "schedule_16_power_w": {
+        "name": "Schema 16 laadvermogen"
+      },
+      "schedule_17_power_w": {
+        "name": "Schema 17 laadvermogen"
+      },
+      "schedule_18_power_w": {
+        "name": "Schema 18 laadvermogen"
+      },
+      "schedule_19_power_w": {
+        "name": "Schema 19 laadvermogen"
+      },
+      "schedule_20_power_w": {
+        "name": "Schema 20 laadvermogen"
+      },
+      "schedule_21_power_w": {
+        "name": "Schema 21 laadvermogen"
+      },
+      "schedule_22_power_w": {
+        "name": "Schema 22 laadvermogen"
+      },
+      "schedule_23_power_w": {
+        "name": "Schema 23 laadvermogen"
+      },
+      "schedule_24_power_w": {
+        "name": "Schema 24 laadvermogen"
+      },
+      "schedule_25_power_w": {
+        "name": "Schema 25 laadvermogen"
+      },
+      "schedule_26_power_w": {
+        "name": "Schema 26 laadvermogen"
+      },
+      "schedule_27_power_w": {
+        "name": "Schema 27 laadvermogen"
+      },
+      "schedule_28_power_w": {
+        "name": "Schema 28 laadvermogen"
+      },
+      "schedule_29_power_w": {
+        "name": "Schema 29 laadvermogen"
+      },
+      "schedule_30_power_w": {
+        "name": "Schema 30 laadvermogen"
+      },
+      "schedule_31_power_w": {
+        "name": "Schema 31 laadvermogen"
+      },
+      "schedule_32_power_w": {
+        "name": "Schema 32 laadvermogen"
+      },
       "feed_schedule_1_power_w": {
         "name": "Terugleverschema 1 terugleververmogen"
       },
@@ -3096,6 +3600,78 @@
       },
       "feed_schedule_8_power_w": {
         "name": "Terugleverschema 8 terugleververmogen"
+      },
+      "feed_schedule_9_power_w": {
+        "name": "Terugleverschema 9 terugleververmogen"
+      },
+      "feed_schedule_10_power_w": {
+        "name": "Terugleverschema 10 terugleververmogen"
+      },
+      "feed_schedule_11_power_w": {
+        "name": "Terugleverschema 11 terugleververmogen"
+      },
+      "feed_schedule_12_power_w": {
+        "name": "Terugleverschema 12 terugleververmogen"
+      },
+      "feed_schedule_13_power_w": {
+        "name": "Terugleverschema 13 terugleververmogen"
+      },
+      "feed_schedule_14_power_w": {
+        "name": "Terugleverschema 14 terugleververmogen"
+      },
+      "feed_schedule_15_power_w": {
+        "name": "Terugleverschema 15 terugleververmogen"
+      },
+      "feed_schedule_16_power_w": {
+        "name": "Terugleverschema 16 terugleververmogen"
+      },
+      "feed_schedule_17_power_w": {
+        "name": "Terugleverschema 17 terugleververmogen"
+      },
+      "feed_schedule_18_power_w": {
+        "name": "Terugleverschema 18 terugleververmogen"
+      },
+      "feed_schedule_19_power_w": {
+        "name": "Terugleverschema 19 terugleververmogen"
+      },
+      "feed_schedule_20_power_w": {
+        "name": "Terugleverschema 20 terugleververmogen"
+      },
+      "feed_schedule_21_power_w": {
+        "name": "Terugleverschema 21 terugleververmogen"
+      },
+      "feed_schedule_22_power_w": {
+        "name": "Terugleverschema 22 terugleververmogen"
+      },
+      "feed_schedule_23_power_w": {
+        "name": "Terugleverschema 23 terugleververmogen"
+      },
+      "feed_schedule_24_power_w": {
+        "name": "Terugleverschema 24 terugleververmogen"
+      },
+      "feed_schedule_25_power_w": {
+        "name": "Terugleverschema 25 terugleververmogen"
+      },
+      "feed_schedule_26_power_w": {
+        "name": "Terugleverschema 26 terugleververmogen"
+      },
+      "feed_schedule_27_power_w": {
+        "name": "Terugleverschema 27 terugleververmogen"
+      },
+      "feed_schedule_28_power_w": {
+        "name": "Terugleverschema 28 terugleververmogen"
+      },
+      "feed_schedule_29_power_w": {
+        "name": "Terugleverschema 29 terugleververmogen"
+      },
+      "feed_schedule_30_power_w": {
+        "name": "Terugleverschema 30 terugleververmogen"
+      },
+      "feed_schedule_31_power_w": {
+        "name": "Terugleverschema 31 terugleververmogen"
+      },
+      "feed_schedule_32_power_w": {
+        "name": "Terugleverschema 32 terugleververmogen"
       },
       "target_temp_c": {
         "name": "Doeltemperatuur"

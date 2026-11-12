@@ -1854,6 +1854,78 @@
       "schedule_8_window": {
         "name": "Fenêtre de la planification 8"
       },
+      "schedule_9_window": {
+        "name": "Fenêtre de la planification 9"
+      },
+      "schedule_10_window": {
+        "name": "Fenêtre de la planification 10"
+      },
+      "schedule_11_window": {
+        "name": "Fenêtre de la planification 11"
+      },
+      "schedule_12_window": {
+        "name": "Fenêtre de la planification 12"
+      },
+      "schedule_13_window": {
+        "name": "Fenêtre de la planification 13"
+      },
+      "schedule_14_window": {
+        "name": "Fenêtre de la planification 14"
+      },
+      "schedule_15_window": {
+        "name": "Fenêtre de la planification 15"
+      },
+      "schedule_16_window": {
+        "name": "Fenêtre de la planification 16"
+      },
+      "schedule_17_window": {
+        "name": "Fenêtre de la planification 17"
+      },
+      "schedule_18_window": {
+        "name": "Fenêtre de la planification 18"
+      },
+      "schedule_19_window": {
+        "name": "Fenêtre de la planification 19"
+      },
+      "schedule_20_window": {
+        "name": "Fenêtre de la planification 20"
+      },
+      "schedule_21_window": {
+        "name": "Fenêtre de la planification 21"
+      },
+      "schedule_22_window": {
+        "name": "Fenêtre de la planification 22"
+      },
+      "schedule_23_window": {
+        "name": "Fenêtre de la planification 23"
+      },
+      "schedule_24_window": {
+        "name": "Fenêtre de la planification 24"
+      },
+      "schedule_25_window": {
+        "name": "Fenêtre de la planification 25"
+      },
+      "schedule_26_window": {
+        "name": "Fenêtre de la planification 26"
+      },
+      "schedule_27_window": {
+        "name": "Fenêtre de la planification 27"
+      },
+      "schedule_28_window": {
+        "name": "Fenêtre de la planification 28"
+      },
+      "schedule_29_window": {
+        "name": "Fenêtre de la planification 29"
+      },
+      "schedule_30_window": {
+        "name": "Fenêtre de la planification 30"
+      },
+      "schedule_31_window": {
+        "name": "Fenêtre de la planification 31"
+      },
+      "schedule_32_window": {
+        "name": "Fenêtre de la planification 32"
+      },
       "feed_schedule_1_window": {
         "name": "Fenêtre de la planification d'injection 1"
       },
@@ -1877,6 +1949,78 @@
       },
       "feed_schedule_8_window": {
         "name": "Fenêtre de la planification d'injection 8"
+      },
+      "feed_schedule_9_window": {
+        "name": "Fenêtre de la planification d'injection 9"
+      },
+      "feed_schedule_10_window": {
+        "name": "Fenêtre de la planification d'injection 10"
+      },
+      "feed_schedule_11_window": {
+        "name": "Fenêtre de la planification d'injection 11"
+      },
+      "feed_schedule_12_window": {
+        "name": "Fenêtre de la planification d'injection 12"
+      },
+      "feed_schedule_13_window": {
+        "name": "Fenêtre de la planification d'injection 13"
+      },
+      "feed_schedule_14_window": {
+        "name": "Fenêtre de la planification d'injection 14"
+      },
+      "feed_schedule_15_window": {
+        "name": "Fenêtre de la planification d'injection 15"
+      },
+      "feed_schedule_16_window": {
+        "name": "Fenêtre de la planification d'injection 16"
+      },
+      "feed_schedule_17_window": {
+        "name": "Fenêtre de la planification d'injection 17"
+      },
+      "feed_schedule_18_window": {
+        "name": "Fenêtre de la planification d'injection 18"
+      },
+      "feed_schedule_19_window": {
+        "name": "Fenêtre de la planification d'injection 19"
+      },
+      "feed_schedule_20_window": {
+        "name": "Fenêtre de la planification d'injection 20"
+      },
+      "feed_schedule_21_window": {
+        "name": "Fenêtre de la planification d'injection 21"
+      },
+      "feed_schedule_22_window": {
+        "name": "Fenêtre de la planification d'injection 22"
+      },
+      "feed_schedule_23_window": {
+        "name": "Fenêtre de la planification d'injection 23"
+      },
+      "feed_schedule_24_window": {
+        "name": "Fenêtre de la planification d'injection 24"
+      },
+      "feed_schedule_25_window": {
+        "name": "Fenêtre de la planification d'injection 25"
+      },
+      "feed_schedule_26_window": {
+        "name": "Fenêtre de la planification d'injection 26"
+      },
+      "feed_schedule_27_window": {
+        "name": "Fenêtre de la planification d'injection 27"
+      },
+      "feed_schedule_28_window": {
+        "name": "Fenêtre de la planification d'injection 28"
+      },
+      "feed_schedule_29_window": {
+        "name": "Fenêtre de la planification d'injection 29"
+      },
+      "feed_schedule_30_window": {
+        "name": "Fenêtre de la planification d'injection 30"
+      },
+      "feed_schedule_31_window": {
+        "name": "Fenêtre de la planification d'injection 31"
+      },
+      "feed_schedule_32_window": {
+        "name": "Fenêtre de la planification d'injection 32"
       },
       "tilt_angle_deg": {
         "name": "Angle d'inclinaison"
@@ -2760,6 +2904,78 @@
       "schedule_8_running": {
         "name": "Planification 8 en cours"
       },
+      "schedule_9_running": {
+        "name": "Planification 9 en cours"
+      },
+      "schedule_10_running": {
+        "name": "Planification 10 en cours"
+      },
+      "schedule_11_running": {
+        "name": "Planification 11 en cours"
+      },
+      "schedule_12_running": {
+        "name": "Planification 12 en cours"
+      },
+      "schedule_13_running": {
+        "name": "Planification 13 en cours"
+      },
+      "schedule_14_running": {
+        "name": "Planification 14 en cours"
+      },
+      "schedule_15_running": {
+        "name": "Planification 15 en cours"
+      },
+      "schedule_16_running": {
+        "name": "Planification 16 en cours"
+      },
+      "schedule_17_running": {
+        "name": "Planification 17 en cours"
+      },
+      "schedule_18_running": {
+        "name": "Planification 18 en cours"
+      },
+      "schedule_19_running": {
+        "name": "Planification 19 en cours"
+      },
+      "schedule_20_running": {
+        "name": "Planification 20 en cours"
+      },
+      "schedule_21_running": {
+        "name": "Planification 21 en cours"
+      },
+      "schedule_22_running": {
+        "name": "Planification 22 en cours"
+      },
+      "schedule_23_running": {
+        "name": "Planification 23 en cours"
+      },
+      "schedule_24_running": {
+        "name": "Planification 24 en cours"
+      },
+      "schedule_25_running": {
+        "name": "Planification 25 en cours"
+      },
+      "schedule_26_running": {
+        "name": "Planification 26 en cours"
+      },
+      "schedule_27_running": {
+        "name": "Planification 27 en cours"
+      },
+      "schedule_28_running": {
+        "name": "Planification 28 en cours"
+      },
+      "schedule_29_running": {
+        "name": "Planification 29 en cours"
+      },
+      "schedule_30_running": {
+        "name": "Planification 30 en cours"
+      },
+      "schedule_31_running": {
+        "name": "Planification 31 en cours"
+      },
+      "schedule_32_running": {
+        "name": "Planification 32 en cours"
+      },
       "feed_schedule_1_running": {
         "name": "Planification d'injection 1 en cours"
       },
@@ -2783,6 +2999,78 @@
       },
       "feed_schedule_8_running": {
         "name": "Planification d'injection 8 en cours"
+      },
+      "feed_schedule_9_running": {
+        "name": "Planification d'injection 9 en cours"
+      },
+      "feed_schedule_10_running": {
+        "name": "Planification d'injection 10 en cours"
+      },
+      "feed_schedule_11_running": {
+        "name": "Planification d'injection 11 en cours"
+      },
+      "feed_schedule_12_running": {
+        "name": "Planification d'injection 12 en cours"
+      },
+      "feed_schedule_13_running": {
+        "name": "Planification d'injection 13 en cours"
+      },
+      "feed_schedule_14_running": {
+        "name": "Planification d'injection 14 en cours"
+      },
+      "feed_schedule_15_running": {
+        "name": "Planification d'injection 15 en cours"
+      },
+      "feed_schedule_16_running": {
+        "name": "Planification d'injection 16 en cours"
+      },
+      "feed_schedule_17_running": {
+        "name": "Planification d'injection 17 en cours"
+      },
+      "feed_schedule_18_running": {
+        "name": "Planification d'injection 18 en cours"
+      },
+      "feed_schedule_19_running": {
+        "name": "Planification d'injection 19 en cours"
+      },
+      "feed_schedule_20_running": {
+        "name": "Planification d'injection 20 en cours"
+      },
+      "feed_schedule_21_running": {
+        "name": "Planification d'injection 21 en cours"
+      },
+      "feed_schedule_22_running": {
+        "name": "Planification d'injection 22 en cours"
+      },
+      "feed_schedule_23_running": {
+        "name": "Planification d'injection 23 en cours"
+      },
+      "feed_schedule_24_running": {
+        "name": "Planification d'injection 24 en cours"
+      },
+      "feed_schedule_25_running": {
+        "name": "Planification d'injection 25 en cours"
+      },
+      "feed_schedule_26_running": {
+        "name": "Planification d'injection 26 en cours"
+      },
+      "feed_schedule_27_running": {
+        "name": "Planification d'injection 27 en cours"
+      },
+      "feed_schedule_28_running": {
+        "name": "Planification d'injection 28 en cours"
+      },
+      "feed_schedule_29_running": {
+        "name": "Planification d'injection 29 en cours"
+      },
+      "feed_schedule_30_running": {
+        "name": "Planification d'injection 30 en cours"
+      },
+      "feed_schedule_31_running": {
+        "name": "Planification d'injection 31 en cours"
+      },
+      "feed_schedule_32_running": {
+        "name": "Planification d'injection 32 en cours"
       },
       "grid_l1_connected": {
         "name": "Phase A connectée"
@@ -2912,6 +3200,78 @@
       "schedule_8_enabled": {
         "name": "Planification 8 activée"
       },
+      "schedule_9_enabled": {
+        "name": "Planification 9 activée"
+      },
+      "schedule_10_enabled": {
+        "name": "Planification 10 activée"
+      },
+      "schedule_11_enabled": {
+        "name": "Planification 11 activée"
+      },
+      "schedule_12_enabled": {
+        "name": "Planification 12 activée"
+      },
+      "schedule_13_enabled": {
+        "name": "Planification 13 activée"
+      },
+      "schedule_14_enabled": {
+        "name": "Planification 14 activée"
+      },
+      "schedule_15_enabled": {
+        "name": "Planification 15 activée"
+      },
+      "schedule_16_enabled": {
+        "name": "Planification 16 activée"
+      },
+      "schedule_17_enabled": {
+        "name": "Planification 17 activée"
+      },
+      "schedule_18_enabled": {
+        "name": "Planification 18 activée"
+      },
+      "schedule_19_enabled": {
+        "name": "Planification 19 activée"
+      },
+      "schedule_20_enabled": {
+        "name": "Planification 20 activée"
+      },
+      "schedule_21_enabled": {
+        "name": "Planification 21 activée"
+      },
+      "schedule_22_enabled": {
+        "name": "Planification 22 activée"
+      },
+      "schedule_23_enabled": {
+        "name": "Planification 23 activée"
+      },
+      "schedule_24_enabled": {
+        "name": "Planification 24 activée"
+      },
+      "schedule_25_enabled": {
+        "name": "Planification 25 activée"
+      },
+      "schedule_26_enabled": {
+        "name": "Planification 26 activée"
+      },
+      "schedule_27_enabled": {
+        "name": "Planification 27 activée"
+      },
+      "schedule_28_enabled": {
+        "name": "Planification 28 activée"
+      },
+      "schedule_29_enabled": {
+        "name": "Planification 29 activée"
+      },
+      "schedule_30_enabled": {
+        "name": "Planification 30 activée"
+      },
+      "schedule_31_enabled": {
+        "name": "Planification 31 activée"
+      },
+      "schedule_32_enabled": {
+        "name": "Planification 32 activée"
+      },
       "feed_schedule_1_enabled": {
         "name": "Planification d'injection 1 activée"
       },
@@ -2935,6 +3295,78 @@
       },
       "feed_schedule_8_enabled": {
         "name": "Planification d'injection 8 activée"
+      },
+      "feed_schedule_9_enabled": {
+        "name": "Planification d'injection 9 activée"
+      },
+      "feed_schedule_10_enabled": {
+        "name": "Planification d'injection 10 activée"
+      },
+      "feed_schedule_11_enabled": {
+        "name": "Planification d'injection 11 activée"
+      },
+      "feed_schedule_12_enabled": {
+        "name": "Planification d'injection 12 activée"
+      },
+      "feed_schedule_13_enabled": {
+        "name": "Planification d'injection 13 activée"
+      },
+      "feed_schedule_14_enabled": {
+        "name": "Planification d'injection 14 activée"
+      },
+      "feed_schedule_15_enabled": {
+        "name": "Planification d'injection 15 activée"
+      },
+      "feed_schedule_16_enabled": {
+        "name": "Planification d'injection 16 activée"
+      },
+      "feed_schedule_17_enabled": {
+        "name": "Planification d'injection 17 activée"
+      },
+      "feed_schedule_18_enabled": {
+        "name": "Planification d'injection 18 activée"
+      },
+      "feed_schedule_19_enabled": {
+        "name": "Planification d'injection 19 activée"
+      },
+      "feed_schedule_20_enabled": {
+        "name": "Planification d'injection 20 activée"
+      },
+      "feed_schedule_21_enabled": {
+        "name": "Planification d'injection 21 activée"
+      },
+      "feed_schedule_22_enabled": {
+        "name": "Planification d'injection 22 activée"
+      },
+      "feed_schedule_23_enabled": {
+        "name": "Planification d'injection 23 activée"
+      },
+      "feed_schedule_24_enabled": {
+        "name": "Planification d'injection 24 activée"
+      },
+      "feed_schedule_25_enabled": {
+        "name": "Planification d'injection 25 activée"
+      },
+      "feed_schedule_26_enabled": {
+        "name": "Planification d'injection 26 activée"
+      },
+      "feed_schedule_27_enabled": {
+        "name": "Planification d'injection 27 activée"
+      },
+      "feed_schedule_28_enabled": {
+        "name": "Planification d'injection 28 activée"
+      },
+      "feed_schedule_29_enabled": {
+        "name": "Planification d'injection 29 activée"
+      },
+      "feed_schedule_30_enabled": {
+        "name": "Planification d'injection 30 activée"
+      },
+      "feed_schedule_31_enabled": {
+        "name": "Planification d'injection 31 activée"
+      },
+      "feed_schedule_32_enabled": {
+        "name": "Planification d'injection 32 activée"
       },
       "power": {
         "name": "Alimentation"
@@ -3073,6 +3505,78 @@
       "schedule_8_power_w": {
         "name": "Puissance de charge planification 8"
       },
+      "schedule_9_power_w": {
+        "name": "Puissance de charge planification 9"
+      },
+      "schedule_10_power_w": {
+        "name": "Puissance de charge planification 10"
+      },
+      "schedule_11_power_w": {
+        "name": "Puissance de charge planification 11"
+      },
+      "schedule_12_power_w": {
+        "name": "Puissance de charge planification 12"
+      },
+      "schedule_13_power_w": {
+        "name": "Puissance de charge planification 13"
+      },
+      "schedule_14_power_w": {
+        "name": "Puissance de charge planification 14"
+      },
+      "schedule_15_power_w": {
+        "name": "Puissance de charge planification 15"
+      },
+      "schedule_16_power_w": {
+        "name": "Puissance de charge planification 16"
+      },
+      "schedule_17_power_w": {
+        "name": "Puissance de charge planification 17"
+      },
+      "schedule_18_power_w": {
+        "name": "Puissance de charge planification 18"
+      },
+      "schedule_19_power_w": {
+        "name": "Puissance de charge planification 19"
+      },
+      "schedule_20_power_w": {
+        "name": "Puissance de charge planification 20"
+      },
+      "schedule_21_power_w": {
+        "name": "Puissance de charge planification 21"
+      },
+      "schedule_22_power_w": {
+        "name": "Puissance de charge planification 22"
+      },
+      "schedule_23_power_w": {
+        "name": "Puissance de charge planification 23"
+      },
+      "schedule_24_power_w": {
+        "name": "Puissance de charge planification 24"
+      },
+      "schedule_25_power_w": {
+        "name": "Puissance de charge planification 25"
+      },
+      "schedule_26_power_w": {
+        "name": "Puissance de charge planification 26"
+      },
+      "schedule_27_power_w": {
+        "name": "Puissance de charge planification 27"
+      },
+      "schedule_28_power_w": {
+        "name": "Puissance de charge planification 28"
+      },
+      "schedule_29_power_w": {
+        "name": "Puissance de charge planification 29"
+      },
+      "schedule_30_power_w": {
+        "name": "Puissance de charge planification 30"
+      },
+      "schedule_31_power_w": {
+        "name": "Puissance de charge planification 31"
+      },
+      "schedule_32_power_w": {
+        "name": "Puissance de charge planification 32"
+      },
       "feed_schedule_1_power_w": {
         "name": "Puissance d'injection de la planification 1"
       },
@@ -3096,6 +3600,78 @@
       },
       "feed_schedule_8_power_w": {
         "name": "Puissance d'injection de la planification 8"
+      },
+      "feed_schedule_9_power_w": {
+        "name": "Puissance d'injection de la planification 9"
+      },
+      "feed_schedule_10_power_w": {
+        "name": "Puissance d'injection de la planification 10"
+      },
+      "feed_schedule_11_power_w": {
+        "name": "Puissance d'injection de la planification 11"
+      },
+      "feed_schedule_12_power_w": {
+        "name": "Puissance d'injection de la planification 12"
+      },
+      "feed_schedule_13_power_w": {
+        "name": "Puissance d'injection de la planification 13"
+      },
+      "feed_schedule_14_power_w": {
+        "name": "Puissance d'injection de la planification 14"
+      },
+      "feed_schedule_15_power_w": {
+        "name": "Puissance d'injection de la planification 15"
+      },
+      "feed_schedule_16_power_w": {
+        "name": "Puissance d'injection de la planification 16"
+      },
+      "feed_schedule_17_power_w": {
+        "name": "Puissance d'injection de la planification 17"
+      },
+      "feed_schedule_18_power_w": {
+        "name": "Puissance d'injection de la planification 18"
+      },
+      "feed_schedule_19_power_w": {
+        "name": "Puissance d'injection de la planification 19"
+      },
+      "feed_schedule_20_power_w": {
+        "name": "Puissance d'injection de la planification 20"
+      },
+      "feed_schedule_21_power_w": {
+        "name": "Puissance d'injection de la planification 21"
+      },
+      "feed_schedule_22_power_w": {
+        "name": "Puissance d'injection de la planification 22"
+      },
+      "feed_schedule_23_power_w": {
+        "name": "Puissance d'injection de la planification 23"
+      },
+      "feed_schedule_24_power_w": {
+        "name": "Puissance d'injection de la planification 24"
+      },
+      "feed_schedule_25_power_w": {
+        "name": "Puissance d'injection de la planification 25"
+      },
+      "feed_schedule_26_power_w": {
+        "name": "Puissance d'injection de la planification 26"
+      },
+      "feed_schedule_27_power_w": {
+        "name": "Puissance d'injection de la planification 27"
+      },
+      "feed_schedule_28_power_w": {
+        "name": "Puissance d'injection de la planification 28"
+      },
+      "feed_schedule_29_power_w": {
+        "name": "Puissance d'injection de la planification 29"
+      },
+      "feed_schedule_30_power_w": {
+        "name": "Puissance d'injection de la planification 30"
+      },
+      "feed_schedule_31_power_w": {
+        "name": "Puissance d'injection de la planification 31"
+      },
+      "feed_schedule_32_power_w": {
+        "name": "Puissance d'injection de la planification 32"
       },
       "target_temp_c": {
         "name": "Température cible"

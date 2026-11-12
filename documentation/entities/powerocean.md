@@ -73,7 +73,7 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** an account entry (Standard or Enhanced Mode) has 253 sensors, 21 binary sensors, 20 numbers, 16 switches and 2 selects. A Local (Modbus/TCP) entry has 29 sensors (20 of the sensors below plus the 9 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
+**Totals:** an account entry (Standard or Enhanced Mode) has 301 sensors, 69 binary sensors, 68 numbers, 64 switches and 2 selects. These are the most a system can show: schedule entities exist only for the slots your PowerOcean reports. A Local (Modbus/TCP) entry has 29 sensors (20 of the sensors below plus the 9 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -213,7 +213,7 @@ These sensors are pre-configured for the HA Energy Dashboard (`total_increasing`
 
 ## Scheduled Charge Tasks (accessory, Enhanced Mode)
 
-Created only for the schedules your system actually reports, up to eight. See the note at the top.
+Created only for the schedules your system actually reports. The number in a schedule's name comes from the PowerOcean, so a name can run up to 32. See the note at the top.
 
 | Entity | Type | Description | Default |
 |:---|:---:|:---|:---:|
@@ -222,7 +222,7 @@ Created only for the schedules your system actually reports, up to eight. See th
 | Schedule 1 Window | Sensor | The time of day the schedule runs, written as `20:00-20:30` | enabled |
 | Schedule 1 Running | Binary sensor | Whether the schedule is running right now. Stays off while the schedule exists but its window has not opened yet | enabled |
 
-Further schedules follow the same pattern: Schedule 2 Enabled, Schedule 2 Charge Power, and so on up to Schedule 8. The EcoFlow app itself lets you create six schedules, so six is the number a system can actually reach.
+Further schedules follow the same pattern: Schedule 2 Enabled, Schedule 2 Charge Power, and so on up to Schedule 32. The EcoFlow app itself lets you create six schedules, but the PowerOcean numbers them itself, so a name does not count from 1: numbers up to 18 have been seen on a PowerOcean Plus.
 
 Charge Power takes the same range the app offers for the same setting. It moves in steps of 100 W, its minimum is 100 W for every online battery pack your system reports (200 W with two packs), and its maximum comes from the model: 10000 W on the three-phase 10 kW unit, 8000 W on the 8 kW one, 12000 W on the 12 kW one, 6000 W on the 6 kW and single-phase units, and 29900 W on a PowerOcean Plus. A value outside that range, or one that is not a multiple of 100, is refused rather than quietly rounded.
 
@@ -306,7 +306,7 @@ The PowerOcean accepts one Modbus client at a time. While this integration holds
 
 ## Feed-to-Grid Schedules (accessory, Enhanced Mode)
 
-Created only for the feed-to-grid schedules your system actually reports, up to eight. These are the schedules the app calls "feed power to grid": a time of day during which the PowerOcean exports a set power from the battery to the grid. They are a separate list from the charge schedules above, numbered on their own, so Feed Schedule 3 and Schedule 3 are two different schedules. See the note at the top.
+Created only for the feed-to-grid schedules your system actually reports, numbered by the PowerOcean up to 32. These are the schedules the app calls "feed power to grid": a time of day during which the PowerOcean exports a set power from the battery to the grid. They are a separate list from the charge schedules above, numbered on their own, so Feed Schedule 3 and Schedule 3 are two different schedules. See the note at the top.
 
 | Entity | Type | Description | Default |
 |:---|:---:|:---|:---:|
@@ -315,7 +315,7 @@ Created only for the feed-to-grid schedules your system actually reports, up to 
 | Feed Schedule 1 Window | Sensor | The time of day the schedule runs, written as `21:00-21:30`. A feed-to-grid schedule can have two windows, shown as `21:00-21:30, 22:00-23:00` | enabled |
 | Feed Schedule 1 Running | Binary sensor | Whether the schedule is exporting right now. Stays off while the schedule exists but its window has not opened yet | enabled |
 
-Further schedules follow the same pattern: Feed Schedule 2 Enabled, Feed Schedule 2 Export Power, and so on up to Feed Schedule 8.
+Further schedules follow the same pattern: Feed Schedule 2 Enabled, Feed Schedule 2 Export Power, and so on up to Feed Schedule 32.
 
 Export Power moves in steps of 100 W from a minimum of 100 W. Its maximum is your system's own **Feed Power Limit** once the PowerOcean has reported it (the same ceiling the app applies to this setting); until that reading arrives the slider shows 5000 W, and a write is refused rather than sent against an unknown limit. A value outside the range, or one that is not a multiple of 100, is refused rather than quietly rounded. To export nothing, switch the schedule off rather than setting the power to zero, which is a value the app never sends.
 
@@ -416,6 +416,6 @@ Backup Reserve and Solar Surplus Threshold are sent to the PowerOcean as one pai
 
 - All power sensors show integers (no decimal places) for clean dashboard display
 - Energy sensors show 2 decimal places (0.01 kWh resolution)
-- Enhanced Mode (~3s updates) unlocks every control (20 numbers, 16 switches, 2 selects) and faster data
+- Enhanced Mode (~3s updates) unlocks every control (68 numbers, 64 switches, 2 selects) and faster data
 - Standard Mode (~30s polling) provides the sensors the Developer API reports. Some readings need Enhanced Mode, for example the schedules, the wallbox, the parallel pair and several diagnostics.
 - Local (Modbus/TCP, three-phase only) refreshes every 2 seconds, needs no account, and creates the shared sensors and Local-only entities listed above.

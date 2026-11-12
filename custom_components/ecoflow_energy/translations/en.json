@@ -1854,6 +1854,78 @@
       "schedule_8_window": {
         "name": "Schedule 8 Window"
       },
+      "schedule_9_window": {
+        "name": "Schedule 9 Window"
+      },
+      "schedule_10_window": {
+        "name": "Schedule 10 Window"
+      },
+      "schedule_11_window": {
+        "name": "Schedule 11 Window"
+      },
+      "schedule_12_window": {
+        "name": "Schedule 12 Window"
+      },
+      "schedule_13_window": {
+        "name": "Schedule 13 Window"
+      },
+      "schedule_14_window": {
+        "name": "Schedule 14 Window"
+      },
+      "schedule_15_window": {
+        "name": "Schedule 15 Window"
+      },
+      "schedule_16_window": {
+        "name": "Schedule 16 Window"
+      },
+      "schedule_17_window": {
+        "name": "Schedule 17 Window"
+      },
+      "schedule_18_window": {
+        "name": "Schedule 18 Window"
+      },
+      "schedule_19_window": {
+        "name": "Schedule 19 Window"
+      },
+      "schedule_20_window": {
+        "name": "Schedule 20 Window"
+      },
+      "schedule_21_window": {
+        "name": "Schedule 21 Window"
+      },
+      "schedule_22_window": {
+        "name": "Schedule 22 Window"
+      },
+      "schedule_23_window": {
+        "name": "Schedule 23 Window"
+      },
+      "schedule_24_window": {
+        "name": "Schedule 24 Window"
+      },
+      "schedule_25_window": {
+        "name": "Schedule 25 Window"
+      },
+      "schedule_26_window": {
+        "name": "Schedule 26 Window"
+      },
+      "schedule_27_window": {
+        "name": "Schedule 27 Window"
+      },
+      "schedule_28_window": {
+        "name": "Schedule 28 Window"
+      },
+      "schedule_29_window": {
+        "name": "Schedule 29 Window"
+      },
+      "schedule_30_window": {
+        "name": "Schedule 30 Window"
+      },
+      "schedule_31_window": {
+        "name": "Schedule 31 Window"
+      },
+      "schedule_32_window": {
+        "name": "Schedule 32 Window"
+      },
       "feed_schedule_1_window": {
         "name": "Feed Schedule 1 Window"
       },
@@ -1877,6 +1949,78 @@
       },
       "feed_schedule_8_window": {
         "name": "Feed Schedule 8 Window"
+      },
+      "feed_schedule_9_window": {
+        "name": "Feed Schedule 9 Window"
+      },
+      "feed_schedule_10_window": {
+        "name": "Feed Schedule 10 Window"
+      },
+      "feed_schedule_11_window": {
+        "name": "Feed Schedule 11 Window"
+      },
+      "feed_schedule_12_window": {
+        "name": "Feed Schedule 12 Window"
+      },
+      "feed_schedule_13_window": {
+        "name": "Feed Schedule 13 Window"
+      },
+      "feed_schedule_14_window": {
+        "name": "Feed Schedule 14 Window"
+      },
+      "feed_schedule_15_window": {
+        "name": "Feed Schedule 15 Window"
+      },
+      "feed_schedule_16_window": {
+        "name": "Feed Schedule 16 Window"
+      },
+      "feed_schedule_17_window": {
+        "name": "Feed Schedule 17 Window"
+      },
+      "feed_schedule_18_window": {
+        "name": "Feed Schedule 18 Window"
+      },
+      "feed_schedule_19_window": {
+        "name": "Feed Schedule 19 Window"
+      },
+      "feed_schedule_20_window": {
+        "name": "Feed Schedule 20 Window"
+      },
+      "feed_schedule_21_window": {
+        "name": "Feed Schedule 21 Window"
+      },
+      "feed_schedule_22_window": {
+        "name": "Feed Schedule 22 Window"
+      },
+      "feed_schedule_23_window": {
+        "name": "Feed Schedule 23 Window"
+      },
+      "feed_schedule_24_window": {
+        "name": "Feed Schedule 24 Window"
+      },
+      "feed_schedule_25_window": {
+        "name": "Feed Schedule 25 Window"
+      },
+      "feed_schedule_26_window": {
+        "name": "Feed Schedule 26 Window"
+      },
+      "feed_schedule_27_window": {
+        "name": "Feed Schedule 27 Window"
+      },
+      "feed_schedule_28_window": {
+        "name": "Feed Schedule 28 Window"
+      },
+      "feed_schedule_29_window": {
+        "name": "Feed Schedule 29 Window"
+      },
+      "feed_schedule_30_window": {
+        "name": "Feed Schedule 30 Window"
+      },
+      "feed_schedule_31_window": {
+        "name": "Feed Schedule 31 Window"
+      },
+      "feed_schedule_32_window": {
+        "name": "Feed Schedule 32 Window"
       },
       "tilt_angle_deg": {
         "name": "Tilt Angle"
@@ -2760,6 +2904,78 @@
       "schedule_8_running": {
         "name": "Schedule 8 Running"
       },
+      "schedule_9_running": {
+        "name": "Schedule 9 Running"
+      },
+      "schedule_10_running": {
+        "name": "Schedule 10 Running"
+      },
+      "schedule_11_running": {
+        "name": "Schedule 11 Running"
+      },
+      "schedule_12_running": {
+        "name": "Schedule 12 Running"
+      },
+      "schedule_13_running": {
+        "name": "Schedule 13 Running"
+      },
+      "schedule_14_running": {
+        "name": "Schedule 14 Running"
+      },
+      "schedule_15_running": {
+        "name": "Schedule 15 Running"
+      },
+      "schedule_16_running": {
+        "name": "Schedule 16 Running"
+      },
+      "schedule_17_running": {
+        "name": "Schedule 17 Running"
+      },
+      "schedule_18_running": {
+        "name": "Schedule 18 Running"
+      },
+      "schedule_19_running": {
+        "name": "Schedule 19 Running"
+      },
+      "schedule_20_running": {
+        "name": "Schedule 20 Running"
+      },
+      "schedule_21_running": {
+        "name": "Schedule 21 Running"
+      },
+      "schedule_22_running": {
+        "name": "Schedule 22 Running"
+      },
+      "schedule_23_running": {
+        "name": "Schedule 23 Running"
+      },
+      "schedule_24_running": {
+        "name": "Schedule 24 Running"
+      },
+      "schedule_25_running": {
+        "name": "Schedule 25 Running"
+      },
+      "schedule_26_running": {
+        "name": "Schedule 26 Running"
+      },
+      "schedule_27_running": {
+        "name": "Schedule 27 Running"
+      },
+      "schedule_28_running": {
+        "name": "Schedule 28 Running"
+      },
+      "schedule_29_running": {
+        "name": "Schedule 29 Running"
+      },
+      "schedule_30_running": {
+        "name": "Schedule 30 Running"
+      },
+      "schedule_31_running": {
+        "name": "Schedule 31 Running"
+      },
+      "schedule_32_running": {
+        "name": "Schedule 32 Running"
+      },
       "feed_schedule_1_running": {
         "name": "Feed Schedule 1 Running"
       },
@@ -2783,6 +2999,78 @@
       },
       "feed_schedule_8_running": {
         "name": "Feed Schedule 8 Running"
+      },
+      "feed_schedule_9_running": {
+        "name": "Feed Schedule 9 Running"
+      },
+      "feed_schedule_10_running": {
+        "name": "Feed Schedule 10 Running"
+      },
+      "feed_schedule_11_running": {
+        "name": "Feed Schedule 11 Running"
+      },
+      "feed_schedule_12_running": {
+        "name": "Feed Schedule 12 Running"
+      },
+      "feed_schedule_13_running": {
+        "name": "Feed Schedule 13 Running"
+      },
+      "feed_schedule_14_running": {
+        "name": "Feed Schedule 14 Running"
+      },
+      "feed_schedule_15_running": {
+        "name": "Feed Schedule 15 Running"
+      },
+      "feed_schedule_16_running": {
+        "name": "Feed Schedule 16 Running"
+      },
+      "feed_schedule_17_running": {
+        "name": "Feed Schedule 17 Running"
+      },
+      "feed_schedule_18_running": {
+        "name": "Feed Schedule 18 Running"
+      },
+      "feed_schedule_19_running": {
+        "name": "Feed Schedule 19 Running"
+      },
+      "feed_schedule_20_running": {
+        "name": "Feed Schedule 20 Running"
+      },
+      "feed_schedule_21_running": {
+        "name": "Feed Schedule 21 Running"
+      },
+      "feed_schedule_22_running": {
+        "name": "Feed Schedule 22 Running"
+      },
+      "feed_schedule_23_running": {
+        "name": "Feed Schedule 23 Running"
+      },
+      "feed_schedule_24_running": {
+        "name": "Feed Schedule 24 Running"
+      },
+      "feed_schedule_25_running": {
+        "name": "Feed Schedule 25 Running"
+      },
+      "feed_schedule_26_running": {
+        "name": "Feed Schedule 26 Running"
+      },
+      "feed_schedule_27_running": {
+        "name": "Feed Schedule 27 Running"
+      },
+      "feed_schedule_28_running": {
+        "name": "Feed Schedule 28 Running"
+      },
+      "feed_schedule_29_running": {
+        "name": "Feed Schedule 29 Running"
+      },
+      "feed_schedule_30_running": {
+        "name": "Feed Schedule 30 Running"
+      },
+      "feed_schedule_31_running": {
+        "name": "Feed Schedule 31 Running"
+      },
+      "feed_schedule_32_running": {
+        "name": "Feed Schedule 32 Running"
       },
       "grid_l1_connected": {
         "name": "Phase A Connected"
@@ -2912,6 +3200,78 @@
       "schedule_8_enabled": {
         "name": "Schedule 8 Enabled"
       },
+      "schedule_9_enabled": {
+        "name": "Schedule 9 Enabled"
+      },
+      "schedule_10_enabled": {
+        "name": "Schedule 10 Enabled"
+      },
+      "schedule_11_enabled": {
+        "name": "Schedule 11 Enabled"
+      },
+      "schedule_12_enabled": {
+        "name": "Schedule 12 Enabled"
+      },
+      "schedule_13_enabled": {
+        "name": "Schedule 13 Enabled"
+      },
+      "schedule_14_enabled": {
+        "name": "Schedule 14 Enabled"
+      },
+      "schedule_15_enabled": {
+        "name": "Schedule 15 Enabled"
+      },
+      "schedule_16_enabled": {
+        "name": "Schedule 16 Enabled"
+      },
+      "schedule_17_enabled": {
+        "name": "Schedule 17 Enabled"
+      },
+      "schedule_18_enabled": {
+        "name": "Schedule 18 Enabled"
+      },
+      "schedule_19_enabled": {
+        "name": "Schedule 19 Enabled"
+      },
+      "schedule_20_enabled": {
+        "name": "Schedule 20 Enabled"
+      },
+      "schedule_21_enabled": {
+        "name": "Schedule 21 Enabled"
+      },
+      "schedule_22_enabled": {
+        "name": "Schedule 22 Enabled"
+      },
+      "schedule_23_enabled": {
+        "name": "Schedule 23 Enabled"
+      },
+      "schedule_24_enabled": {
+        "name": "Schedule 24 Enabled"
+      },
+      "schedule_25_enabled": {
+        "name": "Schedule 25 Enabled"
+      },
+      "schedule_26_enabled": {
+        "name": "Schedule 26 Enabled"
+      },
+      "schedule_27_enabled": {
+        "name": "Schedule 27 Enabled"
+      },
+      "schedule_28_enabled": {
+        "name": "Schedule 28 Enabled"
+      },
+      "schedule_29_enabled": {
+        "name": "Schedule 29 Enabled"
+      },
+      "schedule_30_enabled": {
+        "name": "Schedule 30 Enabled"
+      },
+      "schedule_31_enabled": {
+        "name": "Schedule 31 Enabled"
+      },
+      "schedule_32_enabled": {
+        "name": "Schedule 32 Enabled"
+      },
       "feed_schedule_1_enabled": {
         "name": "Feed Schedule 1 Enabled"
       },
@@ -2935,6 +3295,78 @@
       },
       "feed_schedule_8_enabled": {
         "name": "Feed Schedule 8 Enabled"
+      },
+      "feed_schedule_9_enabled": {
+        "name": "Feed Schedule 9 Enabled"
+      },
+      "feed_schedule_10_enabled": {
+        "name": "Feed Schedule 10 Enabled"
+      },
+      "feed_schedule_11_enabled": {
+        "name": "Feed Schedule 11 Enabled"
+      },
+      "feed_schedule_12_enabled": {
+        "name": "Feed Schedule 12 Enabled"
+      },
+      "feed_schedule_13_enabled": {
+        "name": "Feed Schedule 13 Enabled"
+      },
+      "feed_schedule_14_enabled": {
+        "name": "Feed Schedule 14 Enabled"
+      },
+      "feed_schedule_15_enabled": {
+        "name": "Feed Schedule 15 Enabled"
+      },
+      "feed_schedule_16_enabled": {
+        "name": "Feed Schedule 16 Enabled"
+      },
+      "feed_schedule_17_enabled": {
+        "name": "Feed Schedule 17 Enabled"
+      },
+      "feed_schedule_18_enabled": {
+        "name": "Feed Schedule 18 Enabled"
+      },
+      "feed_schedule_19_enabled": {
+        "name": "Feed Schedule 19 Enabled"
+      },
+      "feed_schedule_20_enabled": {
+        "name": "Feed Schedule 20 Enabled"
+      },
+      "feed_schedule_21_enabled": {
+        "name": "Feed Schedule 21 Enabled"
+      },
+      "feed_schedule_22_enabled": {
+        "name": "Feed Schedule 22 Enabled"
+      },
+      "feed_schedule_23_enabled": {
+        "name": "Feed Schedule 23 Enabled"
+      },
+      "feed_schedule_24_enabled": {
+        "name": "Feed Schedule 24 Enabled"
+      },
+      "feed_schedule_25_enabled": {
+        "name": "Feed Schedule 25 Enabled"
+      },
+      "feed_schedule_26_enabled": {
+        "name": "Feed Schedule 26 Enabled"
+      },
+      "feed_schedule_27_enabled": {
+        "name": "Feed Schedule 27 Enabled"
+      },
+      "feed_schedule_28_enabled": {
+        "name": "Feed Schedule 28 Enabled"
+      },
+      "feed_schedule_29_enabled": {
+        "name": "Feed Schedule 29 Enabled"
+      },
+      "feed_schedule_30_enabled": {
+        "name": "Feed Schedule 30 Enabled"
+      },
+      "feed_schedule_31_enabled": {
+        "name": "Feed Schedule 31 Enabled"
+      },
+      "feed_schedule_32_enabled": {
+        "name": "Feed Schedule 32 Enabled"
       },
       "power": {
         "name": "Power"
@@ -3073,6 +3505,78 @@
       "schedule_8_power_w": {
         "name": "Schedule 8 Charge Power"
       },
+      "schedule_9_power_w": {
+        "name": "Schedule 9 Charge Power"
+      },
+      "schedule_10_power_w": {
+        "name": "Schedule 10 Charge Power"
+      },
+      "schedule_11_power_w": {
+        "name": "Schedule 11 Charge Power"
+      },
+      "schedule_12_power_w": {
+        "name": "Schedule 12 Charge Power"
+      },
+      "schedule_13_power_w": {
+        "name": "Schedule 13 Charge Power"
+      },
+      "schedule_14_power_w": {
+        "name": "Schedule 14 Charge Power"
+      },
+      "schedule_15_power_w": {
+        "name": "Schedule 15 Charge Power"
+      },
+      "schedule_16_power_w": {
+        "name": "Schedule 16 Charge Power"
+      },
+      "schedule_17_power_w": {
+        "name": "Schedule 17 Charge Power"
+      },
+      "schedule_18_power_w": {
+        "name": "Schedule 18 Charge Power"
+      },
+      "schedule_19_power_w": {
+        "name": "Schedule 19 Charge Power"
+      },
+      "schedule_20_power_w": {
+        "name": "Schedule 20 Charge Power"
+      },
+      "schedule_21_power_w": {
+        "name": "Schedule 21 Charge Power"
+      },
+      "schedule_22_power_w": {
+        "name": "Schedule 22 Charge Power"
+      },
+      "schedule_23_power_w": {
+        "name": "Schedule 23 Charge Power"
+      },
+      "schedule_24_power_w": {
+        "name": "Schedule 24 Charge Power"
+      },
+      "schedule_25_power_w": {
+        "name": "Schedule 25 Charge Power"
+      },
+      "schedule_26_power_w": {
+        "name": "Schedule 26 Charge Power"
+      },
+      "schedule_27_power_w": {
+        "name": "Schedule 27 Charge Power"
+      },
+      "schedule_28_power_w": {
+        "name": "Schedule 28 Charge Power"
+      },
+      "schedule_29_power_w": {
+        "name": "Schedule 29 Charge Power"
+      },
+      "schedule_30_power_w": {
+        "name": "Schedule 30 Charge Power"
+      },
+      "schedule_31_power_w": {
+        "name": "Schedule 31 Charge Power"
+      },
+      "schedule_32_power_w": {
+        "name": "Schedule 32 Charge Power"
+      },
       "feed_schedule_1_power_w": {
         "name": "Feed Schedule 1 Export Power"
       },
@@ -3096,6 +3600,78 @@
       },
       "feed_schedule_8_power_w": {
         "name": "Feed Schedule 8 Export Power"
+      },
+      "feed_schedule_9_power_w": {
+        "name": "Feed Schedule 9 Export Power"
+      },
+      "feed_schedule_10_power_w": {
+        "name": "Feed Schedule 10 Export Power"
+      },
+      "feed_schedule_11_power_w": {
+        "name": "Feed Schedule 11 Export Power"
+      },
+      "feed_schedule_12_power_w": {
+        "name": "Feed Schedule 12 Export Power"
+      },
+      "feed_schedule_13_power_w": {
+        "name": "Feed Schedule 13 Export Power"
+      },
+      "feed_schedule_14_power_w": {
+        "name": "Feed Schedule 14 Export Power"
+      },
+      "feed_schedule_15_power_w": {
+        "name": "Feed Schedule 15 Export Power"
+      },
+      "feed_schedule_16_power_w": {
+        "name": "Feed Schedule 16 Export Power"
+      },
+      "feed_schedule_17_power_w": {
+        "name": "Feed Schedule 17 Export Power"
+      },
+      "feed_schedule_18_power_w": {
+        "name": "Feed Schedule 18 Export Power"
+      },
+      "feed_schedule_19_power_w": {
+        "name": "Feed Schedule 19 Export Power"
+      },
+      "feed_schedule_20_power_w": {
+        "name": "Feed Schedule 20 Export Power"
+      },
+      "feed_schedule_21_power_w": {
+        "name": "Feed Schedule 21 Export Power"
+      },
+      "feed_schedule_22_power_w": {
+        "name": "Feed Schedule 22 Export Power"
+      },
+      "feed_schedule_23_power_w": {
+        "name": "Feed Schedule 23 Export Power"
+      },
+      "feed_schedule_24_power_w": {
+        "name": "Feed Schedule 24 Export Power"
+      },
+      "feed_schedule_25_power_w": {
+        "name": "Feed Schedule 25 Export Power"
+      },
+      "feed_schedule_26_power_w": {
+        "name": "Feed Schedule 26 Export Power"
+      },
+      "feed_schedule_27_power_w": {
+        "name": "Feed Schedule 27 Export Power"
+      },
+      "feed_schedule_28_power_w": {
+        "name": "Feed Schedule 28 Export Power"
+      },
+      "feed_schedule_29_power_w": {
+        "name": "Feed Schedule 29 Export Power"
+      },
+      "feed_schedule_30_power_w": {
+        "name": "Feed Schedule 30 Export Power"
+      },
+      "feed_schedule_31_power_w": {
+        "name": "Feed Schedule 31 Export Power"
+      },
+      "feed_schedule_32_power_w": {
+        "name": "Feed Schedule 32 Export Power"
       },
       "target_temp_c": {
         "name": "Target Temperature"

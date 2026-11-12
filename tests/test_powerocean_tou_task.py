@@ -24,6 +24,7 @@ from pathlib import Path
 
 from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+    SCHEDULE_MAX_INDEX,
     _format_windows,
     remap_timer_task_keys,
     remap_tou_task_keys,
@@ -228,6 +229,35 @@ def test_the_timer_and_feed_lists_use_independent_index_sets() -> None:
 
     assert timer_known == {4}
     assert feed_known == {2}
+
+
+def test_feed_slots_the_unit_numbers_above_eight_are_published() -> None:
+    """The feed list shares the timer list's cap, so #714's numbering holds here."""
+    known: set[int] = set()
+    tasks = [
+        {"task_index": 16, "is_enable": True, "sys_chg_dsg_pwr": 2100},
+        {"task_index": 18, "is_enable": False, "sys_chg_dsg_pwr": 700},
+    ]
+
+    keys = remap_tou_task_keys({"tou_task_cfg": tasks}, known)
+
+    assert known == {16, 18}
+    assert keys["feed_schedule_16_enabled"] is True
+    assert keys["feed_schedule_18_enabled"] is False
+    assert not any(key.startswith("feed_schedule_17_") for key in keys)
+
+
+def test_feed_slot_range_ends_at_the_cap_on_both_sides() -> None:
+    """Index 0 and the first one past the cap are refused, the cap itself is not."""
+    refused = [
+        {"task_index": 0, "is_enable": True},
+        {"task_index": SCHEDULE_MAX_INDEX + 1, "is_enable": True},
+    ]
+    kept = {"task_index": SCHEDULE_MAX_INDEX, "is_enable": True}
+
+    assert remap_tou_task_keys({"tou_task_cfg": refused}, set()) == {}
+    keys = remap_tou_task_keys({"tou_task_cfg": [kept]}, set())
+    assert keys[f"feed_schedule_{SCHEDULE_MAX_INDEX}_enabled"] is True
 
 
 def test_format_windows_of_an_empty_list_is_none() -> None:

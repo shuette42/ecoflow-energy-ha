@@ -1854,6 +1854,78 @@
       "schedule_8_window": {
         "name": "Okno harmonogramu 8"
       },
+      "schedule_9_window": {
+        "name": "Okno harmonogramu 9"
+      },
+      "schedule_10_window": {
+        "name": "Okno harmonogramu 10"
+      },
+      "schedule_11_window": {
+        "name": "Okno harmonogramu 11"
+      },
+      "schedule_12_window": {
+        "name": "Okno harmonogramu 12"
+      },
+      "schedule_13_window": {
+        "name": "Okno harmonogramu 13"
+      },
+      "schedule_14_window": {
+        "name": "Okno harmonogramu 14"
+      },
+      "schedule_15_window": {
+        "name": "Okno harmonogramu 15"
+      },
+      "schedule_16_window": {
+        "name": "Okno harmonogramu 16"
+      },
+      "schedule_17_window": {
+        "name": "Okno harmonogramu 17"
+      },
+      "schedule_18_window": {
+        "name": "Okno harmonogramu 18"
+      },
+      "schedule_19_window": {
+        "name": "Okno harmonogramu 19"
+      },
+      "schedule_20_window": {
+        "name": "Okno harmonogramu 20"
+      },
+      "schedule_21_window": {
+        "name": "Okno harmonogramu 21"
+      },
+      "schedule_22_window": {
+        "name": "Okno harmonogramu 22"
+      },
+      "schedule_23_window": {
+        "name": "Okno harmonogramu 23"
+      },
+      "schedule_24_window": {
+        "name": "Okno harmonogramu 24"
+      },
+      "schedule_25_window": {
+        "name": "Okno harmonogramu 25"
+      },
+      "schedule_26_window": {
+        "name": "Okno harmonogramu 26"
+      },
+      "schedule_27_window": {
+        "name": "Okno harmonogramu 27"
+      },
+      "schedule_28_window": {
+        "name": "Okno harmonogramu 28"
+      },
+      "schedule_29_window": {
+        "name": "Okno harmonogramu 29"
+      },
+      "schedule_30_window": {
+        "name": "Okno harmonogramu 30"
+      },
+      "schedule_31_window": {
+        "name": "Okno harmonogramu 31"
+      },
+      "schedule_32_window": {
+        "name": "Okno harmonogramu 32"
+      },
       "feed_schedule_1_window": {
         "name": "Harmonogram oddawania 1 - okno czasowe"
       },
@@ -1877,6 +1949,78 @@
       },
       "feed_schedule_8_window": {
         "name": "Harmonogram oddawania 8 - okno czasowe"
+      },
+      "feed_schedule_9_window": {
+        "name": "Harmonogram oddawania 9 - okno czasowe"
+      },
+      "feed_schedule_10_window": {
+        "name": "Harmonogram oddawania 10 - okno czasowe"
+      },
+      "feed_schedule_11_window": {
+        "name": "Harmonogram oddawania 11 - okno czasowe"
+      },
+      "feed_schedule_12_window": {
+        "name": "Harmonogram oddawania 12 - okno czasowe"
+      },
+      "feed_schedule_13_window": {
+        "name": "Harmonogram oddawania 13 - okno czasowe"
+      },
+      "feed_schedule_14_window": {
+        "name": "Harmonogram oddawania 14 - okno czasowe"
+      },
+      "feed_schedule_15_window": {
+        "name": "Harmonogram oddawania 15 - okno czasowe"
+      },
+      "feed_schedule_16_window": {
+        "name": "Harmonogram oddawania 16 - okno czasowe"
+      },
+      "feed_schedule_17_window": {
+        "name": "Harmonogram oddawania 17 - okno czasowe"
+      },
+      "feed_schedule_18_window": {
+        "name": "Harmonogram oddawania 18 - okno czasowe"
+      },
+      "feed_schedule_19_window": {
+        "name": "Harmonogram oddawania 19 - okno czasowe"
+      },
+      "feed_schedule_20_window": {
+        "name": "Harmonogram oddawania 20 - okno czasowe"
+      },
+      "feed_schedule_21_window": {
+        "name": "Harmonogram oddawania 21 - okno czasowe"
+      },
+      "feed_schedule_22_window": {
+        "name": "Harmonogram oddawania 22 - okno czasowe"
+      },
+      "feed_schedule_23_window": {
+        "name": "Harmonogram oddawania 23 - okno czasowe"
+      },
+      "feed_schedule_24_window": {
+        "name": "Harmonogram oddawania 24 - okno czasowe"
+      },
+      "feed_schedule_25_window": {
+        "name": "Harmonogram oddawania 25 - okno czasowe"
+      },
+      "feed_schedule_26_window": {
+        "name": "Harmonogram oddawania 26 - okno czasowe"
+      },
+      "feed_schedule_27_window": {
+        "name": "Harmonogram oddawania 27 - okno czasowe"
+      },
+      "feed_schedule_28_window": {
+        "name": "Harmonogram oddawania 28 - okno czasowe"
+      },
+      "feed_schedule_29_window": {
+        "name": "Harmonogram oddawania 29 - okno czasowe"
+      },
+      "feed_schedule_30_window": {
+        "name": "Harmonogram oddawania 30 - okno czasowe"
+      },
+      "feed_schedule_31_window": {
+        "name": "Harmonogram oddawania 31 - okno czasowe"
+      },
+      "feed_schedule_32_window": {
+        "name": "Harmonogram oddawania 32 - okno czasowe"
       },
       "tilt_angle_deg": {
         "name": "Kąt nachylenia"
@@ -2760,6 +2904,78 @@
       "schedule_8_running": {
         "name": "Harmonogram 8 aktywny"
       },
+      "schedule_9_running": {
+        "name": "Harmonogram 9 aktywny"
+      },
+      "schedule_10_running": {
+        "name": "Harmonogram 10 aktywny"
+      },
+      "schedule_11_running": {
+        "name": "Harmonogram 11 aktywny"
+      },
+      "schedule_12_running": {
+        "name": "Harmonogram 12 aktywny"
+      },
+      "schedule_13_running": {
+        "name": "Harmonogram 13 aktywny"
+      },
+      "schedule_14_running": {
+        "name": "Harmonogram 14 aktywny"
+      },
+      "schedule_15_running": {
+        "name": "Harmonogram 15 aktywny"
+      },
+      "schedule_16_running": {
+        "name": "Harmonogram 16 aktywny"
+      },
+      "schedule_17_running": {
+        "name": "Harmonogram 17 aktywny"
+      },
+      "schedule_18_running": {
+        "name": "Harmonogram 18 aktywny"
+      },
+      "schedule_19_running": {
+        "name": "Harmonogram 19 aktywny"
+      },
+      "schedule_20_running": {
+        "name": "Harmonogram 20 aktywny"
+      },
+      "schedule_21_running": {
+        "name": "Harmonogram 21 aktywny"
+      },
+      "schedule_22_running": {
+        "name": "Harmonogram 22 aktywny"
+      },
+      "schedule_23_running": {
+        "name": "Harmonogram 23 aktywny"
+      },
+      "schedule_24_running": {
+        "name": "Harmonogram 24 aktywny"
+      },
+      "schedule_25_running": {
+        "name": "Harmonogram 25 aktywny"
+      },
+      "schedule_26_running": {
+        "name": "Harmonogram 26 aktywny"
+      },
+      "schedule_27_running": {
+        "name": "Harmonogram 27 aktywny"
+      },
+      "schedule_28_running": {
+        "name": "Harmonogram 28 aktywny"
+      },
+      "schedule_29_running": {
+        "name": "Harmonogram 29 aktywny"
+      },
+      "schedule_30_running": {
+        "name": "Harmonogram 30 aktywny"
+      },
+      "schedule_31_running": {
+        "name": "Harmonogram 31 aktywny"
+      },
+      "schedule_32_running": {
+        "name": "Harmonogram 32 aktywny"
+      },
       "feed_schedule_1_running": {
         "name": "Harmonogram oddawania 1 działa"
       },
@@ -2783,6 +2999,78 @@
       },
       "feed_schedule_8_running": {
         "name": "Harmonogram oddawania 8 działa"
+      },
+      "feed_schedule_9_running": {
+        "name": "Harmonogram oddawania 9 działa"
+      },
+      "feed_schedule_10_running": {
+        "name": "Harmonogram oddawania 10 działa"
+      },
+      "feed_schedule_11_running": {
+        "name": "Harmonogram oddawania 11 działa"
+      },
+      "feed_schedule_12_running": {
+        "name": "Harmonogram oddawania 12 działa"
+      },
+      "feed_schedule_13_running": {
+        "name": "Harmonogram oddawania 13 działa"
+      },
+      "feed_schedule_14_running": {
+        "name": "Harmonogram oddawania 14 działa"
+      },
+      "feed_schedule_15_running": {
+        "name": "Harmonogram oddawania 15 działa"
+      },
+      "feed_schedule_16_running": {
+        "name": "Harmonogram oddawania 16 działa"
+      },
+      "feed_schedule_17_running": {
+        "name": "Harmonogram oddawania 17 działa"
+      },
+      "feed_schedule_18_running": {
+        "name": "Harmonogram oddawania 18 działa"
+      },
+      "feed_schedule_19_running": {
+        "name": "Harmonogram oddawania 19 działa"
+      },
+      "feed_schedule_20_running": {
+        "name": "Harmonogram oddawania 20 działa"
+      },
+      "feed_schedule_21_running": {
+        "name": "Harmonogram oddawania 21 działa"
+      },
+      "feed_schedule_22_running": {
+        "name": "Harmonogram oddawania 22 działa"
+      },
+      "feed_schedule_23_running": {
+        "name": "Harmonogram oddawania 23 działa"
+      },
+      "feed_schedule_24_running": {
+        "name": "Harmonogram oddawania 24 działa"
+      },
+      "feed_schedule_25_running": {
+        "name": "Harmonogram oddawania 25 działa"
+      },
+      "feed_schedule_26_running": {
+        "name": "Harmonogram oddawania 26 działa"
+      },
+      "feed_schedule_27_running": {
+        "name": "Harmonogram oddawania 27 działa"
+      },
+      "feed_schedule_28_running": {
+        "name": "Harmonogram oddawania 28 działa"
+      },
+      "feed_schedule_29_running": {
+        "name": "Harmonogram oddawania 29 działa"
+      },
+      "feed_schedule_30_running": {
+        "name": "Harmonogram oddawania 30 działa"
+      },
+      "feed_schedule_31_running": {
+        "name": "Harmonogram oddawania 31 działa"
+      },
+      "feed_schedule_32_running": {
+        "name": "Harmonogram oddawania 32 działa"
       },
       "grid_l1_connected": {
         "name": "Faza A połączona"
@@ -2912,6 +3200,78 @@
       "schedule_8_enabled": {
         "name": "Harmonogram 8 włączony"
       },
+      "schedule_9_enabled": {
+        "name": "Harmonogram 9 włączony"
+      },
+      "schedule_10_enabled": {
+        "name": "Harmonogram 10 włączony"
+      },
+      "schedule_11_enabled": {
+        "name": "Harmonogram 11 włączony"
+      },
+      "schedule_12_enabled": {
+        "name": "Harmonogram 12 włączony"
+      },
+      "schedule_13_enabled": {
+        "name": "Harmonogram 13 włączony"
+      },
+      "schedule_14_enabled": {
+        "name": "Harmonogram 14 włączony"
+      },
+      "schedule_15_enabled": {
+        "name": "Harmonogram 15 włączony"
+      },
+      "schedule_16_enabled": {
+        "name": "Harmonogram 16 włączony"
+      },
+      "schedule_17_enabled": {
+        "name": "Harmonogram 17 włączony"
+      },
+      "schedule_18_enabled": {
+        "name": "Harmonogram 18 włączony"
+      },
+      "schedule_19_enabled": {
+        "name": "Harmonogram 19 włączony"
+      },
+      "schedule_20_enabled": {
+        "name": "Harmonogram 20 włączony"
+      },
+      "schedule_21_enabled": {
+        "name": "Harmonogram 21 włączony"
+      },
+      "schedule_22_enabled": {
+        "name": "Harmonogram 22 włączony"
+      },
+      "schedule_23_enabled": {
+        "name": "Harmonogram 23 włączony"
+      },
+      "schedule_24_enabled": {
+        "name": "Harmonogram 24 włączony"
+      },
+      "schedule_25_enabled": {
+        "name": "Harmonogram 25 włączony"
+      },
+      "schedule_26_enabled": {
+        "name": "Harmonogram 26 włączony"
+      },
+      "schedule_27_enabled": {
+        "name": "Harmonogram 27 włączony"
+      },
+      "schedule_28_enabled": {
+        "name": "Harmonogram 28 włączony"
+      },
+      "schedule_29_enabled": {
+        "name": "Harmonogram 29 włączony"
+      },
+      "schedule_30_enabled": {
+        "name": "Harmonogram 30 włączony"
+      },
+      "schedule_31_enabled": {
+        "name": "Harmonogram 31 włączony"
+      },
+      "schedule_32_enabled": {
+        "name": "Harmonogram 32 włączony"
+      },
       "feed_schedule_1_enabled": {
         "name": "Harmonogram oddawania 1 włączony"
       },
@@ -2935,6 +3295,78 @@
       },
       "feed_schedule_8_enabled": {
         "name": "Harmonogram oddawania 8 włączony"
+      },
+      "feed_schedule_9_enabled": {
+        "name": "Harmonogram oddawania 9 włączony"
+      },
+      "feed_schedule_10_enabled": {
+        "name": "Harmonogram oddawania 10 włączony"
+      },
+      "feed_schedule_11_enabled": {
+        "name": "Harmonogram oddawania 11 włączony"
+      },
+      "feed_schedule_12_enabled": {
+        "name": "Harmonogram oddawania 12 włączony"
+      },
+      "feed_schedule_13_enabled": {
+        "name": "Harmonogram oddawania 13 włączony"
+      },
+      "feed_schedule_14_enabled": {
+        "name": "Harmonogram oddawania 14 włączony"
+      },
+      "feed_schedule_15_enabled": {
+        "name": "Harmonogram oddawania 15 włączony"
+      },
+      "feed_schedule_16_enabled": {
+        "name": "Harmonogram oddawania 16 włączony"
+      },
+      "feed_schedule_17_enabled": {
+        "name": "Harmonogram oddawania 17 włączony"
+      },
+      "feed_schedule_18_enabled": {
+        "name": "Harmonogram oddawania 18 włączony"
+      },
+      "feed_schedule_19_enabled": {
+        "name": "Harmonogram oddawania 19 włączony"
+      },
+      "feed_schedule_20_enabled": {
+        "name": "Harmonogram oddawania 20 włączony"
+      },
+      "feed_schedule_21_enabled": {
+        "name": "Harmonogram oddawania 21 włączony"
+      },
+      "feed_schedule_22_enabled": {
+        "name": "Harmonogram oddawania 22 włączony"
+      },
+      "feed_schedule_23_enabled": {
+        "name": "Harmonogram oddawania 23 włączony"
+      },
+      "feed_schedule_24_enabled": {
+        "name": "Harmonogram oddawania 24 włączony"
+      },
+      "feed_schedule_25_enabled": {
+        "name": "Harmonogram oddawania 25 włączony"
+      },
+      "feed_schedule_26_enabled": {
+        "name": "Harmonogram oddawania 26 włączony"
+      },
+      "feed_schedule_27_enabled": {
+        "name": "Harmonogram oddawania 27 włączony"
+      },
+      "feed_schedule_28_enabled": {
+        "name": "Harmonogram oddawania 28 włączony"
+      },
+      "feed_schedule_29_enabled": {
+        "name": "Harmonogram oddawania 29 włączony"
+      },
+      "feed_schedule_30_enabled": {
+        "name": "Harmonogram oddawania 30 włączony"
+      },
+      "feed_schedule_31_enabled": {
+        "name": "Harmonogram oddawania 31 włączony"
+      },
+      "feed_schedule_32_enabled": {
+        "name": "Harmonogram oddawania 32 włączony"
       },
       "power": {
         "name": "Zasilanie"
@@ -3073,6 +3505,78 @@
       "schedule_8_power_w": {
         "name": "Moc ładowania harmonogramu 8"
       },
+      "schedule_9_power_w": {
+        "name": "Moc ładowania harmonogramu 9"
+      },
+      "schedule_10_power_w": {
+        "name": "Moc ładowania harmonogramu 10"
+      },
+      "schedule_11_power_w": {
+        "name": "Moc ładowania harmonogramu 11"
+      },
+      "schedule_12_power_w": {
+        "name": "Moc ładowania harmonogramu 12"
+      },
+      "schedule_13_power_w": {
+        "name": "Moc ładowania harmonogramu 13"
+      },
+      "schedule_14_power_w": {
+        "name": "Moc ładowania harmonogramu 14"
+      },
+      "schedule_15_power_w": {
+        "name": "Moc ładowania harmonogramu 15"
+      },
+      "schedule_16_power_w": {
+        "name": "Moc ładowania harmonogramu 16"
+      },
+      "schedule_17_power_w": {
+        "name": "Moc ładowania harmonogramu 17"
+      },
+      "schedule_18_power_w": {
+        "name": "Moc ładowania harmonogramu 18"
+      },
+      "schedule_19_power_w": {
+        "name": "Moc ładowania harmonogramu 19"
+      },
+      "schedule_20_power_w": {
+        "name": "Moc ładowania harmonogramu 20"
+      },
+      "schedule_21_power_w": {
+        "name": "Moc ładowania harmonogramu 21"
+      },
+      "schedule_22_power_w": {
+        "name": "Moc ładowania harmonogramu 22"
+      },
+      "schedule_23_power_w": {
+        "name": "Moc ładowania harmonogramu 23"
+      },
+      "schedule_24_power_w": {
+        "name": "Moc ładowania harmonogramu 24"
+      },
+      "schedule_25_power_w": {
+        "name": "Moc ładowania harmonogramu 25"
+      },
+      "schedule_26_power_w": {
+        "name": "Moc ładowania harmonogramu 26"
+      },
+      "schedule_27_power_w": {
+        "name": "Moc ładowania harmonogramu 27"
+      },
+      "schedule_28_power_w": {
+        "name": "Moc ładowania harmonogramu 28"
+      },
+      "schedule_29_power_w": {
+        "name": "Moc ładowania harmonogramu 29"
+      },
+      "schedule_30_power_w": {
+        "name": "Moc ładowania harmonogramu 30"
+      },
+      "schedule_31_power_w": {
+        "name": "Moc ładowania harmonogramu 31"
+      },
+      "schedule_32_power_w": {
+        "name": "Moc ładowania harmonogramu 32"
+      },
       "feed_schedule_1_power_w": {
         "name": "Harmonogram oddawania 1 - moc oddawania"
       },
@@ -3096,6 +3600,78 @@
       },
       "feed_schedule_8_power_w": {
         "name": "Harmonogram oddawania 8 - moc oddawania"
+      },
+      "feed_schedule_9_power_w": {
+        "name": "Harmonogram oddawania 9 - moc oddawania"
+      },
+      "feed_schedule_10_power_w": {
+        "name": "Harmonogram oddawania 10 - moc oddawania"
+      },
+      "feed_schedule_11_power_w": {
+        "name": "Harmonogram oddawania 11 - moc oddawania"
+      },
+      "feed_schedule_12_power_w": {
+        "name": "Harmonogram oddawania 12 - moc oddawania"
+      },
+      "feed_schedule_13_power_w": {
+        "name": "Harmonogram oddawania 13 - moc oddawania"
+      },
+      "feed_schedule_14_power_w": {
+        "name": "Harmonogram oddawania 14 - moc oddawania"
+      },
+      "feed_schedule_15_power_w": {
+        "name": "Harmonogram oddawania 15 - moc oddawania"
+      },
+      "feed_schedule_16_power_w": {
+        "name": "Harmonogram oddawania 16 - moc oddawania"
+      },
+      "feed_schedule_17_power_w": {
+        "name": "Harmonogram oddawania 17 - moc oddawania"
+      },
+      "feed_schedule_18_power_w": {
+        "name": "Harmonogram oddawania 18 - moc oddawania"
+      },
+      "feed_schedule_19_power_w": {
+        "name": "Harmonogram oddawania 19 - moc oddawania"
+      },
+      "feed_schedule_20_power_w": {
+        "name": "Harmonogram oddawania 20 - moc oddawania"
+      },
+      "feed_schedule_21_power_w": {
+        "name": "Harmonogram oddawania 21 - moc oddawania"
+      },
+      "feed_schedule_22_power_w": {
+        "name": "Harmonogram oddawania 22 - moc oddawania"
+      },
+      "feed_schedule_23_power_w": {
+        "name": "Harmonogram oddawania 23 - moc oddawania"
+      },
+      "feed_schedule_24_power_w": {
+        "name": "Harmonogram oddawania 24 - moc oddawania"
+      },
+      "feed_schedule_25_power_w": {
+        "name": "Harmonogram oddawania 25 - moc oddawania"
+      },
+      "feed_schedule_26_power_w": {
+        "name": "Harmonogram oddawania 26 - moc oddawania"
+      },
+      "feed_schedule_27_power_w": {
+        "name": "Harmonogram oddawania 27 - moc oddawania"
+      },
+      "feed_schedule_28_power_w": {
+        "name": "Harmonogram oddawania 28 - moc oddawania"
+      },
+      "feed_schedule_29_power_w": {
+        "name": "Harmonogram oddawania 29 - moc oddawania"
+      },
+      "feed_schedule_30_power_w": {
+        "name": "Harmonogram oddawania 30 - moc oddawania"
+      },
+      "feed_schedule_31_power_w": {
+        "name": "Harmonogram oddawania 31 - moc oddawania"
+      },
+      "feed_schedule_32_power_w": {
+        "name": "Harmonogram oddawania 32 - moc oddawania"
       },
       "target_temp_c": {
         "name": "Temperatura docelowa"
