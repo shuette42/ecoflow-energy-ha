@@ -103,7 +103,7 @@ be used in the Energy Dashboard without accumulating drift.
 | AC 1 non-essential | Mark the first AC outlet group as non-essential |
 | AC 2 non-essential | Mark the second AC outlet group as non-essential |
 | DC non-essential | Mark the DC output as non-essential |
-| USB output | All USB-A and USB-C ports on/off. Base DELTA 3 (`P231`) only, Enhanced Mode only. The state is read back from the port status the device reports, so a press on the device panel shows here too |
+| USB output | All USB-A and USB-C ports on/off. Base DELTA 3 (`P231`) only, Enhanced Mode only. The state is read back from the port status the device reports |
 
 ---
 
