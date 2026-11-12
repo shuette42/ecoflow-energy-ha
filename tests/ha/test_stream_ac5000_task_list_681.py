@@ -8,14 +8,11 @@ its own, so these tests drive the coordinator the way a frame does.
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 import pytest
-from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import (
-    MockEntityPlatform,
-    async_capture_events,
-)
+from pytest_homeassistant_custom_component.common import MockEntityPlatform
 
 from custom_components.ecoflow_energy.const import DOMAIN
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
@@ -153,10 +150,27 @@ class TestTaskListStateWrite:
     async def test_an_identical_list_writes_no_new_state(
         self, hass: HomeAssistant
     ) -> None:
+        """Count the writes themselves: Home Assistant would hide a redundant one.
+
+        An identical state and attributes fire no state change, so an event
+        capture cannot tell a skipped write from a repeated one. The edited
+        list is the control: it must write exactly once.
+        """
         coordinator, entity_id = await _live_task_sensor(hass)
-        changed = async_capture_events(hass, EVENT_STATE_CHANGED)
+        written: list[str] = []
+        original = EcoFlowTaskListSensor.async_write_ha_state
 
-        coordinator._apply_data({"scheduled_tasks": [dict(ON), dict(OFF)]})
-        await hass.async_block_till_done()
+        def counting(self: EcoFlowTaskListSensor) -> None:
+            written.append(self.entity_id)
+            original(self)
 
-        assert [e for e in changed if e.data["entity_id"] == entity_id] == []
+        with patch.object(EcoFlowTaskListSensor, "async_write_ha_state", counting):
+            coordinator._apply_data({"scheduled_tasks": [dict(ON), dict(OFF)]})
+            await hass.async_block_till_done()
+            assert written == []
+
+            coordinator._apply_data(
+                {"scheduled_tasks": [{**ON, "power_w": 1900}, dict(OFF)]}
+            )
+            await hass.async_block_till_done()
+            assert written == [entity_id]
