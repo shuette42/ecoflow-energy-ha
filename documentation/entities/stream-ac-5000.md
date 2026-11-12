@@ -126,9 +126,9 @@ All seven are integrated from the matching power reading, so they only ever coun
 **Linked units in the Energy Dashboard: use one set, never both.** With a STREAM Ultra X (or another unit) linked, the STREAM AC 5000's Battery Charge Energy and Battery Discharge Energy already contain the Ultra X. Adding them next to the Ultra X's own Battery Charge Energy and Battery Discharge Energy counts the Ultra X twice. Pick one of the two:
 
 - **The group figure alone.** Add only the STREAM AC 5000's Battery Charge Energy and Battery Discharge Energy. Leave the Ultra X's out of the battery section.
-- **Each battery by itself.** Enable the STREAM AC 5000's Unit Battery Charge Energy and Unit Battery Discharge Energy (both are disabled by default) and add them together with the Ultra X's own Battery Charge Energy and Battery Discharge Energy. Leave the STREAM AC 5000's Battery Charge Energy and Battery Discharge Energy out.
+- **Each battery by itself.** Enable the STREAM AC 5000's Unit Battery Charge Energy and Unit Battery Discharge Energy (both are disabled by default) and add them together with the Ultra X's Unit Battery Charge Energy and Unit Battery Discharge Energy (enabled by default on a Stream, Enhanced Mode only). The Ultra X's own Battery Charge Energy and Battery Discharge Energy no longer count while it is linked, because it does not compute the system figure. Leave the STREAM AC 5000's Battery Charge Energy and Battery Discharge Energy out.
 
-In one owner's data the two sets differed by about 5 percent, in either direction. The same applies to the power readings: Battery Charge Power is the group, Unit Battery Charge Power is this unit's share, so while both units charge the group value is higher than what the app shows under the STREAM AC 5000's own name. The Ultra X's own counters exist in Enhanced Mode only.
+In one owner's data the two sets differed by about 5 percent, in either direction. The same applies to the power readings: Battery Charge Power is the group, Unit Battery Charge Power is this unit's share, so while both units charge the group value is higher than what the app shows under the STREAM AC 5000's own name. The Ultra X's Unit Battery counters exist in Enhanced Mode only.
 
 There is deliberately no Solar Energy counter, see the note below.
 

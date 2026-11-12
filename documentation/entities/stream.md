@@ -101,7 +101,7 @@ Full list of all entities created for Stream devices.
 
 | Entity | Unit | Default | Dashboard Section |
 |:---|:---:|:---:|:---|
-| Battery Charge Energy | kWh | enabled | Battery charge, integrated from Battery Charge Power. On linked units it counts only while this unit reports the system figure, so a unit that does not compute it stops counting. Use the Unit counters for those |
+| Battery Charge Energy | kWh | enabled | Battery charge, integrated from Battery Charge Power. On linked units it counts only while this unit reports the system figure, so a unit that does not compute it stops counting. On the unit that does compute it, the counters cover the whole group. Use one set in the Energy Dashboard, never both: either the group counters of that unit alone, or the Unit counters of every unit, so no unit is counted twice |
 | Battery Discharge Energy | kWh | enabled | Battery discharge, integrated from Battery Discharge Power. Same limit on linked units |
 | Unit Battery Charge Energy | kWh | enabled | Lifetime energy into this unit's own battery, integrated from Unit Battery Charge Power. Starts at 0 when first created. **Enhanced Mode only.** |
 | Unit Battery Discharge Energy | kWh | enabled | Lifetime energy out of this unit's own battery, integrated from Unit Battery Discharge Power. Starts at 0 when first created. **Enhanced Mode only.** |
