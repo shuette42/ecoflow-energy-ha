@@ -20,7 +20,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
+import pytest
 from homeassistant.const import EVENT_STATE_CHANGED, EVENT_STATE_REPORTED
 from homeassistant.core import (
     Event,
@@ -268,3 +270,34 @@ async def test_a_bare_source_report_counts_as_a_report_for_the_three_shares(
     for key in SHARES:
         assert _count(reported, ids[key]) == 1, key
         assert _count(changed, ids[key]) == 0, key
+
+
+async def test_an_apply_that_raises_leaves_no_report_behind(
+    hass: HomeAssistant,
+) -> None:
+    """An apply that fails before its notify never reported anything, so the
+    next availability or SET notify must not write the rod sensors as if it
+    had: the key set brackets the notify only."""
+    seed = {**ROD_AT_ZERO, **dict.fromkeys(SHARES, 0.0)}
+    coordinator, ids = await _live(hass, seed)
+    rod_keys = (ROD_POWER, *SHARES)
+    assert set(rod_keys) <= set(ids)
+    parsed = coordinator._parse_message(TOPIC, _powerglow_frame("rod_off_212_8"))
+    assert parsed is not None
+    assert set(rod_keys) <= set(parsed)
+
+    with (
+        patch.object(
+            coordinator, "_integrate_energy", side_effect=RuntimeError("boom")
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        coordinator._apply_data(parsed)
+    reported = _capture_reported(hass)
+
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+
+    assert coordinator.last_applied_keys == frozenset()
+    for key in rod_keys:
+        assert _count(reported, ids[key]) == 0, key

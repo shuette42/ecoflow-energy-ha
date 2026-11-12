@@ -796,6 +796,12 @@ HEATING_ROD_POWER_SOURCE_TO_SENSOR: dict[str, str] = {
     "hr_power_from_grid": "heating_rod_power_from_grid_w",
 }
 
+# The coordinator's note that a 212/33 carried neither the total nor a share
+# (#700). Not a reading: `_resolve_bare_share_report` pops it before the store,
+# an entity or diagnostics see it, and decides from accumulated state whether
+# it becomes 0 W shares.
+HEATING_ROD_BARE_SHARE_REPORT_KEY = "hr_share_report_bare"
+
 
 def remap_heating_rod_power_source_keys(raw: dict[str, Any]) -> dict[str, Any]:
     """Remap a PowerGlow power report (cmd_func 212, cmd_id 33).

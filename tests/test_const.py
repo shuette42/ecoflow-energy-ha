@@ -1568,8 +1568,22 @@ def test_every_table_keyed_by_prefix_names_a_registered_prefix(keys: Any) -> Non
 def test_only_the_heating_rod_power_sensors_write_on_report() -> None:
     """`write_on_report` bypasses the unchanged-value gate (#700). It belongs to
     Heating Rod Power and its three source shares, and to nothing else: any other
-    PowerOcean sensor carrying it would write a state row on every frame."""
-    flagged = sorted(s.key for s in POWEROCEAN_SENSORS if s.write_on_report)
+    sensor carrying it would write on every frame. Every `*_SENSORS` list of
+    const.py is scanned, not only the PowerOcean one."""
+    from ecoflow_energy import const as const_module
+
+    lists = {
+        name: value
+        for name, value in vars(const_module).items()
+        if name.endswith("_SENSORS") and isinstance(value, list)
+    }
+    assert "POWEROCEAN_SENSORS" in lists and "STREAM_SENSORS" in lists
+    flagged = sorted(
+        definition.key
+        for definitions in lists.values()
+        for definition in definitions
+        if getattr(definition, "write_on_report", False)
+    )
     assert flagged == sorted(
         [
             "heating_rod_power_w",

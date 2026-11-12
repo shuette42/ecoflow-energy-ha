@@ -257,9 +257,8 @@ class EcoFlowWriteGateMixin:
     def _write_state_if_changed(self, new_value: Any) -> None:
         """Write HA state when the value or the availability changed.
 
-        Sensors whose definition sets `write_on_report` bypass this gate for
-        an applied report that carried their key (`sensor.py`, #700), so
-        `last_reported` advances on every report; all others stay gated.
+        The `write_on_report` bypass (#700) lives in
+        `EcoFlowSensor._handle_coordinator_update` in `sensor.py`, not here.
         """
         new_available = self.available  # type: ignore[attr-defined]
         if (

@@ -26,7 +26,11 @@ from ..const import (
     remaining_time_is_battery_only,
 )
 from ..ecoflow.const import POWERPULSE2_DISPLAY_BLOCK_LEN_KEY
-from ..ecoflow.parsers.powerocean_proto import EMS_CHANGE_DEV_SOC_KEY
+from ..ecoflow.parsers.powerocean_proto import (
+    EMS_CHANGE_DEV_SOC_KEY,
+    HEATING_ROD_BARE_SHARE_REPORT_KEY,
+    HEATING_ROD_POWER_SOURCE_TO_SENSOR,
+)
 from ..ecoflow.parsers.powerpulse_proto import (
     RELAYED_WALLBOX_POWER_KEY,
     RELAYED_WALLBOX_SETTINGS_KEY,
@@ -93,6 +97,36 @@ else:
 
 class StateApplyMixin(_Base):
     """Mixin applying parsed data to coordinator state."""
+
+    def _resolve_bare_share_report(self, parsed: dict[str, Any]) -> bool:
+        """Turn a bare heating rod share report into 0 W shares, or into nothing.
+
+        The rod sends 212/33 on a ~5 s timer, idle or not, and at idle every
+        frame is the bare serial: all sources at 0 W (#700). The parser only
+        offers that on `HEATING_ROD_BARE_SHARE_REPORT_KEY`; whether it becomes
+        the shares is decided here, on the loop, from accumulated state. The
+        parser runs on the Paho thread ahead of the queue, so a 212/8 with
+        positive power parsed but not yet applied would be invisible there.
+
+        Three cases on Heating Rod Power, read from this report first, then
+        from the store: absent (unknown, e.g. right after a restart before the
+        get-all reply) does nothing; above 0 W does nothing, so a bare frame
+        during a run never drops the shares (the v1.26.0 promise); exactly
+        0 W sets the three shares to 0 W. Unlike the 212/8 rule in the parser,
+        this creates the share keys: the rod itself sent the share report,
+        which turns `unavailable` into 0 W after a restart.
+
+        Returns whether the marker was present; it never stays in `parsed`.
+        """
+        if parsed.pop(HEATING_ROD_BARE_SHARE_REPORT_KEY, None) is None:
+            return False
+        rod_power = parsed.get(
+            "heating_rod_power_w", self._device_data.get("heating_rod_power_w")
+        )
+        if isinstance(rod_power, (int, float)) and rod_power == 0.0:
+            for share_key in HEATING_ROD_POWER_SOURCE_TO_SENSOR.values():
+                parsed.setdefault(share_key, 0.0)
+        return True
 
     def _resolve_soc(self, parsed: dict[str, Any]) -> None:
         """Decide whether a unit's own state of charge stands in for `soc_pct`.
@@ -756,6 +790,11 @@ class StateApplyMixin(_Base):
         # Without this, the parser overwrites the derived state on every EMS
         # report, causing ~250 false transitions/day (#50).
         parsed.pop("batt_charge_discharge_state", None)
+        if self._resolve_bare_share_report(parsed) and not parsed:
+            # A bare heating rod share report while the rod's power is unknown
+            # or above 0 W carries nothing to apply: no listener call, no
+            # snapshot (#700).
+            return
         # Track the arrival of a fresh EmsParamChangeReport so the auto-sync
         # below can distinguish a real app-side change from a stale frame
         # whose value the user has since superseded.
@@ -827,9 +866,6 @@ class StateApplyMixin(_Base):
 
         self._note_value_change(parsed)
 
-        # The keys this report really applies, for `write_on_report` sensors
-        # (#700). Cleared right after the notify below.
-        self._last_applied_keys = frozenset(parsed)
         self._device_data.update(parsed)
 
         # Ocean 2 writes (PLAN-151, PLAN-192): a Backup Reserve write waits for a
@@ -880,6 +916,11 @@ class StateApplyMixin(_Base):
             source="mqtt",
             key_count=len(self._device_data),
         )
+        # The keys this report really applies, for `write_on_report` sensors
+        # (#700). Set and cleared around the notify only: an exception above
+        # must not leave a set that a later availability or SET notify would
+        # replay as a fresh report.
+        self._last_applied_keys = frozenset(parsed)
         try:
             self.async_set_updated_data(dict(self._device_data))
         finally:

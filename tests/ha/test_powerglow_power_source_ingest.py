@@ -5,7 +5,9 @@ PLAN-217).
 the real frames; this proves what the coordinator does with them: a report
 that carries the total lands the three shares in `_device_data`, and a report
 that carries only the rod's serial leaves the stored shares exactly as they
-were, so a sensor never drops to 0 W between two real readings.
+were while the rod draws power or its power is unknown, so a sensor never
+drops to 0 W between two real readings. With the rod known at 0 W the bare
+report sets the shares to 0 W (#700, the cases further down).
 """
 
 from __future__ import annotations
@@ -18,6 +20,9 @@ import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.ecoflow_energy.const import DEVICE_TYPE_POWEROCEAN
+from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+    HEATING_ROD_BARE_SHARE_REPORT_KEY,
+)
 from custom_components.ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
@@ -111,14 +116,19 @@ async def test_a_later_report_without_grid_overwrites_the_grid_with_zero(
 POWER = "heating_rod_power_w"
 
 
-def _ingest_212_8(coordinator: Any, power_w: int) -> dict[str, Any] | None:
-    """Feed a 212/8 report whose rod draws `power_w` (field 4)."""
+def _frame_212_8(power_w: int) -> bytes:
+    """A 212/8 report whose rod draws `power_w` (field 4)."""
     header = (
         encode_field_bytes(1, encode_field_varint(4, power_w))
         + encode_field_varint(8, 212)
         + encode_field_varint(9, 8)
     )
-    parsed = coordinator._parse_message(TOPIC, encode_field_bytes(1, header))
+    return encode_field_bytes(1, header)
+
+
+def _ingest_212_8(coordinator: Any, power_w: int) -> dict[str, Any] | None:
+    """Feed a 212/8 report whose rod draws `power_w` (field 4)."""
+    parsed = coordinator._parse_message(TOPIC, _frame_212_8(power_w))
     if parsed:
         coordinator._apply_data(parsed)
     return parsed
@@ -127,7 +137,8 @@ def _ingest_212_8(coordinator: Any, power_w: int) -> dict[str, Any] | None:
 async def test_a_rod_drawing_nothing_zeroes_the_published_shares(
     hass: HomeAssistant,
 ) -> None:
-    """212/33 may stop when the rod stops, so 212/8 saying 0 W ends the shares."""
+    """212/8 saying 0 W ends the shares at once, without waiting for the next
+    212/33."""
     coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
     _ingest(coordinator, "pv_battery_grid")
 
@@ -216,7 +227,6 @@ async def test_a_bare_report_after_a_restart_at_zero_watt_sets_the_shares_to_zer
     parsed = _ingest(coordinator, "serial_only")
 
     assert parsed is not None
-    assert [parsed[key] for key in SHARES] == [0.0, 0.0, 0.0]
     assert [coordinator._device_data[key] for key in SHARES] == [0.0, 0.0, 0.0]
 
 
@@ -293,3 +303,46 @@ async def test_the_zeroed_shares_count_as_reported_at_notify_time(
     assert seen, "the apply never notified a listener"
     assert {POWER, *SHARES} <= seen[-1]
     assert coordinator.last_applied_keys == frozenset()
+
+
+async def test_a_bare_report_queued_behind_a_running_rod_keeps_the_shares(
+    hass: HomeAssistant,
+) -> None:
+    """The parser runs on the Paho thread and queues each report; the loop
+    applies them later, in order. Stored rod power is 0 W, a 212/8 with the rod
+    at 2159 W is parsed and queued, then a bare 212/33 is parsed before that
+    212/8 is applied. A decision taken at parse time would read the stale 0 W
+    and queue zero shares that land after the 2159 W: the shares of a running
+    rod at 0 W. Decided at apply time, the bare report sees 2159 W."""
+    coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
+    _ingest(coordinator, "pv_battery_grid")
+    coordinator._device_data[POWER] = 0.0
+
+    running = coordinator._parse_message(TOPIC, _frame_212_8(2159))
+    bare = coordinator._parse_message(TOPIC, _frame("serial_only"))
+    assert running is not None and bare is not None
+    coordinator._apply_data(running)
+    coordinator._apply_data(bare)
+
+    assert coordinator._device_data[POWER] == 2159.0
+    assert [coordinator._device_data[key] for key in SHARES] == [116.0, 33.0, 3.0]
+
+
+@pytest.mark.parametrize("rod_power", [None, 0.0, 2159.0])
+async def test_the_bare_report_marker_never_reaches_the_store(
+    hass: HomeAssistant, rod_power: float | None
+) -> None:
+    """The parser's offer is a note for `_apply_data`, not a reading: in all
+    three cases of the rule it is gone from the store and the snapshot."""
+    coordinator = _coordinator(hass, POWEROCEAN_DEVICE)
+    if rod_power is not None:
+        coordinator._device_data[POWER] = rod_power
+
+    parsed = coordinator._parse_message(TOPIC, _frame("serial_only"))
+    assert parsed is not None
+    assert parsed.get(HEATING_ROD_BARE_SHARE_REPORT_KEY) is True
+    coordinator._apply_data(parsed)
+
+    assert HEATING_ROD_BARE_SHARE_REPORT_KEY not in coordinator._device_data
+    snapshot = coordinator._snapshot
+    assert snapshot is None or HEATING_ROD_BARE_SHARE_REPORT_KEY not in snapshot.data

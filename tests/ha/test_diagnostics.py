@@ -2356,6 +2356,36 @@ class TestUnknownProtoFieldDiagnostics:
         coordinator._capture_raw_frame(topic, payload, None)
         assert bucket.keys_seen["unknown:254/21:13"][1] == 1
 
+    async def test_the_bare_share_note_is_not_counted_as_a_parsed_reading(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The parser's note for `_apply_data` is no reading the frame carried (#700).
+
+        The same frame is captured twice: once with a real reading in
+        `parsed`, once with that reading plus the note. Both must record the
+        same `parsed_keys`, so a note cannot make a frame look like it decoded
+        something it did not. The first capture is the control: a count of 1
+        shows the field is read at all.
+        """
+        from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+            HEATING_ROD_BARE_SHARE_REPORT_KEY,
+        )
+
+        coordinator = self._recording_coordinator(hass, standard_config_entry)
+        topic = f"/app/device/property/{MOCK_DELTA3_DEVICE['sn']}"
+        payload = self._frame(254, 21, b"\x08\x01")
+
+        coordinator._capture_raw_frame(topic, payload, {"soc_pct": 50.0})
+        coordinator._capture_raw_frame(
+            topic, payload, {"soc_pct": 50.0, HEATING_ROD_BARE_SHARE_REPORT_KEY: True}
+        )
+
+        counts = [frame["parsed_keys"] for frame in coordinator._raw_frames.frames()]
+        assert counts
+        assert set(counts) == {1}
+
     async def test_a_parse_that_raises_does_not_leak_into_the_next_frame(
         self,
         hass: HomeAssistant,

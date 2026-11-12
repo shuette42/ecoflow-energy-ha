@@ -29,11 +29,12 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 >
 > Heating Rod Power and its three shares (from PV, Battery and Grid) update
 > their `last_reported` time on every report that carries them, even when the
-> value stays the same, so an automation can tell a fresh 0 W from missing
-> data. This adds no rows to the recorder history. The rod reports Heating Rod
-> Power only when it changes, and the shares about every five seconds; while
-> the rod is known to be off, a share report without any power reads 0 W for
-> all three shares, also right after a restart.
+> value stays the same. This adds no rows to the recorder history. In our
+> recordings the rod sends Heating Rod Power only when it changes, so its
+> `last_reported` time stays put while the rod is off. The rod sends the three
+> shares about every five seconds. For the three shares an automation can therefore tell a
+> fresh 0 W from missing data: while the rod is known to be off, a share report
+> without any power reads 0 W for all three shares, also right after a restart.
 
 > **The wallbox readings are optional and need Enhanced Mode.** They belong to
 > a PowerPulse 1 wallbox coupled to your PowerOcean, so they are only created once
