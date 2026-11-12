@@ -292,6 +292,54 @@ class TestSystemSocOfZero:
         assert result[SOC_FALLBACK_KEY] == 0
 
 
+class TestBackupReserve:
+    """`backupReverseSoc` is the Backup Reserve, in whole percent (#702)."""
+
+    # The 15 keys a Stream Max (BK41) returned in Standard Mode, from the
+    # reporter's diagnostics.
+    BK41_QUOTA: dict = {
+        "backupReverseSoc": 13,
+        "cmsBattSoc": 26,
+        "cmsMaxChgSoc": 100,
+        "cmsMinDsgSoc": 8,
+        "energyStrategyOperateMode.operateIntelligentScheduleModeOpen": True,
+        "energyStrategyOperateMode.operateSelfPoweredOpen": False,
+        "feedGridMode": 2,
+        "gridConnectionPower": -72.1,
+        "powGetBpCms": 233.4,
+        "powGetPvSum": 265.4,
+        "powGetSysGrid": -32,
+        "powGetSysLoad": 0,
+        "quota_cloud_ts": "2026-11-10 12:00:00",
+        "relay2Onoff": True,
+        "relay3Onoff": False,
+    }
+
+    def test_bk41_quota_shows_the_reserve(self) -> None:
+        result = parse_stream_quota(self.BK41_QUOTA)
+
+        assert result["backup_reserve_pct"] == 13
+        assert type(result["backup_reserve_pct"]) is int
+        assert "backupReverseSoc" not in result
+
+    def test_ac_pro_quota_shows_the_reserve(self) -> None:
+        result = parse_stream_quota(TestRealAcProQuota.QUOTA)
+
+        assert result["backup_reserve_pct"] == 20
+
+    def test_ultra_x_diagnostics_show_the_reserve(self) -> None:
+        snapshots = json.loads(FEED_IN_FIXTURE.read_text())
+
+        assert parse_stream_quota(snapshots["on"])["backup_reserve_pct"] == 23
+        assert parse_stream_quota(snapshots["off"])["backup_reserve_pct"] == 23
+
+    def test_a_quota_without_the_key_leaves_the_reserve_alone(self) -> None:
+        """A push without the key is no update: not 0, not Unknown."""
+        result = parse_stream_quota({"cmsBattSoc": 26, "powGetSysGrid": 79.0})
+
+        assert "backup_reserve_pct" not in result
+
+
 FEED_IN_FIXTURE = (
     Path(__file__).parent / "fixtures" / "stream" / "bk61_feed_in_quota_509.json"
 )

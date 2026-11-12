@@ -107,6 +107,11 @@ STREAM_HTTP_INT_FIELD_MAP: dict[str, str] = {
     "cmsBattSoc": "soc_pct",
     "soc": "unit_soc_pct",
     "soh": "bms_soh_pct",
+    # The reserve the unit keeps, the same value the protobuf path reads as
+    # field 102 (the app's Backup Reserve). Present in every Stream Standard
+    # quota seen so far (BK31, BK41, BK61); the spelling `Reverse` is the
+    # device's own.
+    "backupReverseSoc": "backup_reserve_pct",
 }
 
 

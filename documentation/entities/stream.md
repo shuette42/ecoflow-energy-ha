@@ -33,7 +33,7 @@ Full list of all entities created for Stream devices.
 | Unit Battery Discharge Power | W | - | enabled | Discharging power of this unit's battery (always >= 0), split from Unit Battery Power. **Enhanced Mode only.** |
 | Battery Voltage | V | - | enabled | Pack voltage |
 | Battery Temp | C | - | enabled | Battery temperature |
-| Backup Reserve | % | diagnostic | enabled | Current reserve level. On the Stream AC Pro (`BK31`) it mirrors the Backup Reserve number; the other models show the value only |
+| Backup Reserve | % | diagnostic | enabled | Current reserve level. On the Stream AC Pro (`BK31`) it mirrors the Backup Reserve number; the other models show the value only. The value is also reported in Standard Mode |
 | Battery Charge/Discharge State | - | diagnostic | disabled | `standby`, `charging` or `discharging`. It is derived from Battery Power, so on a linked unit that does not report Battery Power it keeps its last value or stays empty |
 
 ## Sensors - Solar
