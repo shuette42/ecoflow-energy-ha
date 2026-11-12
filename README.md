@@ -52,7 +52,7 @@
 | **Stream Micro** | `BK01` | Enhanced only | 25 | none | 2 optional | ~3 s |
 | **Stream Micro** | `BK02` | Standard | 25 | none | 2 optional | MQTT bursts |
 | **PowerStream** | `HW51` | Standard only | 25 | none, read-only | 2 + 2 optional | ~30 s |
-| **STREAM AC 5000** | `ES22` | Enhanced only | 64 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 3 optional | ~2 s |
+| **STREAM AC 5000** | `ES22` | Enhanced only | 65 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 3 optional | ~2 s |
 | **STREAM 5000** | `ES21` | Enhanced only | 64 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 3 optional | ~2 s |
 | **Smart Meter** | `BK21` | Enhanced only | 18 + 3 binary | none, read-only | 2 | ~3 s |
 | **Solar Tracker** | `HZ31` `S02F` | Enhanced only | 6 | none, read-only for now | none | ~3 s |
