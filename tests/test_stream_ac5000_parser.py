@@ -826,6 +826,34 @@ class TestScheduledTasks:
         )
         assert all(result[k] is None for k in _TASK_COUNT_KEYS)
 
+    @pytest.mark.parametrize(
+        ("present", "block", "absent"),
+        [("discharge", 9, "charge"), ("charge", 8, "discharge")],
+    )
+    def test_a_list_without_a_kind_clears_its_repeat(
+        self, present: str, block: int, absent: str
+    ) -> None:
+        """The repeat is read from the kind's task and cleared with it (#653).
+
+        The coordinator merge only ever adds keys, so a repeat left over from a
+        deleted task would go back out on the next task of that kind.
+        """
+        task = (
+            encode_field_varint(2, 1)
+            + encode_field_varint(5, 2)
+            + encode_field_varint(6, 5)
+            # discharge {1: 600 W}; charge {1: source 1, solar and grid}
+            + _sub(block, encode_field_varint(1, 600 if block == 9 else 1))
+        )
+        result = parse_stream_ac5000_message(
+            _build_frame(254, 39, bytes(_sub(40, _sub(1, task))))
+        )
+        assert result is not None
+        assert result[f"scheduled_{present}_time_mode"] == 2
+        assert result[f"scheduled_{present}_time_param"] == 5
+        assert result[f"scheduled_{absent}_time_mode"] is None
+        assert result[f"scheduled_{absent}_time_param"] is None
+
     def test_empty_task_block_clears_every_readback_key(self) -> None:
         """Deleting the last task in the app sends `f40` with no bytes.
 
