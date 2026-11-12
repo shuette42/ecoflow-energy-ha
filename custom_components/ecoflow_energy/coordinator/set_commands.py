@@ -1711,7 +1711,15 @@ class SetCommandsMixin(_Base):
         reads it back instead of charging to 100%. The next list without a
         charge task clears it, as it clears every key of a kind it lacks.
         """
-        for suffix in ("power_w", "enabled", "start_min", "end_min", "task_slot"):
+        for suffix in (
+            "power_w",
+            "enabled",
+            "start_min",
+            "end_min",
+            "task_slot",
+            "time_mode",
+            "time_param",
+        ):
             state_key = f"scheduled_{kind}_{suffix}"
             self.set_device_value(state_key, None)
             if self.data is not None:
@@ -1792,7 +1800,10 @@ class SetCommandsMixin(_Base):
         """Build the update that changes only the watts of the kind's task.
 
         Every other field goes out as the device reported it: number, window,
-        on/off and the charge limit. The charging source is not carried
+        on/off, repeat and the charge limit. The repeat (`time_mode`, and
+        `time_param` for a task that is not daily) is required, as on the
+        PowerOcean timer: sending a guessed daily would turn a weekly, monthly
+        or once task into a daily one (#653). The charging source is not carried
         because a settable charge task is by definition one that charges from
         solar and grid, which is what the builder writes. A task switched off
         in the app stays off; the new power applies when the owner switches it
@@ -1821,6 +1832,10 @@ class SetCommandsMixin(_Base):
         ):
             # Right after an add, until the readback names the new task.
             raise DeviceValueNotReported(f"{prefix}task_slot")
+        time_mode = as_known_int(data.get(f"{prefix}time_mode"))
+        if time_mode is None:
+            raise DeviceValueNotReported(f"{prefix}time_mode")
+        time_param = as_known_int(data.get(f"{prefix}time_param"))
         self._warn_unless_custom_mode(kind, data)
         soc_target = as_known_int(data.get("scheduled_charge_soc_target"))
         return build_task_payload(
@@ -1833,6 +1848,8 @@ class SetCommandsMixin(_Base):
             operation=TASK_UPDATE,
             charge_soc_target=100 if soc_target is None else soc_target,
             task_slot=slot,
+            time_mode=time_mode,
+            time_param=0 if time_param is None else time_param,
         )
 
     async def async_send_proto_set_command(

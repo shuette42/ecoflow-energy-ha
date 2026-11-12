@@ -304,6 +304,8 @@ def build_task_payload(
     charge_soc_target: int = 100,
     seq: int = 0,
     task_slot: int | None = None,
+    time_mode: int = 1,
+    time_param: int = 0,
 ) -> bytes:
     """Build a scheduled-task SET frame (config field 39).
 
@@ -318,7 +320,16 @@ def build_task_payload(
                 numbered 1 and added a discharge task numbered 1 in one frame.
                 `task_slot` overrides it so a removal or an update can name the
                 number the device reported rather than one derived from `kind`.
-        39.1.3  enabled, 39.1.4 its inverse, 39.1.5 always 1
+        39.1.3  enabled
+        39.1.4  always 0. The device reports 1 on its readback while the task's
+                window holds the current time; the app never writes it, and
+                sends the 0 explicitly in every recorded write.
+        39.1.5  repeat: 1 daily, 2 weekly, 3 monthly, 4 once
+        39.1.6  the repeat's parameter (the date of a once task, packed as
+                year << 9 | month << 5 | day). Sent only when it is not 0: the
+                app writes none on a daily task. An update echoes both from the
+                readback, so a power change keeps the owner's repeat; a new
+                task (`TASK_ADD`) is daily.
         39.1.7  window: a packed varint, start in the low 16 bits and end in
                 the high 16, both minutes since midnight
         39.1.8  charge settings {1: source, 2: 0, 3: per device}, where the
@@ -395,13 +406,19 @@ def build_task_payload(
         raise ValueError(f"power_w must be 0..{MAX_TASK_POWER_W}, got {power_w}")
     if not 0 <= charge_soc_target <= 100:
         raise ValueError(f"charge_soc_target must be 0..100, got {charge_soc_target}")
+    if not 0 < time_mode <= 0xFF:
+        raise ValueError(f"time_mode must be 1..255, got {time_mode}")
+    if time_param < 0:
+        raise ValueError(f"time_param must not be negative, got {time_param}")
 
     task = bytearray()
     task.extend(encode_field_varint(1, operation))
     task.extend(encode_field_varint(2, task_type if task_slot is None else task_slot))
     task.extend(encode_field_varint(3, 1 if enabled else 0))
-    task.extend(encode_field_varint(4, 0 if enabled else 1))
-    task.extend(encode_field_varint(5, 1))
+    task.extend(encode_field_varint(4, 0))
+    task.extend(encode_field_varint(5, time_mode))
+    if time_param:
+        task.extend(encode_field_varint(6, time_param))
     task.extend(encode_field_bytes(7, encode_varint((end_min << 16) | start_min)))
 
     if kind == "charge":

@@ -262,7 +262,12 @@ class TestTask:
         # 0x05640000 = (1380 << 16) | 0
         assert bytes.fromhex("3a048080902b") in pdata
 
-    def test_disabled_task_inverts_both_flags(self) -> None:
+    def test_disabled_task_keeps_field_4_at_zero(self) -> None:
+        """Field 4 is the device's "active now" flag, never the inverse of 3.
+
+        The app sends it as an explicit 0 in every recorded write, on and off
+        alike (#653).
+        """
         enabled = bytes.fromhex(
             _pdata(
                 build_task_payload(
@@ -286,7 +291,21 @@ class TestTask:
         )
 
         assert bytes.fromhex("18012000") in enabled
-        assert bytes.fromhex("18002001") in disabled
+        assert bytes.fromhex("18002000") in disabled
+        assert bytes.fromhex("18002001") not in disabled
+
+    def test_a_new_task_is_daily_without_a_parameter(self) -> None:
+        """The task this integration adds itself: repeat 1, no field 6."""
+        pdata = bytes.fromhex(
+            _pdata(
+                build_task_payload(
+                    "discharge", 0, 1439, 600, SN, seq=1, operation=TASK_ADD
+                )
+            )
+        )
+
+        # field 5 = 1 directly followed by field 7: no field 6 between them
+        assert bytes.fromhex("28013a") in pdata
 
     def test_charge_power_is_per_device_and_discharge_is_not(self) -> None:
         charge = bytes.fromhex(
