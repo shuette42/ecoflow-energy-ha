@@ -7743,7 +7743,7 @@ class TestDeveloperCredentialRefresh:
         coordinator._iot_api.refresh_credentials = AsyncMock(
             return_value={
                 "certificateAccount": "new-account",
-                "certificatePassword": "new-password",
+                "certificatePassword": "test_password",
             }
         )
 
@@ -7759,7 +7759,7 @@ class TestDeveloperCredentialRefresh:
         assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_called_once_with(
             "new-account",
-            "new-password",
+            "test_password",
         )
         assert coordinator._credential_obtained_ts == 5000.0
         assert coordinator.event_log[-1]["type"] == "credential_refresh_ok"
@@ -7913,7 +7913,7 @@ class TestDeveloperCredentialRefresh:
         coordinator._iot_api.refresh_credentials = AsyncMock(
             return_value={
                 "certificateAccount": "new-account",
-                "certificatePassword": "new-password",
+                "certificatePassword": "test_password",
             }
         )
 
@@ -7923,7 +7923,7 @@ class TestDeveloperCredentialRefresh:
         assert isinstance(coordinator._mqtt_client, MagicMock)
         coordinator._mqtt_client.update_credentials.assert_called_once_with(
             "new-account",
-            "new-password",
+            "test_password",
         )
         mock_exec.assert_called_once_with(
             coordinator._mqtt_client.force_reconnect,
@@ -8576,6 +8576,108 @@ class TestStreamQuotaRouting:
         assert result["batt_discharge_power_w"] == 220.0
         assert not any(key.startswith("powGet") for key in result)
         assert "bmsFaultState" not in result
+
+    async def test_quota_push_records_dropped_key_names(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A dropped push key is named for diagnostics, never stored (#702)."""
+        import json as json_mod
+
+        coordinator = self._coordinator(hass, standard_config_entry)
+        payload = json_mod.dumps(
+            {"params": {"powGetPvSum": 819, "temp": 23, "remainCap": 4100}}
+        ).encode()
+
+        with patch.object(coordinator.hass.loop, "call_soon_threadsafe") as mock_csf:
+            coordinator._on_mqtt_message("/open/cert/SN001/quota", payload)
+        posted = mock_csf.call_args[0][1]
+        coordinator._apply_data(posted)
+
+        assert coordinator._device_data["solar_w"] == 819.0
+        assert "temp" not in coordinator._device_data
+        assert coordinator.stream_push_unmapped_keys == ["remainCap", "temp"]
+
+    async def test_enhanced_quota_push_records_nothing(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        """The collector is a Standard Mode tool only (#702)."""
+        import json as json_mod
+
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_STREAM_DEVICE
+        )
+        payload = json_mod.dumps({"params": {"temp": 23}}).encode()
+
+        coordinator._parse_message("/open/cert/SN001/quota", payload)
+
+        assert coordinator.stream_push_unmapped_keys == []
+
+    async def test_full_collector_skips_the_key_scan(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Once 128 names are held, a push costs no further scan (#702)."""
+        import json as json_mod
+
+        coordinator = self._coordinator(hass, standard_config_entry)
+        coordinator._note_stream_push_unmapped_keys(
+            [f"key{chr(97 + i // 26)}{chr(97 + i % 26)}" for i in range(128)], []
+        )
+        payload = json_mod.dumps({"params": {"temp": 23}}).encode()
+
+        with patch(
+            "custom_components.ecoflow_energy.coordinator.mqtt_ingest."
+            "unmapped_stream_quota_keys"
+        ) as scan:
+            coordinator._parse_message("/open/cert/SN001/quota", payload)
+
+        scan.assert_not_called()
+
+    async def test_dropped_key_names_are_capped_and_counted(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """128 names at most, distinct; the rest is counted as withheld (#702)."""
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        coordinator._note_stream_push_unmapped_keys(["temp", "vol"], [])
+        coordinator._note_stream_push_unmapped_keys(["temp"], ["HJ31TESTDUMMY01"])
+        coordinator._note_stream_push_unmapped_keys([], ["HJ31TESTDUMMY01"])
+        assert coordinator.stream_push_unmapped_keys == ["temp", "vol"]
+        assert coordinator.stream_push_withheld_count == 1
+
+        names = [f"key{chr(97 + i // 26)}{chr(97 + i % 26)}" for i in range(200)]
+        coordinator._note_stream_push_unmapped_keys(names, [])
+        held = coordinator.stream_push_unmapped_keys
+        assert len(held) == 128
+        assert "temp" in held
+        assert names[125] in held
+        assert names[126] not in held
+        assert coordinator.stream_push_withheld_count == 1 + 74
+        assert coordinator.stream_push_unmapped_keys_full is True
+
+    async def test_a_key_is_counted_once_when_it_moves_between_the_sets(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A key withheld in one push and shown in a later one counts once (#702)."""
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        coordinator._note_stream_push_unmapped_keys([], ["temp"])
+        assert coordinator.stream_push_withheld_count == 1
+        coordinator._note_stream_push_unmapped_keys(["temp"], [])
+        assert coordinator.stream_push_unmapped_keys == ["temp"]
+        assert coordinator.stream_push_withheld_count == 0
+        coordinator._note_stream_push_unmapped_keys([], ["temp"])
+        assert coordinator.stream_push_withheld_count == 0
 
     async def test_enhanced_protobuf_path_is_untouched(
         self,

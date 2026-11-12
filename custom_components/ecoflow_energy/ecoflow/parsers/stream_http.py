@@ -60,6 +60,7 @@ Field notes:
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .stream_proto import SOC_FALLBACK_KEY
@@ -122,6 +123,63 @@ STREAM_HTTP_INT_FIELD_MAP: dict[str, str] = {
 STREAM_FEED_IN_MODE_KEY = "feedGridMode"
 STREAM_FEED_IN_STATE_KEY = "feed_in_control_enabled"
 _FEED_IN_MODE_TO_ENABLED: dict[int, bool] = {2: True, 1: False}
+
+
+# Every quota key `parse_stream_quota` reads. Anything else in a push is
+# dropped there, and `unmapped_stream_quota_keys` names it instead.
+_STREAM_READ_KEYS: frozenset[str] = frozenset(
+    (
+        *STREAM_HTTP_FIELD_MAP,
+        *STREAM_HTTP_INT_FIELD_MAP,
+        *STREAM_HTTP_RELAY_MAP,
+        STREAM_FEED_IN_MODE_KEY,
+    )
+)
+# A key is reported by name only, and only when it looks like a field name:
+# a letter first, at most 64 characters, no spaces or punctuation beyond `_`
+# and `.`, at most two dots, no run of four digits. A run of eight upper-case
+# letters and digits, or of eight lower-case letters and digits with a digit
+# in it, is serial shaped (EcoFlow serials are 16 such characters) and never
+# a camelCase field name.
+_KEY_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_.]{0,63}")
+_DIGIT_RUN = re.compile(r"[0-9]{4,}")
+_UPPER_RUN = re.compile(r"[A-Z0-9]{8,}")
+_LOWER_RUN = re.compile(r"[a-z0-9]{8,}")
+UNMAPPED_KEYS_PER_CALL_MAX = 64
+
+
+def _reportable_key_name(key: str) -> bool:
+    """Return True when a key may be shown by name in a diagnostics download."""
+    if not _KEY_NAME.fullmatch(key) or key.count(".") > 2:
+        return False
+    if _DIGIT_RUN.search(key) or _UPPER_RUN.search(key):
+        return False
+    return not any(
+        any(char.isdigit() for char in run) for run in _LOWER_RUN.findall(key)
+    )
+
+
+def unmapped_stream_quota_keys(raw: Any) -> tuple[list[str], list[str]]:
+    """Return the top-level keys of a Stream quota the parser does not read.
+
+    The first list holds at most 64 names that look like field names, sorted.
+    The second holds every other unread key: a name that looks like a serial
+    or not like a field name, and any name past the 64. That one is for
+    counting only and never leaves the process.
+    """
+    if not isinstance(raw, dict):
+        return [], []
+    names: list[str] = []
+    withheld: list[str] = []
+    for key in raw:
+        if not isinstance(key, str) or key in _STREAM_READ_KEYS:
+            continue
+        if len(names) < UNMAPPED_KEYS_PER_CALL_MAX and _reportable_key_name(key):
+            names.append(key)
+        else:
+            withheld.append(key)
+    names.sort()
+    return names, withheld
 
 
 def _feed_in_enabled(value: Any) -> bool | None:

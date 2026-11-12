@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.27.1] - 2026-11-11
 
+### Changed
+
+- The diagnostics download of a Stream in Standard Mode now lists the names of the keys in the device's push messages that the integration does not read, never their values. A `withheld` count gives the number of such keys whose names are not shown because they look like a serial number or not like a field name, or because the list was already full when they arrived (the count stops growing once the list is full), so a key the device did not send can be told apart from one that was left out of the list. This shows whether the device sends battery temperature, voltage and capacity in Standard Mode at all, which the quota snapshot in the download cannot answer. (Ref #702)
+
 ### Fixed
 
 - Backup Reserve of a Stream (`BK41` and the other BK models) now shows the value the device reports in Standard Mode instead of unknown. The quota the Developer API returns carried it all along and the integration did not read it. Battery temperature, voltage and capacity stay unknown in Standard Mode, because that quota does not contain them; the integration reads them in Enhanced Mode only. Thanks to @dariogobbi for the diagnostics. (Ref #702)

@@ -45,6 +45,7 @@ from .conftest import (
     MOCK_DELTA3_DEVICE,
     MOCK_DELTA_DEVICE,
     MOCK_POWEROCEAN_DEVICE,
+    MOCK_STREAM_DEVICE,
 )
 
 # ===========================================================================
@@ -461,6 +462,94 @@ class TestFirmwareDiagnostics:
         key = next(iter(firmware))
         assert "HJ31TESTSERIAL02" not in key
         assert firmware[key]["decoded"] == "v1.3.6.90"
+
+
+class TestStreamPushUnmappedKeysDiagnostics:
+    """Names of Stream push keys the parser drops (#702)."""
+
+    async def test_stream_lists_the_names(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_STREAM_DEVICE
+        )
+        coordinator._note_stream_push_unmapped_keys(
+            ["vol", "temp"], ["HJ31TESTDUMMY01"]
+        )
+
+        result = _device_diagnostics(coordinator)
+
+        assert result["stream_push_unmapped_keys"] == {
+            "count": 2,
+            "names": ["temp", "vol"],
+            "withheld": 1,
+        }
+
+    async def test_only_withheld_keys_still_show_the_section(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_STREAM_DEVICE
+        )
+        coordinator._note_stream_push_unmapped_keys([], ["HJ31TESTDUMMY01"])
+
+        result = _device_diagnostics(coordinator)
+
+        assert result["stream_push_unmapped_keys"] == {
+            "count": 0,
+            "names": [],
+            "withheld": 1,
+        }
+
+    async def test_enhanced_stream_has_no_section(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+    ) -> None:
+        enhanced_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, enhanced_config_entry, MOCK_STREAM_DEVICE
+        )
+        coordinator._note_stream_push_unmapped_keys(["temp"], [])
+
+        result = _device_diagnostics(coordinator)
+
+        assert "stream_push_unmapped_keys" not in result
+
+    async def test_stream_without_names_has_no_section(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_STREAM_DEVICE
+        )
+
+        result = _device_diagnostics(coordinator)
+
+        assert "stream_push_unmapped_keys" not in result
+
+    async def test_other_device_has_no_section(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_DELTA3_DEVICE
+        )
+        coordinator._note_stream_push_unmapped_keys(["temp"], [])
+
+        result = _device_diagnostics(coordinator)
+
+        assert "stream_push_unmapped_keys" not in result
 
 
 class TestDeltaThreeRawQuotaDiagnostics:
