@@ -1184,9 +1184,11 @@ _TOU_TASK_OPERATIONS = ("arm", "disarm", "power")
 def _tou_task_window(value: object) -> int:
     """Check one packed `start | end << 16` window, in minutes since midnight.
 
-    Refuses anything that cannot be a time of day, with the same bound the
-    read path applies in `_format_window`: an edge is a minute of the day,
-    0 to 1439. Not the device's own answer - no capture has ever shown a
+    Refuses anything that cannot be a time of day: an edge is a minute of the
+    day, 0 to 1439. The read path in `_format_window` is wider on the end half,
+    which may be 1440 (`24:00`, seen on #714), so a window that ends at
+    midnight is shown but not written back until a capture shows the device
+    accepting it. Not the device's own answer - no capture has ever shown a
     rejection, because no capture has ever tried a window outside a day.
     """
     if isinstance(value, bool) or not isinstance(value, int):

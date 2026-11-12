@@ -977,6 +977,9 @@ def _format_window(time_table: int | None) -> str | None:
     1230: a window from 20:00 to 20:30. The start half is anchored - the task
     began running between two reads bracketing 20:00 local - while the end
     half rests on the split rather than on a window that was watched closing.
+    The end may also be 1440, rendered `24:00` for a window that runs to
+    midnight: the schedule on #714 reads 22:30 to 24:00 in the app and carries
+    1350 | 1440 << 16. That is the only place 1440 is allowed.
     """
     if time_table is None:
         return None
@@ -989,12 +992,12 @@ def _format_window(time_table: int | None) -> str | None:
         # `00:00-00:00` on the entity. Zero and unset are kept apart
         # everywhere else on this message, and they are kept apart here.
         return None
-    if start >= _MINUTES_PER_DAY or end >= _MINUTES_PER_DAY:
-        # Minutes since midnight run 0 to 1439, so 1440 is one past the end of
-        # the day rather than the end of it. It could be meant as "until
-        # midnight", but no capture shows it, and rendering the unseen value
-        # as `24:00` would be a guess dressed as a reading. The whole window
-        # is refused, as it is for any other half that cannot be read.
+    if start >= _MINUTES_PER_DAY or end > _MINUTES_PER_DAY:
+        # A start runs 0 to 1439, an end 0 to 1440. The 1440 is seen only as an
+        # end ("until midnight", the #714 capture, shown as 22:30-24:00 in the
+        # app); no capture shows it as a start, and anything beyond it is not a
+        # minute of the day. The whole window is refused, as it is for any
+        # other half that cannot be read.
         return None
     return f"{start // 60:02d}:{start % 60:02d}-{end // 60:02d}:{end % 60:02d}"
 

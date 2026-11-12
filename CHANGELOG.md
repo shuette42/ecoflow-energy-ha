@@ -6,7 +6,8 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- PowerOcean schedules that the unit numbers above 8 (seen up to 18 on a PowerOcean Plus) now get their schedule entities. Until now every schedule with a number above 8 was dropped, so its controls never appeared. Thanks to @rhaschke for the debug log and for testing the larger limit. A newly created schedule can still show an unknown time window, which is tracked in #714 and not changed here. (Ref #714)
+- PowerOcean schedules that the unit numbers above 8 (seen up to 18 on a PowerOcean Plus) now get their schedule entities. Until now every schedule with a number above 8 was dropped, so its controls never appeared. Thanks to @rhaschke for the debug log and for testing the larger limit. A schedule whose time window is not set yet still shows unknown. (Ref #714)
+- A PowerOcean schedule or feed-to-grid schedule that runs until midnight now shows its time window, for example `22:30-24:00`, instead of unknown. Changing such a feed-to-grid schedule from Home Assistant is still refused, because no recording shows the unit accepting that end value. The unit reports the end as minute 1440, which the reading used to refuse. Thanks to @rhaschke for the diagnostic that carries the window. (Ref #714)
 
 ## [1.27.0] - 2026-11-08
 

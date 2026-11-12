@@ -277,14 +277,18 @@ def test_the_last_minute_of_the_day_is_still_a_window() -> None:
     assert _window(1200, 1439) == "20:00-23:59"
 
 
-def test_a_half_at_exactly_one_full_day_publishes_no_window() -> None:
-    """1440 is one past the end of the day, not the end of it.
+def test_an_end_at_exactly_midnight_is_a_window_to_24_00() -> None:
+    """1440 as the END is "until midnight" (#714: the app showed 22:30 to 24:00).
 
-    It may well be how a device expresses "until midnight", but none has been
-    seen doing it, and the arithmetic would render it as the hour `24:00`.
+    The captured block is the four bytes c68a802d, which is 1350 | 1440 << 16.
+    Only the end may be 1440: a start there, or an end past it, is refused.
     """
-    assert _window(1200, 1440) is None
+    assert _time_table(1350, 1440) == b64encode(bytes.fromhex("c68a802d")).decode()
+    assert _window(1350, 1440) == "22:30-24:00"
+    assert _window(0, 1440) == "00:00-24:00"
     assert _window(1440, 1230) is None
+    assert _window(1440, 1440) is None
+    assert _window(1200, 1441) is None
 
 
 def test_a_half_beyond_a_day_publishes_no_window() -> None:
