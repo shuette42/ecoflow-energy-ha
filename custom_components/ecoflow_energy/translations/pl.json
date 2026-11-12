@@ -468,6 +468,9 @@
       "mppt_pv4_power_w": {
         "name": "Moc łańcucha PV 4"
       },
+      "mppt_pv5_power_w": {
+        "name": "Moc łańcucha PV 5"
+      },
       "mppt_pv4_voltage_v": {
         "name": "Napięcie łańcucha PV 4"
       },
@@ -2823,6 +2826,42 @@
       },
       "other_vehicle_energy": {
         "name": "Energia zakończonych ładowań wallboxa (nieprzypisana)"
+      },
+      "battery_pack_soc_pct": {
+        "name": "SOC pakietu baterii"
+      },
+      "inverter_ac_l1_voltage_v": {
+        "name": "Napięcie falownika L1"
+      },
+      "inverter_ac_l1_current_a": {
+        "name": "Prąd falownika L1"
+      },
+      "inverter_ac_l1_power_w": {
+        "name": "Moc falownika L1"
+      },
+      "inverter_ac_l2_voltage_v": {
+        "name": "Napięcie falownika L2"
+      },
+      "inverter_ac_l2_current_a": {
+        "name": "Prąd falownika L2"
+      },
+      "inverter_ac_l2_power_w": {
+        "name": "Moc falownika L2"
+      },
+      "device_temperature_1_c": {
+        "name": "Temperatura urządzenia 1"
+      },
+      "device_temperature_2_c": {
+        "name": "Temperatura urządzenia 2"
+      },
+      "device_temperature_3_c": {
+        "name": "Temperatura urządzenia 3"
+      },
+      "device_temperature_4_c": {
+        "name": "Temperatura urządzenia 4"
+      },
+      "device_temperature_5_c": {
+        "name": "Temperatura urządzenia 5"
       }
     },
     "binary_sensor": {

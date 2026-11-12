@@ -294,6 +294,24 @@ def test_the_code_file_set_is_not_empty() -> None:
     assert len(_CODE_FILES) >= 100, len(_CODE_FILES)
 
 
+# Fixture JSON is tracked too, and a `source` field there once named a
+# capture under the private docs tree (#427). Same pattern as the code files.
+_FIXTURE_JSON_FILES = sorted((REPO_ROOT / "tests" / "fixtures").rglob("*.json"))
+
+
+@pytest.mark.parametrize(
+    "path", _FIXTURE_JSON_FILES, ids=lambda p: str(p.relative_to(REPO_ROOT))
+)
+def test_fixture_json_names_no_private_path(path: Path) -> None:
+    text = path.read_text(encoding="utf-8", errors="replace")
+    found = [match.group() for match in _PRIVATE_PATH_IN_CODE.finditer(text)]
+    assert not found, f"{path.relative_to(REPO_ROOT)}: {found[:5]}"
+
+
+def test_the_fixture_json_set_is_not_empty() -> None:
+    assert len(_FIXTURE_JSON_FILES) >= 10, len(_FIXTURE_JSON_FILES)
+
+
 def test_the_code_private_path_pattern_catches_its_sample() -> None:
     sample = "built from docs/captures/x.json, see docs/review/y.md"
     assert len(_PRIVATE_PATH_IN_CODE.findall(sample)) == 2

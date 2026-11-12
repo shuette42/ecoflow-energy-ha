@@ -121,6 +121,13 @@ DEVICE_TYPE_OCEAN2 = "ocean2"
 # block - is decoded by its own parser (`smart_panel_40_proto.py`) rather than a
 # routing entry.
 DEVICE_TYPE_SMART_PANEL_40 = "smart_panel_40"
+# OCEAN Pro inverter and battery (`HR51`, #427). Enhanced-only and read-only:
+# both recordings on record came over the app broker. It shares the panel's
+# six system figures on `cmd_func` 254 / cmd_id 21 (one table for both units)
+# and adds what only this unit sends - PV strings, the inverter AC port, the
+# battery pack's own heartbeat (32/177) - so it gets its own parser
+# (`ocean_pro_proto.py`) rather than a routing entry on the panel's type.
+DEVICE_TYPE_OCEAN_PRO = "ocean_pro"
 # DELTA Pro Ultra (`Y711`, #464). Enhanced-only and read-only: the frames on
 # record came over the app broker, and whether the Developer API answers for
 # this model has not been observed. Its `cmd_func` 2 headers (cmd_id 1 to 4)
@@ -402,6 +409,12 @@ _SN_PREFIX_MAP = {
     # (254/25) both decode, and grid/PV/battery close the panel's own power
     # balance exactly on multiple frames.
     "HR61": DEVICE_TYPE_SMART_PANEL_40,
+    # OCEAN Pro inverter and battery (#427). Mapped from two recordings of a
+    # live installation (52 frames plus a second day): the panel's six system
+    # figures decode on the shared 254/21 table and the pack heartbeat on
+    # 32/177. No `_SN_PREFIX_EXCLUDED_KEYS` entry: the type carries the
+    # difference to the panel.
+    "HR51": DEVICE_TYPE_OCEAN_PRO,
     # DELTA Pro Ultra (#464). Mapped from an owner's 66-frame recording whose
     # main-unit headers (2.1 to 2.4) decode on this model's own field
     # numbers. Without the prefix the unit is unknown on the account channel:
@@ -445,6 +458,8 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "RE42": "Ocean 2",
     "RE43": "Ocean 2 Plus",
     "HR61": "OCEAN Smart Electrical Panel 40",
+    # The name the EcoFlow app shows for the unit (owner screenshots on #427).
+    "HR51": "OCEAN Pro",
     "Y711": "DELTA Pro Ultra",
     "HD31": "Smart Home Panel 2",
     "HZ31": "Solar Tracker",
@@ -611,7 +626,7 @@ def get_device_type(product_name: str, sn: str = "") -> str:
     DEVICE_TYPE_SMARTPLUG, DEVICE_TYPE_STREAM, DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_POWERSTREAM, DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_SOLAR_TRACKER, DEVICE_TYPE_WAVE3, DEVICE_TYPE_POWERPULSE2,
-    DEVICE_TYPE_OCEAN2, DEVICE_TYPE_SMART_PANEL_40,
+    DEVICE_TYPE_OCEAN2, DEVICE_TYPE_SMART_PANEL_40, DEVICE_TYPE_OCEAN_PRO,
     DEVICE_TYPE_DELTA_PRO_ULTRA, DEVICE_TYPE_SMART_HOME_PANEL_2, or
     DEVICE_TYPE_UNKNOWN.
 

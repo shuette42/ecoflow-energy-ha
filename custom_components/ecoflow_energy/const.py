@@ -19,6 +19,7 @@ from .ecoflow.const import (  # noqa: E402
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_DELTA_PRO_ULTRA,
     DEVICE_TYPE_OCEAN2,
+    DEVICE_TYPE_OCEAN_PRO,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
@@ -538,6 +539,7 @@ DEVICE_TYPE_DISPLAY_NAMES: dict[str, str] = {
     DEVICE_TYPE_POWERPULSE2: "PowerPulse 2",
     DEVICE_TYPE_OCEAN2: "Ocean 2",
     DEVICE_TYPE_SMART_PANEL_40: "OCEAN Smart Electrical Panel 40",
+    DEVICE_TYPE_OCEAN_PRO: "OCEAN Pro",
     DEVICE_TYPE_DELTA_PRO_ULTRA: "DELTA Pro Ultra",
     DEVICE_TYPE_SMART_HOME_PANEL_2: "Smart Home Panel 2",
 }
@@ -554,6 +556,7 @@ ENHANCED_ONLY_DEVICE_TYPES: frozenset[str] = frozenset(
         DEVICE_TYPE_POWERPULSE2,
         DEVICE_TYPE_OCEAN2,
         DEVICE_TYPE_SMART_PANEL_40,
+        DEVICE_TYPE_OCEAN_PRO,
         DEVICE_TYPE_DELTA_PRO_ULTRA,
         DEVICE_TYPE_SMART_HOME_PANEL_2,
         # ES22 and ES21 only. The type has a protobuf parser and no HTTP one,
@@ -9124,12 +9127,11 @@ OCEAN2_SWITCHES: list[EcoFlowSwitchDef] = [
 ]
 
 
-# OCEAN Smart Electrical Panel 40 (`HR61`). Enhanced mode only: the one
-# capture on record came over the app channel. Read-only, and no energy
-# counters: none appear in the panel's push, and integrating power locally
-# would invent a second source for a figure the panel may report elsewhere.
-# Per-circuit entities are created from the circuits the panel reports.
-SMARTPANEL40_SENSORS: list[EcoFlowSensorDef] = [
+# The six system figures the OCEAN Smart Electrical Panel 40 (`HR61`) and the
+# OCEAN Pro (`HR51`) both report on the same 254/21 fields: one set of
+# definitions for both units, so the two device pages agree. The first five
+# lead both lists; backup reserve keeps its own place in each.
+CMSCORE_SENSORS: list[EcoFlowSensorDef] = [
     # Signed: positive = import from grid, negative = export.
     EcoFlowSensorDef(
         "grid_power_w",
@@ -9188,6 +9190,28 @@ SMARTPANEL40_SENSORS: list[EcoFlowSensorDef] = [
         translation_key="soc_pct",
         enhanced_only=True,
     ),
+]
+_CMS_BACKUP_RESERVE_SENSOR = EcoFlowSensorDef(
+    "backup_reserve_pct",
+    "Backup Reserve",
+    "%",
+    None,
+    "measurement",
+    "mdi:battery-lock",
+    entity_category="diagnostic",
+    suggested_display_precision=0,
+    disabled_by_default=True,
+    enhanced_only=True,
+)
+
+
+# OCEAN Smart Electrical Panel 40 (`HR61`). Enhanced mode only: the one
+# capture on record came over the app channel. Read-only, and no energy
+# counters: none appear in the panel's push, and integrating power locally
+# would invent a second source for a figure the panel may report elsewhere.
+# Per-circuit entities are created from the circuits the panel reports.
+SMARTPANEL40_SENSORS: list[EcoFlowSensorDef] = [
+    *CMSCORE_SENSORS,
     EcoFlowSensorDef(
         "grid_l1_voltage_v",
         "Grid L1 Voltage",
@@ -9300,18 +9324,7 @@ SMARTPANEL40_SENSORS: list[EcoFlowSensorDef] = [
         disabled_by_default=True,
         enhanced_only=True,
     ),
-    EcoFlowSensorDef(
-        "backup_reserve_pct",
-        "Backup Reserve",
-        "%",
-        None,
-        "measurement",
-        "mdi:battery-lock",
-        entity_category="diagnostic",
-        suggested_display_precision=0,
-        disabled_by_default=True,
-        enhanced_only=True,
-    ),
+    _CMS_BACKUP_RESERVE_SENSOR,
     # Grid-code block, sent once per full state: the nominal values the
     # panel is configured for, not live measurements.
     EcoFlowSensorDef(
@@ -9445,6 +9458,189 @@ SMARTPANEL40_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
         label_key=f"circuit_{_circuit}_name",
     )
     for _circuit in range(1, SMARTPANEL40_CIRCUIT_COUNT + 1)
+]
+
+
+# OCEAN Pro inverter and battery (`HR51`, #427). Enhanced mode only and
+# read-only: both recordings came over the app channel. The six system figures
+# are the panel's own definitions (`CMSCORE_SENSORS`), so a home with both
+# units shows the same Battery SOC figure on both device pages. The battery's
+# lifetime counters come from the pack's own heartbeat; there are no PV, grid
+# or load energy counters, for the same reason as on the panel.
+def _build_ocean_pro_pv_string_sensor(string: int) -> EcoFlowSensorDef:
+    return EcoFlowSensorDef(
+        f"pv_string_{string}_power_w",
+        f"PV String {string} Power",
+        "W",
+        "power",
+        "measurement",
+        "mdi:solar-panel",
+        suggested_display_precision=0,
+        # The PowerOcean's per-string labels, extended by a fifth string.
+        translation_key=f"mppt_pv{string}_power_w",
+        enhanced_only=True,
+    )
+
+
+def _build_ocean_pro_inverter_leg_sensors(leg: int) -> list[EcoFlowSensorDef]:
+    l_ = f"inverter_ac_l{leg}"
+    return [
+        EcoFlowSensorDef(
+            f"{l_}_voltage_v",
+            f"Inverter L{leg} Voltage",
+            "V",
+            "voltage",
+            "measurement",
+            "mdi:sine-wave",
+            suggested_display_precision=0,
+            enhanced_only=True,
+        ),
+        EcoFlowSensorDef(
+            f"{l_}_current_a",
+            f"Inverter L{leg} Current",
+            "A",
+            "current",
+            "measurement",
+            "mdi:current-ac",
+            suggested_display_precision=2,
+            enhanced_only=True,
+        ),
+        # Signed as the unit reports it: negative while the inverter delivers.
+        EcoFlowSensorDef(
+            f"{l_}_power_w",
+            f"Inverter L{leg} Power",
+            "W",
+            "power",
+            "measurement",
+            "mdi:flash",
+            suggested_display_precision=0,
+            enhanced_only=True,
+        ),
+    ]
+
+
+def _build_ocean_pro_device_temperature_sensor(n: int) -> EcoFlowSensorDef:
+    return EcoFlowSensorDef(
+        f"device_temperature_{n}_c",
+        f"Device Temperature {n}",
+        "°C",
+        "temperature",
+        "measurement",
+        "mdi:thermometer",
+        entity_category="diagnostic",
+        suggested_display_precision=1,
+        disabled_by_default=True,
+        enhanced_only=True,
+    )
+
+
+OCEANPRO_SENSORS: list[EcoFlowSensorDef] = [
+    *CMSCORE_SENSORS,
+    *[_build_ocean_pro_pv_string_sensor(n) for n in range(1, 6)],
+    *_build_ocean_pro_inverter_leg_sensors(1),
+    *_build_ocean_pro_inverter_leg_sensors(2),
+    EcoFlowSensorDef(
+        "battery_stored_energy_wh",
+        "Battery Remaining Energy",
+        "Wh",
+        "energy_storage",
+        "measurement",
+        "mdi:battery-clock",
+        suggested_display_precision=0,
+        translation_key="batt_remaining_wh",
+        enhanced_only=True,
+    ),
+    # Lifetime counters of the battery pack, Wh on the wire, published in kWh
+    # only when above zero and not the unset placeholder (see the parser).
+    EcoFlowSensorDef(
+        "batt_charge_energy_kwh",
+        "Battery Charge Energy",
+        "kWh",
+        "energy",
+        "total_increasing",
+        "mdi:battery-charging",
+        suggested_display_precision=2,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "batt_discharge_energy_kwh",
+        "Battery Discharge Energy",
+        "kWh",
+        "energy",
+        "total_increasing",
+        "mdi:battery",
+        suggested_display_precision=2,
+        enhanced_only=True,
+    ),
+    _CMS_BACKUP_RESERVE_SENSOR,
+    # The pack's own figures. Battery SOC above is the system figure (254/21
+    # field 262); the pack's SoC is a separate reading, not a fallback for it,
+    # so it carries no battery device class.
+    EcoFlowSensorDef(
+        "battery_pack_soc_pct",
+        "Battery Pack SOC",
+        "%",
+        None,
+        "measurement",
+        "mdi:battery",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "battery_pack_soh_pct",
+        "Battery SOH",
+        "%",
+        None,
+        "measurement",
+        "mdi:battery-heart-variant",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        translation_key="bp_soh_pct",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "battery_pack_cycles",
+        "Battery Cycles",
+        None,
+        None,
+        "total_increasing",
+        "mdi:battery-sync",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        translation_key="bp_cycles",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "grid_frequency_hz",
+        "Grid Frequency",
+        "Hz",
+        "frequency",
+        "measurement",
+        "mdi:sine-wave",
+        entity_category="diagnostic",
+        suggested_display_precision=2,
+        disabled_by_default=True,
+        translation_key="pcs_ac_freq_hz",
+        enhanced_only=True,
+    ),
+    EcoFlowSensorDef(
+        "inverter_temperature_c",
+        "Inverter Temp",
+        "°C",
+        "temperature",
+        "measurement",
+        "mdi:thermometer",
+        entity_category="diagnostic",
+        suggested_display_precision=0,
+        disabled_by_default=True,
+        translation_key="inv_out_temp_c",
+        enhanced_only=True,
+    ),
+    *[_build_ocean_pro_device_temperature_sensor(n) for n in range(1, 6)],
 ]
 
 

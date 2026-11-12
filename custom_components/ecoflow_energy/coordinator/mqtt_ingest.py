@@ -13,6 +13,7 @@ from ..const import (
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_DELTA_PRO_ULTRA,
     DEVICE_TYPE_OCEAN2,
+    DEVICE_TYPE_OCEAN_PRO,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
@@ -47,6 +48,7 @@ from ..ecoflow.parsers.delta3_proto import (
 from ..ecoflow.parsers.delta_http import parse_delta_http_quota
 from ..ecoflow.parsers.delta_pro_ultra_proto import parse_delta_pro_ultra_message
 from ..ecoflow.parsers.ocean2_proto import parse_ocean2_proto_message
+from ..ecoflow.parsers.ocean_pro_proto import parse_hr51_proto_message
 from ..ecoflow.parsers.powerocean_http import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
     HEATING_ROD_BARE_SHARE_REPORT_KEY,
@@ -664,6 +666,10 @@ class MqttIngestMixin(_Base):
                 # `_device_data.update()` is the merge that keeps the rest.
                 if self.device_type == DEVICE_TYPE_SMART_PANEL_40:
                     return parse_hr61_proto_message(payload)
+                # OCEAN Pro (#427): the panel's 254/21 table plus its own
+                # fields and the pack heartbeat, incremental the same way.
+                if self.device_type == DEVICE_TYPE_OCEAN_PRO:
+                    return parse_hr51_proto_message(payload)
                 # DELTA Pro Ultra (#464): its own `cmd_func` 2 headers, and
                 # incremental as well. A frame with nothing the parser reads
                 # returns None, the caller's "nothing to merge" signal.
@@ -818,6 +824,10 @@ class MqttIngestMixin(_Base):
                 # `_device_data.update()` is the merge that keeps the rest.
                 if self.device_type == DEVICE_TYPE_SMART_PANEL_40:
                     return parse_hr61_proto_message(payload)
+                # OCEAN Pro (#427): the panel's 254/21 table plus its own
+                # fields and the pack heartbeat, incremental the same way.
+                if self.device_type == DEVICE_TYPE_OCEAN_PRO:
+                    return parse_hr51_proto_message(payload)
                 # DELTA Pro Ultra (#464): its own `cmd_func` 2 headers, and
                 # incremental as well. A frame with nothing the parser reads
                 # returns None, the caller's "nothing to merge" signal.

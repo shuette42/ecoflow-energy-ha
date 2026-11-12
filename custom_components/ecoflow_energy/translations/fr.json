@@ -468,6 +468,9 @@
       "mppt_pv4_power_w": {
         "name": "Puissance chaîne PV 4"
       },
+      "mppt_pv5_power_w": {
+        "name": "Puissance chaîne PV 5"
+      },
       "mppt_pv4_voltage_v": {
         "name": "Tension chaîne PV 4"
       },
@@ -2823,6 +2826,42 @@
       },
       "other_vehicle_energy": {
         "name": "Énergie des charges terminées de la wallbox (non attribuée)"
+      },
+      "battery_pack_soc_pct": {
+        "name": "SOC pack batterie"
+      },
+      "inverter_ac_l1_voltage_v": {
+        "name": "Tension onduleur L1"
+      },
+      "inverter_ac_l1_current_a": {
+        "name": "Courant onduleur L1"
+      },
+      "inverter_ac_l1_power_w": {
+        "name": "Puissance onduleur L1"
+      },
+      "inverter_ac_l2_voltage_v": {
+        "name": "Tension onduleur L2"
+      },
+      "inverter_ac_l2_current_a": {
+        "name": "Courant onduleur L2"
+      },
+      "inverter_ac_l2_power_w": {
+        "name": "Puissance onduleur L2"
+      },
+      "device_temperature_1_c": {
+        "name": "Température de l'appareil 1"
+      },
+      "device_temperature_2_c": {
+        "name": "Température de l'appareil 2"
+      },
+      "device_temperature_3_c": {
+        "name": "Température de l'appareil 3"
+      },
+      "device_temperature_4_c": {
+        "name": "Température de l'appareil 4"
+      },
+      "device_temperature_5_c": {
+        "name": "Température de l'appareil 5"
       }
     },
     "binary_sensor": {

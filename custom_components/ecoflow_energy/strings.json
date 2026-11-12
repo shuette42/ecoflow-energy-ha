@@ -468,6 +468,9 @@
       "mppt_pv4_power_w": {
         "name": "PV String 4 Power"
       },
+      "mppt_pv5_power_w": {
+        "name": "PV String 5 Power"
+      },
       "mppt_pv4_voltage_v": {
         "name": "PV String 4 Voltage"
       },
@@ -2823,6 +2826,42 @@
       },
       "other_vehicle_energy": {
         "name": "Wallbox Completed Charging Energy Unassigned"
+      },
+      "battery_pack_soc_pct": {
+        "name": "Battery Pack SOC"
+      },
+      "inverter_ac_l1_voltage_v": {
+        "name": "Inverter L1 Voltage"
+      },
+      "inverter_ac_l1_current_a": {
+        "name": "Inverter L1 Current"
+      },
+      "inverter_ac_l1_power_w": {
+        "name": "Inverter L1 Power"
+      },
+      "inverter_ac_l2_voltage_v": {
+        "name": "Inverter L2 Voltage"
+      },
+      "inverter_ac_l2_current_a": {
+        "name": "Inverter L2 Current"
+      },
+      "inverter_ac_l2_power_w": {
+        "name": "Inverter L2 Power"
+      },
+      "device_temperature_1_c": {
+        "name": "Device Temperature 1"
+      },
+      "device_temperature_2_c": {
+        "name": "Device Temperature 2"
+      },
+      "device_temperature_3_c": {
+        "name": "Device Temperature 3"
+      },
+      "device_temperature_4_c": {
+        "name": "Device Temperature 4"
+      },
+      "device_temperature_5_c": {
+        "name": "Device Temperature 5"
       }
     },
     "binary_sensor": {
