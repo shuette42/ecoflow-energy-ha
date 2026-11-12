@@ -1,12 +1,18 @@
 # Smart Meter - Entity Reference
 
-Full list of all entities created for the EcoFlow Smart Meter (`BK21` series).
+Full list of all entities created for the EcoFlow Smart Meter (`BK21`) and Smart Meter Dual CT (`ES81`).
 
 **Totals:** 18 sensors, 3 binary sensors
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Smart Meter > Entities**.
 
 The meter is read-only. It reports through the account connection only, so it needs **Enhanced Mode**; the Developer API answers for it with an empty response, which is why a Standard Mode setup skips it and says so in the log.
+
+## Smart Meter Dual CT (ES81)
+
+The Dual CT uses the same 18 sensors and 3 binary sensors listed below and appears as its own Home Assistant device named Smart Meter Dual CT. It requires **Enhanced Mode**. No entities from this set are excluded for ES81; Power Factor follows the unknown-value handling described below. This support covers grid measurements; the second CT channel and Wi-Fi signal diagnostics are not exposed.
+
+The native import and export counters count the directions of individual phases before whole-house netting and can differ from a billing meter that nets phases first. Choose one source for overlapping grid readings when a linked STREAM also exposes the meter's measurements.
 
 The phases are keyed L1, L2 and L3 on the wire and lettered A, B and C in the EcoFlow app. The entity names follow the app.
 
@@ -61,6 +67,8 @@ None. The meter measures and reports; it has nothing to set.
 ---
 
 ## Notes
+
+The recording notes below describe the original BK21 qualification.
 
 **Where the readings come from.** Support was built from a recording an owner took on 2026-08-31 with the EcoFlow app open beside it, and the values above match what the app showed at that moment: 407 W total, 318 W on phase B and 89 W on phase C with phase A idle, and 1345 Wh imported. The meter sends a short frame every few seconds and a full one less often; voltages, currents, the power factor and the connection flags only appear in the full frames, so those entities update more slowly than the power readings. A second recording of 18 hours and 40 minutes spanning local midnight, together with a short deliberate export test, settled the six energy counters: none of them reset at midnight, and the export test moved only the export counter and the exporting phase's net figure.
 

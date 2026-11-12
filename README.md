@@ -55,6 +55,7 @@
 | **STREAM AC 5000** | `ES22` | Enhanced only | 64 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 3 optional | ~2 s |
 | **STREAM 5000** | `ES21` | Enhanced only | 64 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 3 optional | ~2 s |
 | **Smart Meter** | `BK21` | Enhanced only | 18 + 3 binary | none, read-only | 2 | ~3 s |
+| **Smart Meter Dual CT** | `ES81` | Enhanced only | 18 + 3 binary | none, read-only | 2 | seconds (power), slower full reports |
 | **Solar Tracker** | `HZ31` `S02F` | Enhanced only | 6 | none, read-only for now | none | ~3 s |
 | **WAVE 3** | `AC71` | Enhanced only | 18 + 5 binary | 4 switches · 5 numbers · 5 selects · 1 climate | 1 | ~2 s / 120 s |
 | **PowerPulse 2** | `C376` `C374` | Enhanced only | 21 + 1 binary | 2 buttons · 1 number with no PowerOcean, plus 5 numbers · 2 selects · 5 switches with exactly one PowerOcean in the entry | 1 | on change, refreshed after 20 min |
@@ -216,7 +217,7 @@ Already running a different EcoFlow integration? It can stay installed while you
 |:---|:---|:---|:---|
 | **Connection** | EcoFlow cloud (HTTPS polling + MQTT) | EcoFlow cloud (WSS MQTT) | Your network, Modbus/TCP, no cloud |
 | **Credentials** | Access Key + Secret Key ([Developer Portal](https://developer.ecoflow.com)) | EcoFlow email + password (same as mobile app) | None. EcoFlow support must enable Modbus on the inverter first |
-| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R373`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C371`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `RE43`, `HR61`, `Y711`, `HD31`, `R655`, `R631`). `R611` is untested in Standard Mode | All supported devices | Three-phase PowerOcean only |
+| **Devices** | All except the Enhanced-only serials (`J327`, `J32D`, `J32E`, `R371`, `R372`, `R373`, `R374`, `HJ3C`, `BK01`, `BK21`, `ES81`, `ES21`, `ES22`, `HZ31`, `S02F`, `AC71`, `C371`, `C374`, `C376`, `RE11`, `RE17`, `RE41`, `RE42`, `RE43`, `HR61`, `Y711`, `HD31`, `R655`, `R631`). `R611` is untested in Standard Mode | All supported devices | Three-phase PowerOcean only |
 | **Update rate** | ~30 s HTTP polling (+ MQTT push for Delta/Smart Plug) | ~2-4 s real-time via WSS MQTT | ~2 s polling |
 | **Delta 2 Max / Smart Plug controls** | All switches and numbers | All switches and numbers | Not applicable |
 | **Delta 3 controls** | Switches and most numbers; the screen and idle shutdowns and the AC charge power need Enhanced Mode | All switches, numbers and selects | Not applicable |

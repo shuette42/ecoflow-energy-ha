@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [1.27.1] - 2026-11-11
 
+### Added
+
+- Smart Meter Dual CT (`ES81`) is now available as its own read-only device in Enhanced Mode, using the existing Smart Meter sensors and native energy counters, confirmed on one unit. Hardware recordings and reference measurements provided by @uysy. (Ref #596)
+
 ### Fixed
 
 - PowerOcean schedules that the unit numbers above 8 (seen up to 18 on a PowerOcean Plus) now get their schedule entities. Until now every schedule with a number above 8 was dropped, so its controls never appeared. Thanks to @rhaschke for the debug log and for testing the larger limit. A newly created schedule can still show an unknown time window, which is tracked in #714 and not changed here. (Ref #714)

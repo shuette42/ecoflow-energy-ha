@@ -500,10 +500,16 @@ class TestUnsupportedDeviceSkip:
         ("sn", "device_type", "label"),
         [
             ("BK21TEST00000001", "smart_meter", "Smart Meter"),
+            ("ES81TEST00000001", "smart_meter", "Smart Meter"),
             ("ES22TEST00000001", "stream_ac5000", "STREAM AC 5000"),
             ("HD31TEST00000001", "smart_home_panel_2", "Smart Home Panel 2"),
         ],
-        ids=["smart_meter", "stream_ac5000", "smart_home_panel_2"],
+        ids=[
+            "smart_meter",
+            "smart_meter_dual",
+            "stream_ac5000",
+            "smart_home_panel_2",
+        ],
     )
     async def test_developer_keys_enhanced_only_device_is_skipped_without_probe(
         self,

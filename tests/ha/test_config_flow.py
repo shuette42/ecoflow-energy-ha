@@ -240,6 +240,14 @@ SMART_METER_DEVICE = {
     "online": 1,
 }
 
+SMART_METER_DUAL_DEVICE = {
+    "sn": "ES81TEST00000001",
+    "name": "Smart Meter Dual CT",
+    "product_name": "",
+    "device_type": "smart_meter",
+    "online": 1,
+}
+
 SOLAR_TRACKER_DEVICE = {
     "sn": "HZ31TEST00000001",
     "name": "Solar Tracker",
@@ -312,6 +320,11 @@ ENHANCED_ONLY_DEVICE_CASES = [
         SMART_METER_DEVICE,
         "Smart Meter (0001) (BK21...0001) - requires Enhanced Mode",
         id="smart_meter",
+    ),
+    pytest.param(
+        SMART_METER_DUAL_DEVICE,
+        "Smart Meter Dual CT (0001) (ES81...0001) - requires Enhanced Mode",
+        id="smart_meter_dual",
     ),
     pytest.param(
         SOLAR_TRACKER_DEVICE,

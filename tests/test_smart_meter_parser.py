@@ -1,9 +1,10 @@
-"""Tests for the EcoFlow Smart Meter (BK21) protobuf parser.
+"""Tests for the shared EcoFlow Smart Meter (BK21 and ES81) protobuf parser.
 
-Every expectation below is a number the reporter's meter put on the wire on
-2026-08-31 (#331). They are written out per frame rather than recomputed
-from the parser, because a test that derives its expectation from the code
-under test holds for any field map.
+The BK21 expectations are readings the reporter's meter put on the wire on
+2026-08-31 (#331); the ES81 readings are from the capture of 2026-11-09.
+They are written out per frame rather than recomputed from the parser,
+because a test that derives its expectation from the code under test
+holds for any field map.
 """
 
 from __future__ import annotations
@@ -27,6 +28,9 @@ from ecoflow_energy.ecoflow.proto_encoding import (
 
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "smart_meter" / "bk21_frames_issue331.json"
+)
+ES81_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "smart_meter" / "es81_frames_20261109.json"
 )
 STREAM_FIXTURE = (
     Path(__file__).parent / "fixtures" / "stream" / "bk01_capture_masked.json"
@@ -745,3 +749,61 @@ class TestExportFill:
         assert result["grid_l1_net_energy_wh"] == 0.0
         assert result["grid_l2_net_energy_wh"] == 0.0
         assert result["grid_l3_net_energy_wh"] == 0.0
+
+
+# Frozen readings checked against the captured wire fields, including nested
+# record 773 children 1/2/3/4/6/7. These expectations never call the parser.
+_ES81_EXPECTED: dict[str, dict[str, Any]] = {
+    "full_report": {
+        "grid_w": 8.331795692443848,
+        "grid_power_factor": None,
+        "grid_l3_voltage_v": 240.3419952392578,
+        "grid_l3_w": 66.92192077636719,
+        "grid_l1_net_energy_wh": 24005.0,
+        "grid_l2_net_energy_wh": 10942.0,
+        "grid_l3_net_energy_wh": 16168.0,
+        "grid_import_energy_wh": 63164.0,
+        "grid_export_energy_wh": 12049.0,
+        "grid_net_energy_wh": 51115.0,
+        "grid_l3_current_a": 1.028925895690918,
+        "grid_l1_voltage_v": 239.81448364257812,
+        "grid_l2_voltage_v": 239.847900390625,
+        "grid_l1_current_a": -0.824674665927887,
+        "grid_l2_current_a": 0.4491105079650879,
+        "grid_l1_w": -82.11643981933594,
+        "grid_l2_w": 23.52631187438965,
+        "grid_connection_state": "grid_in",
+        "grid_l1_connected": True,
+        "grid_l2_connected": True,
+        "grid_l3_connected": True,
+    },
+    "power_only": {
+        "grid_w": 3.2872917652130127,
+        "grid_l3_w": 35.69029235839844,
+        "grid_l1_w": -56.26542282104492,
+        "grid_l2_w": 23.8624210357666,
+    },
+    "counter_record": {
+        "grid_w": 3.4647202491760254,
+        "grid_l3_w": 34.967491149902344,
+        "grid_l1_net_energy_wh": 24012.0,
+        "grid_l2_net_energy_wh": 10940.0,
+        "grid_l3_net_energy_wh": 16163.0,
+        "grid_import_energy_wh": 63157.0,
+        "grid_export_energy_wh": 12042.0,
+        "grid_net_energy_wh": 51115.0,
+        "grid_l1_w": -54.74516296386719,
+        "grid_l2_w": 23.24239158630371,
+    },
+}
+
+
+class TestES81RealFrames:
+    @pytest.mark.parametrize("frame", _frames(ES81_FIXTURE), ids=lambda f: f["at"])
+    def test_the_shared_parser_decodes_the_real_report(
+        self, frame: dict[str, Any]
+    ) -> None:
+        assert frame["device_sn"] == "ES81"
+        payload = bytes.fromhex(frame["hex"])
+        assert len(payload) == frame["size"]
+        _assert_matches(parse_smart_meter_message(payload), _ES81_EXPECTED[frame["at"]])

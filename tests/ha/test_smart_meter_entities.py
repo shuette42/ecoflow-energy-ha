@@ -1,4 +1,4 @@
-"""Entity-set tests for the EcoFlow Smart Meter (BK21).
+"""Entity-set tests for the shared EcoFlow Smart Meter (BK21 and ES81).
 
 The parser tests prove the field map against the reporter's capture. These
 run one of the same frames through the coordinator, because the failure this
@@ -17,8 +17,11 @@ import binascii
 import json
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
+import pytest
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.ecoflow_energy.binary_sensor import (
@@ -34,6 +37,7 @@ from custom_components.ecoflow_energy.const import (
     CONF_USER_ID,
     DEVICE_TYPE_SMART_METER,
     DEVICE_TYPE_STREAM,
+    DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     MODE_ENHANCED,
     SMARTMETER_BINARY_SENSORS,
@@ -50,6 +54,13 @@ from custom_components.ecoflow_energy.ecoflow.const import (
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
 from .conftest import add_entities_collector
+
+ES81_CAPTURE = (
+    Path(__file__).parent.parent
+    / "fixtures"
+    / "smart_meter"
+    / "es81_frames_20261109.json"
+)
 
 CAPTURE = (
     Path(__file__).parent.parent
@@ -502,3 +513,162 @@ class TestSmartMeterDiagnostics:
         diag = await async_get_config_entry_diagnostics(hass, entry)
 
         assert "raw_quota" not in diag["devices"][0]
+
+
+class TestES81SharedSmartMeter:
+    """An ES81 serial must select the existing meter path end to end."""
+
+    @staticmethod
+    def _coordinator(
+        hass: HomeAssistant,
+    ) -> tuple[MockConfigEntry, EcoFlowDeviceCoordinator]:
+        # A stored unknown device must be reclassified from its serial; setting
+        # smart_meter here would hide the missing prefix that this change fixes.
+        device = {
+            "sn": "ES81TEST00000001",
+            "name": "",
+            "product_name": "",
+            "device_type": DEVICE_TYPE_UNKNOWN,
+            "online": 1,
+        }
+        entry = _entry(device)
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, device)
+        assert coordinator.device_type == DEVICE_TYPE_SMART_METER
+        hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {device["sn"]: coordinator}
+        return entry, coordinator
+
+    @staticmethod
+    async def _feed(
+        hass: HomeAssistant,
+        coordinator: EcoFlowDeviceCoordinator,
+        shape: str,
+        topic: str,
+    ) -> None:
+        frames = json.loads(ES81_CAPTURE.read_text())["frames"]
+        frame = next(frame for frame in frames if frame["at"] == shape)
+        coordinator._on_mqtt_message(topic, bytes.fromhex(frame["hex"]))
+        await hass.async_block_till_done()
+
+    @pytest.mark.parametrize("topic_kind", ["property", "get_reply"])
+    async def test_real_reports_reach_shared_entities_and_survive_sparse_updates(
+        self, hass: HomeAssistant, topic_kind: str
+    ) -> None:
+        entry, coordinator = self._coordinator(hass)
+        sn = coordinator.device_sn
+        topic = (
+            f"/app/device/property/{sn}"
+            if topic_kind == "property"
+            else f"/app/user123/{sn}/thing/property/get_reply"
+        )
+        await self._feed(hass, coordinator, "counter_record", topic)
+        assert coordinator.data["grid_import_energy_wh"] == 63157.0
+        assert coordinator.data["grid_export_energy_wh"] == 12042.0
+        await self._feed(hass, coordinator, "full_report", topic)
+
+        sensors: list[Any] = []
+        binaries: list[Any] = []
+        await sensor_setup(hass, entry, add_entities_collector(sensors))
+        await binary_sensor_setup(hass, entry, add_entities_collector(binaries))
+        values = {
+            entity._definition.key: entity.native_value
+            for entity in sensors
+            if hasattr(entity, "_definition")
+        }
+        assert len(sensors) == 20  # 18 meter sensors and the two common diagnostics.
+        assert set(values) == {definition.key for definition in SMARTMETER_SENSORS}
+        assert {entity._key for entity in sensors if hasattr(entity, "_key")} == {
+            "mqtt_status",
+            "connection_mode",
+        }
+        assert values["grid_w"] == 8
+        assert values["grid_l1_w"] == -82
+        assert values["grid_l1_current_a"] == -0.82
+        assert values["grid_l2_voltage_v"] == 239.8
+        assert values["grid_import_energy_wh"] == 63164
+        assert values["grid_export_energy_wh"] == 12049
+        assert values["grid_net_energy_wh"] == 51115
+        assert values["grid_power_factor"] is None
+        assert values["grid_connection_state"] == "grid_in"
+        assert len(binaries) == 3
+        assert {entity._definition.key: entity.is_on for entity in binaries} == {
+            "grid_l1_connected": True,
+            "grid_l2_connected": True,
+            "grid_l3_connected": True,
+        }
+
+        # Replaying the short captured shape after the full one tests merge
+        # semantics, not capture chronology: missing fields must not zero it.
+        await self._feed(hass, coordinator, "power_only", topic)
+        after = {
+            entity._definition.key: entity.native_value
+            for entity in sensors
+            if hasattr(entity, "_definition")
+        }
+        assert after["grid_w"] == 3
+        assert after["grid_l1_w"] == -56
+        for key in values.keys() - {"grid_w", "grid_l1_w", "grid_l2_w", "grid_l3_w"}:
+            assert after[key] == values[key], key
+
+        diag = await async_get_config_entry_diagnostics(hass, entry)
+        assert diag["skipped_devices"] == []
+        assert len(diag["devices"]) == 1
+        assert diag["devices"][0]["device_sn"].startswith("ES81")
+        assert "grid_l1_current_a" in diag["devices"][0]["data_keys"]
+
+    async def test_real_counters_use_the_shared_sensor_restore_contract(
+        self, hass: HomeAssistant
+    ) -> None:
+        entry, coordinator = self._coordinator(hass)
+        topic = f"/app/device/property/{coordinator.device_sn}"
+        await self._feed(hass, coordinator, "full_report", topic)
+        original: list[Any] = []
+        await sensor_setup(hass, entry, add_entities_collector(original))
+        counters = {
+            "grid_l1_net_energy_wh": 24005,
+            "grid_l2_net_energy_wh": 10942,
+            "grid_l3_net_energy_wh": 16168,
+            "grid_import_energy_wh": 63164,
+            "grid_export_energy_wh": 12049,
+            "grid_net_energy_wh": 51115,
+        }
+        stored = {
+            entity._definition.key: entity.extra_restore_state_data
+            for entity in original
+            if hasattr(entity, "_definition") and entity._definition.key in counters
+        }
+
+        # Restarted coordinator has only the real sparse power report. The
+        # missing counters are restored by HA sensors, never integrated from W.
+        restarted = EcoFlowDeviceCoordinator(hass, entry, entry.data[CONF_DEVICES][0])
+        hass.data[DOMAIN][entry.entry_id] = {restarted.device_sn: restarted}
+        await self._feed(hass, restarted, "power_only", topic)
+        restored: list[Any] = []
+        await sensor_setup(hass, entry, add_entities_collector(restored))
+        assert not counters.keys() & restarted.data.keys()
+        for entity in restored:
+            if (
+                not hasattr(entity, "_definition")
+                or entity._definition.key not in counters
+            ):
+                continue
+            key = entity._definition.key
+            saved = stored[key]
+            assert saved is not None
+            roundtrip = type(saved).from_dict(saved.as_dict())
+            assert roundtrip is not None
+            entity.hass = hass
+            with (
+                patch.object(
+                    CoordinatorEntity, "async_added_to_hass", new_callable=AsyncMock
+                ),
+                patch.object(
+                    entity,
+                    "async_get_last_sensor_data",
+                    new_callable=AsyncMock,
+                    return_value=roundtrip,
+                ),
+            ):
+                await entity.async_added_to_hass()
+            assert entity.native_value == counters[key]
+        assert restarted._energy_integrator.state_snapshot() == {}

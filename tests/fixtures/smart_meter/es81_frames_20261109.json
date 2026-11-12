@@ -1,0 +1,23 @@
+{
+  "note": "Three real ES81 254/21 reports retained on 2026-11-09: full, power-only and counter-record shapes. Device identity is labelled ES81; envelopes contain no serial. Hex copied unchanged from the integration diagnostic export, whose provider sanitization already replaced the timezone with Europe/XXXXXX. These are not claimed as pre-sanitization network bytes.",
+  "frames": [
+    {
+      "at": "full_report",
+      "device_sn": "ES81",
+      "size": 271,
+      "hex": "0a8c020ae901a80864b2080d4575726f70652f585858585858b808019d20094f0541d525000030c2d52600000000d826019a2700c22d00c82d00e02d00e82d00d02f01d82f01e02f019d308d577043a53006d88542aa301e0d008abb461500f82a461d00a07c462500bc76473500443c463d00ab47478531d8b3833fe53b82d06f43ed3b10d96f43f53be11d53bffd3bd0f1e53e953c9e3ba4c29d3ce335bc41c03d82c0b7ee06cd3d2bd16f43d53de2d86f43dd3de7567043e53d00000000ed3d00000000f53d00000000fd3d00000000853e000000008d3e00000000903e01983e01a03e01aa3e00b53e000000001002182020012801380340fe01481550e9017080b1747881ca02800103880101"
+    },
+    {
+      "at": "power_only",
+      "device_sn": "ES81",
+      "size": 61,
+      "hex": "0a3b0a189d20fd625240a530dcc20e42953ccb0f61c29d3c3de6be411002182020012801380340fe0148155018580170afa7747881ca02800103880101"
+    },
+    {
+      "at": "counter_record",
+      "device_sn": "ES81",
+      "size": 100,
+      "hex": "0a620a3f9d20fabd5d40d525000030c2a530b6de0b42aa301e0d0098bb461500f02a461d008c7c462500b576473500283c463d00ab4747953c0cfb5ac29d3c6bf0b9411002182020012801380340fe014815503f580170f4a9747881ca02800103880101"
+    }
+  ]
+}

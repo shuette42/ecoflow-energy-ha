@@ -338,6 +338,8 @@ _SN_PREFIX_MAP = {
     # product name empty like every other BK prefix, so without this entry
     # the unit is classified by name alone and skipped as unsupported.
     "BK21": DEVICE_TYPE_SMART_METER,
+    # Dual CT uses the same telemetry fields and native counter record (#596).
+    "ES81": DEVICE_TYPE_SMART_METER,
     # Single Axis Solar Tracker (#339). Both prefixes map to the one type:
     # the app registry keys `HZ31` (`product_st_fd100`) and `S02F`
     # (`product_st_sp002`) to the same productType 31, and a reporter
@@ -439,6 +441,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "ES22": "STREAM AC 5000",
     "ES21": "STREAM 5000",
     "BK21": "Smart Meter",
+    "ES81": "Smart Meter Dual CT",
     "RE11": "Ocean 2",
     "RE17": "Ocean 2",
     "RE41": "Ocean 2 Plus",
