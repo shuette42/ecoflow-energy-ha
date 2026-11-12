@@ -468,6 +468,9 @@
       "mppt_pv4_power_w": {
         "name": "PV-Strang 4 Leistung"
       },
+      "mppt_pv5_power_w": {
+        "name": "PV-Strang 5 Leistung"
+      },
       "mppt_pv4_voltage_v": {
         "name": "PV-Strang 4 Spannung"
       },
@@ -2823,6 +2826,42 @@
       },
       "other_vehicle_energy": {
         "name": "Wallbox-Energie abgeschlossener Ladevorgänge nicht zugeordnet"
+      },
+      "battery_pack_soc_pct": {
+        "name": "Batteriepack Ladestand"
+      },
+      "inverter_ac_l1_voltage_v": {
+        "name": "Wechselrichter L1 Spannung"
+      },
+      "inverter_ac_l1_current_a": {
+        "name": "Wechselrichter L1 Strom"
+      },
+      "inverter_ac_l1_power_w": {
+        "name": "Wechselrichter L1 Leistung"
+      },
+      "inverter_ac_l2_voltage_v": {
+        "name": "Wechselrichter L2 Spannung"
+      },
+      "inverter_ac_l2_current_a": {
+        "name": "Wechselrichter L2 Strom"
+      },
+      "inverter_ac_l2_power_w": {
+        "name": "Wechselrichter L2 Leistung"
+      },
+      "device_temperature_1_c": {
+        "name": "Gerätetemperatur 1"
+      },
+      "device_temperature_2_c": {
+        "name": "Gerätetemperatur 2"
+      },
+      "device_temperature_3_c": {
+        "name": "Gerätetemperatur 3"
+      },
+      "device_temperature_4_c": {
+        "name": "Gerätetemperatur 4"
+      },
+      "device_temperature_5_c": {
+        "name": "Gerätetemperatur 5"
       }
     },
     "binary_sensor": {

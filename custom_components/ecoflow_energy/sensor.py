@@ -33,6 +33,7 @@ from .const import (
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_DELTA_PRO_ULTRA,
     DEVICE_TYPE_OCEAN2,
+    DEVICE_TYPE_OCEAN_PRO,
     DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DEVICE_TYPE_POWERSTREAM,
@@ -46,6 +47,7 @@ from .const import (
     DEVICE_TYPE_WAVE3,
     DOMAIN,
     OCEAN2_SENSORS,
+    OCEANPRO_SENSORS,
     POWEROCEAN_LOCAL_SENSOR_DEFS,
     POWEROCEAN_SENSORS,
     POWERPULSE2_SENSORS,
@@ -568,6 +570,8 @@ def _get_sensor_defs(device_type: str) -> list[EcoFlowSensorDef]:
         return OCEAN2_SENSORS
     if device_type == DEVICE_TYPE_SMART_PANEL_40:
         return SMARTPANEL40_SENSORS
+    if device_type == DEVICE_TYPE_OCEAN_PRO:
+        return OCEANPRO_SENSORS
     if device_type == DEVICE_TYPE_DELTA_PRO_ULTRA:
         return DELTAPROULTRA_SENSORS
     if device_type == DEVICE_TYPE_SMART_HOME_PANEL_2:

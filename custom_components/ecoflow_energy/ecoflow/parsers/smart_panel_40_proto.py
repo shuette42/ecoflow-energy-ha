@@ -65,7 +65,9 @@ settled well enough yet to publish.
 from __future__ import annotations
 
 import struct
+from collections.abc import Mapping
 from math import isfinite
+from types import MappingProxyType
 from typing import Any
 
 from ..proto.decoder import decode_header_message
@@ -90,16 +92,27 @@ _CMD_ID_SAFETY = 25
 #: read here.
 _MILLIAMP_TO_AMP = 0.001
 
+#: The six `254/21` fields every OCEAN system unit that speaks
+#: `DisplayPropertyUpload` shares with the same meaning: the HR61 panel and the
+#: HR51 inverter (`ocean_pro_proto`) both read them from this one table, so a
+#: field assignment is registered once. Read-only view: neither parser can
+#: change the other's table.
+CMS_CORE_FIELD_MAP: Mapping[str, tuple[str, str, float]] = MappingProxyType(
+    {
+        # --- system totals, positive = import/charging ---
+        "515": ("grid_power_w", _TYPE_FLOAT, 1),
+        "516": ("load_power_w", _TYPE_FLOAT, 1),
+        "517": ("pv_power_w", _TYPE_FLOAT, 1),
+        "518": ("battery_power_w", _TYPE_FLOAT, 1),
+        "262": ("battery_soc_pct", _TYPE_FLOAT, 1),
+        # Full-state constant on every frame seen (50); still read live rather
+        # than hardcoded, the same way the ES22 grid ceiling is read live.
+        "461": ("backup_reserve_pct", _TYPE_INT, 1),
+    }
+)
+
 _HR61_FIELD_MAP: dict[str, tuple[str, str, float]] = {
-    # --- system totals, positive = import/charging ---
-    "515": ("grid_power_w", _TYPE_FLOAT, 1),
-    "516": ("load_power_w", _TYPE_FLOAT, 1),
-    "517": ("pv_power_w", _TYPE_FLOAT, 1),
-    "518": ("battery_power_w", _TYPE_FLOAT, 1),
-    "262": ("battery_soc_pct", _TYPE_FLOAT, 1),
-    # Full-state constant on every frame seen (50); still read live rather
-    # than hardcoded, the same way the ES22 grid ceiling is read live.
-    "461": ("backup_reserve_pct", _TYPE_INT, 1),
+    **CMS_CORE_FIELD_MAP,
     # --- grid L1/L2 breakdown ---
     "956": ("grid_l1_voltage_v", _TYPE_FLOAT, 1),
     "957": ("grid_l2_voltage_v", _TYPE_FLOAT, 1),

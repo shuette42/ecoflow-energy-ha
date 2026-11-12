@@ -130,6 +130,10 @@ FAMILY_TO_FILE: dict[str, str] = {
     "POWERPULSE2": "powerpulse-2.md",
     "OCEAN2": "ocean-2.md",
     "SMARTPANEL40": "smart-panel-40.md",
+    # The five system readings the panel and the OCEAN Pro share are one
+    # list (CMSCORE) that both pages document; the panel page is its catalog.
+    "CMSCORE": "smart-panel-40.md",
+    "OCEANPRO": "ocean-pro.md",
     "DELTAPROULTRA": "delta-pro-ultra.md",
     "SMARTHOMEPANEL2": "smart-home-panel-2.md",
     # The sensors that exist only in a PowerOcean Local (Modbus/TCP) entry

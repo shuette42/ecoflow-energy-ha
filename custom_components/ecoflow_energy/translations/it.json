@@ -468,6 +468,9 @@
       "mppt_pv4_power_w": {
         "name": "Potenza stringa PV 4"
       },
+      "mppt_pv5_power_w": {
+        "name": "Potenza stringa PV 5"
+      },
       "mppt_pv4_voltage_v": {
         "name": "Tensione stringa PV 4"
       },
@@ -2823,6 +2826,42 @@
       },
       "other_vehicle_energy": {
         "name": "Energia di ricarica completata wallbox non assegnata"
+      },
+      "battery_pack_soc_pct": {
+        "name": "SOC pack batteria"
+      },
+      "inverter_ac_l1_voltage_v": {
+        "name": "Tensione inverter L1"
+      },
+      "inverter_ac_l1_current_a": {
+        "name": "Corrente inverter L1"
+      },
+      "inverter_ac_l1_power_w": {
+        "name": "Potenza inverter L1"
+      },
+      "inverter_ac_l2_voltage_v": {
+        "name": "Tensione inverter L2"
+      },
+      "inverter_ac_l2_current_a": {
+        "name": "Corrente inverter L2"
+      },
+      "inverter_ac_l2_power_w": {
+        "name": "Potenza inverter L2"
+      },
+      "device_temperature_1_c": {
+        "name": "Temperatura dispositivo 1"
+      },
+      "device_temperature_2_c": {
+        "name": "Temperatura dispositivo 2"
+      },
+      "device_temperature_3_c": {
+        "name": "Temperatura dispositivo 3"
+      },
+      "device_temperature_4_c": {
+        "name": "Temperatura dispositivo 4"
+      },
+      "device_temperature_5_c": {
+        "name": "Temperatura dispositivo 5"
       }
     },
     "binary_sensor": {
