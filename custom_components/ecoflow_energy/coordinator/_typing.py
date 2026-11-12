@@ -101,6 +101,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _last_unit_batt_get_all_ts: float
     _last_mqtt_event_ts: float
     _last_flush_ts: float
+    _last_applied_keys: frozenset[str]
     _surplus_sync_record: SurplusSyncRecord | None
     _dev_soc_352_seen: bool
     _dev_soc_352_unapplied: int
@@ -191,6 +192,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
         relayed_settings: bool = False,
     ) -> None: ...
 
+    def _resolve_bare_share_report(self, parsed: dict[str, Any]) -> bool: ...
     def _resolve_soc(self, parsed: dict[str, Any]) -> None: ...
     def _resolve_battery_only_remaining_time(self, parsed: dict[str, Any]) -> None: ...
 

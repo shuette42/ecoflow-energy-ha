@@ -1563,3 +1563,32 @@ def test_every_table_keyed_by_prefix_names_a_registered_prefix(keys: Any) -> Non
     device nothing can route to, and it stays silent about it."""
     orphans = sorted(set(keys) - set(_SN_PREFIX_MAP))
     assert not orphans, f"prefixes missing from _SN_PREFIX_MAP: {orphans}"
+
+
+def test_only_the_heating_rod_power_sensors_write_on_report() -> None:
+    """`write_on_report` bypasses the unchanged-value gate (#700). It belongs to
+    Heating Rod Power and its three source shares, and to nothing else: any other
+    sensor carrying it would write on every frame. Every `*_SENSORS` list of
+    const.py is scanned, not only the PowerOcean one."""
+    from ecoflow_energy import const as const_module
+
+    lists = {
+        name: value
+        for name, value in vars(const_module).items()
+        if name.endswith("_SENSORS") and isinstance(value, list)
+    }
+    assert "POWEROCEAN_SENSORS" in lists and "STREAM_SENSORS" in lists
+    flagged = sorted(
+        definition.key
+        for definitions in lists.values()
+        for definition in definitions
+        if getattr(definition, "write_on_report", False)
+    )
+    assert flagged == sorted(
+        [
+            "heating_rod_power_w",
+            "heating_rod_power_from_pv_w",
+            "heating_rod_power_from_battery_w",
+            "heating_rod_power_from_grid_w",
+        ]
+    )

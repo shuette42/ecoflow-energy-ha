@@ -796,6 +796,12 @@ HEATING_ROD_POWER_SOURCE_TO_SENSOR: dict[str, str] = {
     "hr_power_from_grid": "heating_rod_power_from_grid_w",
 }
 
+# The coordinator's note that a 212/33 carried neither the total nor a share
+# (#700). Not a reading: `_resolve_bare_share_report` pops it before the store,
+# an entity or diagnostics see it, and decides from accumulated state whether
+# it becomes 0 W shares.
+HEATING_ROD_BARE_SHARE_REPORT_KEY = "hr_share_report_bare"
+
 
 def remap_heating_rod_power_source_keys(raw: dict[str, Any]) -> dict[str, Any]:
     """Remap a PowerGlow power report (cmd_func 212, cmd_id 33).
@@ -806,10 +812,13 @@ def remap_heating_rod_power_source_keys(raw: dict[str, Any]) -> dict[str, Any]:
     112 W from PV and 41 W from the battery against a total of 153 W and no
     grid field.
 
-    A report without the total publishes nothing. Five of the seven reporter
-    frames are the bare serial, which means the rod sent no reading, and
-    answering that with 0 W would drop the sensors to zero in the middle of a
-    run.
+    A report without the total publishes nothing here. The rod sends this
+    report on a ~5 s timer whether it heats or not, and at idle every frame is
+    the bare serial: all sources at 0 W, the zero-omitting encoder leaving
+    every field out. Whether that becomes 0 W shares depends on accumulated
+    state, so the coordinator applies it, and only while Heating Rod Power is
+    known at 0 W; a bare frame during a run then leaves the shares as they
+    were.
 
     The total itself is not published: the drawn power already comes from
     cmd_id 8 as `heating_rod_power_w`, one reading from one source. The shares

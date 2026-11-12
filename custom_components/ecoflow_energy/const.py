@@ -631,6 +631,13 @@ class EcoFlowSensorDef:
     # every slot instead of one per slot.
     label: str | None = None
     label_key: str | None = None
+    # Write the state on every applied report that carried this key, even when
+    # the value is unchanged, so Home Assistant's `last_reported` follows the
+    # device's own report clock (#700: a controller tells "confirmed 0 W" from
+    # "telemetry missing" by it). This bypasses the write gate for the entity;
+    # a write with the same state only fires `state_reported`, which the
+    # recorder does not store. Opt-in, set only on the PowerGlow power readings.
+    write_on_report: bool = False
 
 
 @dataclass(frozen=True)
@@ -1111,6 +1118,7 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "diagnostic",
         suggested_display_precision=0,
         accessory=True,
+        write_on_report=True,
     ),
     EcoFlowSensorDef(
         "heating_rod_water_temp_c",
@@ -1158,6 +1166,7 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "diagnostic",
         suggested_display_precision=0,
         accessory=True,
+        write_on_report=True,
     ),
     EcoFlowSensorDef(
         "heating_rod_power_from_battery_w",
@@ -1169,6 +1178,7 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "diagnostic",
         suggested_display_precision=0,
         accessory=True,
+        write_on_report=True,
     ),
     EcoFlowSensorDef(
         "heating_rod_power_from_grid_w",
@@ -1180,6 +1190,7 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "diagnostic",
         suggested_display_precision=0,
         accessory=True,
+        write_on_report=True,
     ),
     # The tank size set in the app ("Anpassen", 1500 L), read from 212/8.
     # `volume` + `measurement` is rejected by HA for liters, so no state class.

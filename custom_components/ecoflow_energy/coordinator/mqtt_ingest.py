@@ -49,6 +49,7 @@ from ..ecoflow.parsers.delta_pro_ultra_proto import parse_delta_pro_ultra_messag
 from ..ecoflow.parsers.ocean2_proto import parse_ocean2_proto_message
 from ..ecoflow.parsers.powerocean_http import parse_powerocean_http_quota
 from ..ecoflow.parsers.powerocean_proto import (
+    HEATING_ROD_BARE_SHARE_REPORT_KEY,
     HEATING_ROD_POWER_SOURCE_TO_SENSOR,
     flatten_heartbeat,
     remap_bp_keys,
@@ -368,6 +369,14 @@ class MqttIngestMixin(_Base):
         self._frame_unknown_fields = {}
         if not self._enhanced_mode:
             return
+        if parsed and HEATING_ROD_BARE_SHARE_REPORT_KEY in parsed:
+            # The bare share report offer is a note for `_apply_data`, not a
+            # reading this frame carried (#700).
+            parsed = {
+                key: value
+                for key, value in parsed.items()
+                if key != HEATING_ROD_BARE_SHARE_REPORT_KEY
+            }
         try:
             secrets = self._frame_secrets()
             if not is_proto_frame(payload):
@@ -921,6 +930,8 @@ class MqttIngestMixin(_Base):
         # question this answers is how often the choice of copy mattered, and
         # a bundle with three copies still only made one choice.
         bundle_diverged = False
+        # A 212/33 that carried neither the total nor a share (#700).
+        bare_power_source = False
         for result in results:
             try:
                 header = result.headers[0] if result.headers else {}
@@ -973,11 +984,14 @@ class MqttIngestMixin(_Base):
                 if result.mapped.get("_is_heating_rod_param"):
                     rod = remap_heating_rod_keys(raw)
                     merged.update(rod)
-                    # The 212/33 report may stop when the rod stops, which
-                    # would leave the shares at their last value. A rod
-                    # drawing 0 W draws nothing from any source, so a share
-                    # already published drops to 0. Never created from here:
-                    # a rod that never sent 212/33 gets no share sensors.
+                    # A rod drawing 0 W draws nothing from any source, so a
+                    # share already published drops to 0 with it, without
+                    # waiting for the next 212/33. Never created from here:
+                    # this is the power report, not the share report, and a
+                    # rod that never sent 212/33 gets no share sensors. The
+                    # bare-212/33 rule (`_resolve_bare_share_report`) does
+                    # create them, because there the rod itself sent the
+                    # share report.
                     if rod.get("heating_rod_power_w") == 0.0:
                         for share_key in HEATING_ROD_POWER_SOURCE_TO_SENSOR.values():
                             if (
@@ -988,6 +1002,12 @@ class MqttIngestMixin(_Base):
                     continue
                 if result.mapped.get("_is_heating_rod_power_source"):
                     merged.update(remap_heating_rod_power_source_keys(raw))
+                    # The bare serial: no total and no share. Offered after
+                    # the loop, decided in `_apply_data`.
+                    if "hr_total_power" not in raw and not (
+                        raw.keys() & HEATING_ROD_POWER_SOURCE_TO_SENSOR.keys()
+                    ):
+                        bare_power_source = True
                     continue
                 # The scheduled charge tasks, the whole list at once. An empty
                 # payload is an empty list rather than a header with nothing
@@ -1023,6 +1043,15 @@ class MqttIngestMixin(_Base):
 
         if bundle_diverged:
             self._schedule_divergent_bundles += 1
+
+        # A bare 212/33 reads as all sources at 0 W, but only while Heating Rod
+        # Power is known at 0 W (#700). This runs on the Paho thread ahead of
+        # the apply queue, so the store here can lag a 212/8 still waiting to
+        # be applied: only offer the report, `_apply_data` decides on the loop
+        # (`_resolve_bare_share_report`). Offered after the loop, so a 212/8 in
+        # the same envelope is in `merged` whatever the header order.
+        if bare_power_source:
+            merged[HEATING_ROD_BARE_SHARE_REPORT_KEY] = True
 
         # A coupled PowerPulse 2's settings, relayed on `241/3` (#553). They
         # belong to the wallbox, not to this device: `_apply_data` pops the
