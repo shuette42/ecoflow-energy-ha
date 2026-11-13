@@ -60,7 +60,10 @@ from .ecoflow.parsers.powerocean_http import (  # noqa: E402
     EMS_WORK_STATES,
     PARALLEL_UNIT_MAX,
 )
-from .ecoflow.parsers.powerocean_proto import SCHEDULE_MAX_INDEX  # noqa: E402
+from .ecoflow.parsers.powerocean_proto import (  # noqa: E402
+    EV_TASK_LIST_KEY,
+    SCHEDULE_MAX_INDEX,
+)
 from .ecoflow.parsers.smart_home_panel_2_proto import (
     CIRCUIT_COUNT as SMARTHOMEPANEL2_CIRCUIT_COUNT,  # noqa: E402
 )
@@ -1718,6 +1721,15 @@ POWEROCEAN_SENSORS: list[EcoFlowSensorDef] = [
         "mdi:car-electric",
         "diagnostic",
         enhanced_only=True,
+        accessory=True,
+    ),
+    EcoFlowSensorDef(
+        EV_TASK_LIST_KEY,
+        "Wallbox Charging Schedule",
+        icon="mdi:calendar-clock",
+        enhanced_only=True,
+        suggested_display_precision=0,
+        translation_key=EV_TASK_LIST_KEY,
         accessory=True,
     ),
     # --- EMS / System extended sensors (diagnostic, disabled by default) ---
