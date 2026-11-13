@@ -497,6 +497,49 @@ class TestRollbackKeepsANewerReport:
         _switch, power = (calls[0] for calls in _sent_entries(coordinator))
         assert _enabled_of(power) == 0
 
+    @pytest.mark.parametrize("outcome", ["failed", "shutdown"])
+    async def test_a_hold_expired_during_a_slow_send_is_still_rolled_back(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        outcome: str,
+    ) -> None:
+        """A partial report after the window ends the hold, not the seed."""
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_on_stale")
+        assert coordinator.data[HOLD_KEY] is True
+        now = [1000.0]
+        during: list[tuple[Any, bool]] = []
+
+        async def send(*_args: Any, **_kwargs: Any) -> bool:
+            now[0] = 1000.0 + STREAM_AC5000_TASK_ENABLED_HOLD_S + 1
+            partial = _report("task2_on_stale")
+            partial.pop(HOLD_KEY)
+            coordinator._apply_data(partial)
+            during.append(
+                (
+                    coordinator.data[HOLD_KEY],
+                    HOLD_KEY in coordinator._schedule_armed_latch,
+                )
+            )
+            if outcome == "shutdown":
+                coordinator._shutdown = True
+                return True
+            return False
+
+        coordinator.async_send_proto_set_command = AsyncMock(side_effect=send)
+
+        with patch(CLOCK, side_effect=lambda: now[0]):
+            assert not await coordinator.async_set_stream_ac5000_task_enabled(
+                1, "charge", False
+            )
+
+        # The hold is gone and the seed still stands before the failure.
+        assert during == [(False, False)]
+        assert coordinator.data[HOLD_KEY] is True
+        assert coordinator.device_data[HOLD_KEY] is True
+        assert coordinator._schedule_armed_latch == {}
+        assert coordinator._schedule_armed_identity == {}
+
 
 class TestShutdown:
     async def test_a_toggle_queued_behind_the_lock_does_not_send(
