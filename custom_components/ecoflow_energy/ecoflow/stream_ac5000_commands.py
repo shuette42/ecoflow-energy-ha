@@ -306,6 +306,7 @@ def build_task_payload(
     task_slot: int | None = None,
     time_mode: int = 1,
     time_param: int = 0,
+    charge_source: int = 1,
 ) -> bytes:
     """Build a scheduled-task SET frame (config field 39).
 
@@ -336,7 +337,10 @@ def build_task_payload(
                 per device block is {1: serial, 2: target SoC %, 3: watts}.
                 Source 1 charges from solar and grid at that power, 0 is the
                 app's "Solar only", which has no power (#653). `.2` is 0 or
-                absent in every recorded frame.
+                absent in every recorded frame. `charge_source` sets `.1`;
+                with 0 the watts go out as an explicit 0 whatever `power_w`
+                holds, the zero fill the app writes for a Solar only task
+                (#681).
         39.1.9  discharge power, system wide: {1: watts}
 
     Written on config field 39, read back on `254/39 f40`. The grammar under
@@ -410,6 +414,8 @@ def build_task_payload(
         raise ValueError(f"time_mode must be 1..255, got {time_mode}")
     if time_param < 0:
         raise ValueError(f"time_param must not be negative, got {time_param}")
+    if charge_source not in (0, 1):
+        raise ValueError(f"charge_source must be 0 or 1, got {charge_source}")
 
     task = bytearray()
     task.extend(encode_field_varint(1, operation))
@@ -425,12 +431,12 @@ def build_task_payload(
         per_device = (
             encode_field_bytes(1, device_sn.encode("ascii"))
             + encode_field_varint(2, charge_soc_target)
-            + encode_field_varint(3, power_w)
+            + encode_field_varint(3, power_w if charge_source else 0)
         )
         task.extend(
             encode_field_bytes(
                 8,
-                encode_field_varint(1, 1)
+                encode_field_varint(1, charge_source)
                 + encode_field_varint(2, 0)
                 + encode_field_bytes(3, per_device),
             )

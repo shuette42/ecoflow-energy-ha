@@ -414,21 +414,37 @@ class StateApplyMixin(_Base):
         loses to one that agrees: an agreeing frame is the device confirming
         the write, which ends the hold there and then. Only the flag is held.
         Everything else the frame carries, this slot included, is applied.
+
+        Two writers use it. The PowerOcean schedule switches hold
+        `schedule_N_enabled` / `feed_schedule_N_enabled`, whose key is the
+        slot. The STREAM AC 5000 task switch (#681) holds
+        `scheduled_{kind}_enabled`, whose key is the kind: the task behind it
+        is whichever one the device lists as settable, so that hold carries
+        the task number it was written for. A report that names another
+        settable task, or retracts the flag to None because the task is gone,
+        is about a different task: the hold ends and the report is applied.
         """
         if not self._schedule_armed_latch:
             return
         now = time.monotonic()
         for key, (written, until) in list(self._schedule_armed_latch.items()):
+            held = self._schedule_armed_identity.get(key)
+            if held is not None and (
+                (held[0] in parsed and parsed[held[0]] != held[1])
+                or (key in parsed and parsed[key] is None)
+            ):
+                self.clear_schedule_armed_latch(key)
+                continue
             expired = now >= until
             if key in parsed:
                 if parsed[key] == written:
-                    del self._schedule_armed_latch[key]
+                    self.clear_schedule_armed_latch(key)
                     continue
                 if not expired:
                     del parsed[key]
                     continue
             if expired:
-                del self._schedule_armed_latch[key]
+                self.clear_schedule_armed_latch(key)
 
     def _resolve_wallbox_charge_mode(self, parsed: dict[str, Any], now: float) -> None:
         """Pick which PowerPulse 2 message fills `ev_charge_mode` for this frame.
@@ -590,16 +606,31 @@ class StateApplyMixin(_Base):
         wake, self._settings_wake = self._settings_wake, asyncio.Event()
         wake.set()
 
-    def latch_schedule_armed(self, state_key: str, armed: bool) -> None:
-        """Start the hold for one arming flag this integration just sent."""
-        self._schedule_armed_latch[state_key] = (
-            armed,
-            time.monotonic() + POWEROCEAN_SCHEDULE_ARMED_LATCH_S,
-        )
+    def latch_schedule_armed(
+        self,
+        state_key: str,
+        armed: bool,
+        *,
+        hold_s: float = POWEROCEAN_SCHEDULE_ARMED_LATCH_S,
+        held_identity: tuple[str, Any] | None = None,
+    ) -> None:
+        """Start the hold for one arming flag this integration just sent.
+
+        `held_identity` names the key and value that identify the task the
+        flag belongs to, for a flag that is not bound to a fixed slot (the
+        STREAM AC 5000 settable task). A report naming another task, or none,
+        ends such a hold, see `_resolve_schedule_armed`.
+        """
+        self._schedule_armed_latch[state_key] = (armed, time.monotonic() + hold_s)
+        if held_identity is None:
+            self._schedule_armed_identity.pop(state_key, None)
+        else:
+            self._schedule_armed_identity[state_key] = held_identity
 
     def clear_schedule_armed_latch(self, state_key: str) -> None:
         """Drop the hold for one arming flag, used when the send failed."""
         self._schedule_armed_latch.pop(state_key, None)
+        self._schedule_armed_identity.pop(state_key, None)
 
     def _resolve_relayed_wallbox_settings(
         self, parsed: dict[str, Any], *, own_connection: bool

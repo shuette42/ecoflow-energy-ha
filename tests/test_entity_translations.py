@@ -33,6 +33,10 @@ LANGS = ("en", "de", "fr", "it", "nl", "pl")
 # Diagnostic sensors created directly in sensor.py (not definition-driven)
 DIAGNOSTIC_SENSOR_KEYS = {"mqtt_status", "connection_mode"}
 
+# The STREAM AC 5000 per-task switches in switch.py (#681): one entity per task
+# in the device's list, so no definition list; the kind picks the key.
+STREAM_TASK_SWITCH_KEYS = {"scheduled_charge_task", "scheduled_discharge_task"}
+
 
 # Runtime-discovered vehicle sensors in charging_history.py.
 def _vehicle_sensor_keys(source: str | None = None) -> set[str]:
@@ -139,7 +143,7 @@ PLATFORM_KEYS = {
     | DIAGNOSTIC_SENSOR_KEYS
     | VEHICLE_SENSOR_KEYS,
     "binary_sensor": _labels(r"[A-Z0-9]+_BINARY_SENSORS") | _readback_labels(),
-    "switch": _labels(r"[A-Z0-9]+_SWITCHES"),
+    "switch": _labels(r"[A-Z0-9]+_SWITCHES") | STREAM_TASK_SWITCH_KEYS,
     "number": _labels(r"[A-Z0-9]+_NUMBERS"),
     "select": _labels(r"[A-Z0-9]+_SELECTS"),
     "button": _labels(r"[A-Z0-9]+_BUTTONS"),

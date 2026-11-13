@@ -933,6 +933,14 @@ EXCLUDE_FROM_ORPHAN: tuple[Exclusion, ...] = (
         "entry",
     ),
     Exclusion(
+        "STREAMAC5000",
+        "switches",
+        re.compile(r"^Scheduled (Charge|Discharge) Task N$"),
+        "one switch per schedule task, created from the task list the unit "
+        "reports (#681), so there is no fixed const.py name; N is the unit's "
+        "task number. Documented in stream-ac-5000.md, 'Scheduled Task switches'",
+    ),
+    Exclusion(
         "STREAM",
         "sensors",
         re.compile(r"^PV 1 Energy to PV 4 Energy$"),

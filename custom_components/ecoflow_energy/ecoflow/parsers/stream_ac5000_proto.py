@@ -951,6 +951,11 @@ _TASK_COUNT_KEYS: tuple[str, ...] = (
 # on/off state, as read back from the device (#681).
 TASK_LIST_KEY = "scheduled_tasks"
 
+# What a write has to send back unchanged when it switches one task on or off,
+# per slot, from the same list as `scheduled_tasks` (#681). No entity reads it,
+# and it stays out of the list entries so the task list sensor is unchanged.
+TASK_ECHO_KEY = "scheduled_task_echo"
+
 # Charging source on `40.1.8.1`: 1 charges from solar and grid at a set power,
 # 0 is "Solar only" and carries no power in the app.
 TASK_CHARGE_SOURCE_GRID = 1
@@ -1007,6 +1012,28 @@ def _task_entry(task: dict[str, Any], kind: str) -> dict[str, Any]:
     return entry
 
 
+def _task_echo(task: dict[str, Any]) -> dict[str, Any]:
+    """The raw fields a task's on/off write sends back as the device holds them.
+
+    The device omits zeros: an absent repeat parameter is 0. The charging
+    source is zero filled with its container (`_TASK_ZERO_FILL_PATHS`), so a
+    "Solar only" charge task reads 0, which is what the app wrote for task 2
+    on #681 and its acknowledgement left out; a discharge task has none. An
+    absent repeat stays None: the app reads it as weekly, whose parameter is
+    not decoded.
+    """
+    time_mode = task.get("_task_time_mode_raw")
+    time_param = task.get("_task_time_param_raw")
+    window_raw = task.get("_task_window_raw")
+    return {
+        "time_mode": time_mode if isinstance(time_mode, int) else None,
+        "time_param": time_param if isinstance(time_param, int) else 0,
+        "start_min": window_raw & 0xFFFF if isinstance(window_raw, int) else None,
+        "end_min": (window_raw >> 16) & 0xFFFF if isinstance(window_raw, int) else None,
+        "charge_source": task.get("_task_charge_source_raw"),
+    }
+
+
 def _finalize_task(result: dict[str, Any]) -> None:
     """Turn one task list readback into the keys the control side writes back.
 
@@ -1060,6 +1087,7 @@ def _finalize_task(result: dict[str, Any]) -> None:
         for key in _TASK_COUNT_KEYS:
             result[key] = None
         result[TASK_LIST_KEY] = None
+        result[TASK_ECHO_KEY] = None
         return
 
     slots = [
@@ -1078,6 +1106,11 @@ def _finalize_task(result: dict[str, Any]) -> None:
         if kind in task["_task_kinds"]
     ]
     result[TASK_LIST_KEY] = [entry for entry, _task in paired]
+    result[TASK_ECHO_KEY] = {
+        slot: _task_echo(task)
+        for task in tasks
+        if isinstance(slot := task.get("_task_slot_raw"), int)
+    }
 
     for kind, _group in _TASK_BLOCKS:
         prefix = f"scheduled_{kind}_"

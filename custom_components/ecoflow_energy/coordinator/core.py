@@ -362,6 +362,9 @@ class EcoFlowDeviceCoordinator(
         # write reads the flag out of the store and would then re-send the
         # reverted one, undoing what the owner just asked for.
         self._schedule_armed_latch: dict[str, tuple[bool, float]] = {}
+        # The task a hold was written for, where the held key does not name it
+        # (STREAM AC 5000, #681): (identity key, value), see latch_schedule_armed.
+        self._schedule_armed_identity: dict[str, tuple[str, Any]] = {}
         # Debounce state for the PowerOcean SoC SET. HA Number-Entity sliders
         # send one SET per 5%-step during a mouse drag, which arrives at the
         # device at ~100 ms cadence. The device cannot keep all SETs in sync
