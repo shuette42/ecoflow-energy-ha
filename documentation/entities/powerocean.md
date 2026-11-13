@@ -403,7 +403,7 @@ Session readings are created once a coupled wallbox reports a charging session; 
 | Wallbox Session Duration | How long the current session has been running, in seconds | enabled |
 | Wallbox Charging Status | Unplugged, vehicle connected, charging, paused by charger, paused by vehicle, charging session ended, or fault | enabled |
 | Wallbox Vehicle | The vehicle the charger has recognized. Empty until a car is identified | enabled |
-| Wallbox Charging Schedule | Number of enabled tasks. The `tasks` attribute lists each task's number, enabled state, current in A, time window, repeat (`daily`, `weekly`, or empty for any other kind), and weekdays (only for weekly). Repeat `once` is shown as empty until a recording shows it. Enhanced Mode only; appears once the wallbox has reported its schedule | enabled |
+| Wallbox Charging Schedule | Number of enabled tasks. The `tasks` attribute lists each task's number, enabled state, current in A, time window, repeat (`daily`, `weekly`, or empty for any other kind), and weekdays (only for weekly, checked against one recording of a Monday and Thursday task). Repeat `once` is shown as empty until a recording shows it. Enhanced Mode only; appears once the wallbox has reported its schedule | enabled |
 
 ---
 

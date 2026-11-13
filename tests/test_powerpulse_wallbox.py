@@ -237,6 +237,32 @@ class TestChargingSchedule:
     def test_a_report_with_nothing_in_it_yields_nothing(self) -> None:
         assert remap_ev_timer_task_keys({}) == {}
 
+    @pytest.mark.parametrize(
+        ("task", "repeat", "weekdays"),
+        [
+            # A kind nobody has recorded (the low nibble 4 may be "once") is
+            # published as None, never guessed.
+            ({"time_mode": 4, "time_param": 9}, None, []),
+            # Only the low nibble names the kind: a time zone in the high nibble
+            # leaves a daily task daily, and a weekday mask on a daily task is
+            # ignored.
+            ({"time_mode": 0x31, "time_param": 9}, "daily", []),
+            # Wrong types do not raise and give no repeat and no weekdays.
+            ({"time_mode": "66", "time_param": "9"}, None, []),
+            ({"time_mode": 66, "time_param": None}, "weekly", []),
+        ],
+    )
+    def test_repeat_and_weekdays_follow_the_kind_only(
+        self, task: dict, repeat: str | None, weekdays: list[str]
+    ) -> None:
+        result = remap_ev_timer_task_keys(
+            {"ev_time_task_cfg": [{"task_index": 1, **task}]}
+        )
+
+        entry = result[EV_TASK_LIST_KEY][0]
+        assert entry["repeat"] == repeat
+        assert entry["weekdays"] == weekdays
+
     def test_absent_current_and_window_stay_none_not_zero(self) -> None:
         result = remap_ev_timer_task_keys(
             {"ev_time_task_cfg": [{"task_index": 2, "time_mode": 66, "time_param": 0}]}

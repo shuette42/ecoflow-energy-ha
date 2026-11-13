@@ -1,9 +1,9 @@
 """The wallbox charging schedule (209/2, #731) through the PowerOcean
-coordinator, on both of its paths: the plain `property` push (single-frame
-branch) and the `get_reply` bundle (merged branch).
+coordinator, for the plain `property` push and for the `get_reply` bundle.
+Both reach the coordinator through the merged-bundle path of the ingest.
 
 `tests/test_powerpulse_wallbox.py` tests the mapping itself; this only proves
-the coordinator calls it on each path. Both frames are real, taken from
+the coordinator calls it for each kind of frame. Both frames are real, taken from
 `tests/fixtures/powerpulse/r372_timer_task_731_20261112.json`.
 """
 
