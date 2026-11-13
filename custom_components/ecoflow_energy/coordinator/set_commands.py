@@ -1692,7 +1692,10 @@ class SetCommandsMixin(_Base):
         this task number): the first report after the write is stale and can
         arrive before the send returns, and a power write that read it would
         send the old state back. Another task has no such value to hold. A
-        failed send puts the previous value back and drops the hold.
+        failed send puts the previous value back and drops the hold, but only
+        while the hold and the seeded value are still this write's: a report
+        during the send that named another task or retracted the value is
+        newer and stays.
 
         A write refused at unload is refused again once the lock is taken,
         since a toggle may have queued behind another write while unload
@@ -1788,7 +1791,18 @@ class SetCommandsMixin(_Base):
             )
             if sent and not self._shutdown:
                 return True
-            if settable:
+            # Roll back only while this write still owns the seed: a report
+            # during the send that named another task or retracted the value
+            # has already ended the hold, and its state is newer than ours.
+            latch = self._schedule_armed_latch.get(state_key)
+            if (
+                settable
+                and latch is not None
+                and latch[0] == enabled
+                and self._schedule_armed_identity.get(state_key)
+                == (f"scheduled_{kind}_task_slot", slot)
+                and self._device_data.get(state_key, _UNSET) == enabled
+            ):
                 self._restore_device_values(**{state_key: previous})
                 self.clear_schedule_armed_latch(state_key)
             return False

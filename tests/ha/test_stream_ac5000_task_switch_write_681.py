@@ -427,6 +427,77 @@ class TestFailedSend:
         assert coordinator._schedule_armed_latch == {}
 
 
+# Task 2 replaces task 1 as the settable charge task while the write is in
+# flight. Its own state is off, the value the write seeded, so only a rollback
+# can move the scalar: back to task 1's on.
+REPLACED = {HOLD_KEY: False, "scheduled_charge_task_slot": 2}
+RETRACTED = {HOLD_KEY: None, "scheduled_charge_task_slot": None}
+
+
+def _send_with_report_during(
+    coordinator: EcoFlowDeviceCoordinator, change: dict[str, Any], outcome: str
+) -> None:
+    """The toggle's send applies a report, then fails or meets unload."""
+    calls = 0
+
+    async def send(*_args: Any, **_kwargs: Any) -> bool:
+        nonlocal calls
+        calls += 1
+        if calls > 1:
+            return True
+        report = _report("task2_off")
+        report.update(change)
+        coordinator._apply_data(report)
+        if outcome == "shutdown":
+            coordinator._shutdown = True
+            return True
+        return False
+
+    coordinator.async_send_proto_set_command = AsyncMock(side_effect=send)
+
+
+class TestRollbackKeepsANewerReport:
+    @pytest.mark.parametrize("outcome", ["failed", "shutdown"])
+    @pytest.mark.parametrize(
+        "change", [REPLACED, RETRACTED], ids=["replaced", "retracted"]
+    )
+    async def test_a_report_during_the_send_stays(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        change: dict[str, Any],
+        outcome: str,
+    ) -> None:
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_on_stale")
+        assert coordinator.data[HOLD_KEY] is True
+        _send_with_report_during(coordinator, change, outcome)
+
+        with patch(CLOCK, return_value=1000.0):
+            assert not await coordinator.async_set_stream_ac5000_task_enabled(
+                1, "charge", False
+            )
+
+        assert coordinator.data[HOLD_KEY] is change[HOLD_KEY]
+        assert coordinator.device_data[HOLD_KEY] is change[HOLD_KEY]
+        assert coordinator._schedule_armed_latch == {}
+        assert coordinator._schedule_armed_identity == {}
+
+    async def test_a_power_write_echoes_the_replacement(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_on_stale")
+        _send_with_report_during(coordinator, REPLACED, "failed")
+
+        with patch(CLOCK, return_value=1000.0):
+            assert not await coordinator.async_set_stream_ac5000_task_enabled(
+                1, "charge", False
+            )
+            assert await coordinator.async_set_stream_ac5000_task_power("charge", 1800)
+
+        _switch, power = (calls[0] for calls in _sent_entries(coordinator))
+        assert _enabled_of(power) == 0
+
+
 class TestShutdown:
     async def test_a_toggle_queued_behind_the_lock_does_not_send(
         self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry

@@ -108,14 +108,14 @@ The list follows the unit's own report. After a power change made in Home Assist
 
 ### Scheduled Task switches
 
-Each schedule task the unit holds gets its own switch, named **Scheduled Charge Task N** or **Scheduled Discharge Task N**. The switch is on while the task is switched on in the unit and off while it is switched off. Turning it on or off from Home Assistant sends the same single-task command the EcoFlow app sends, and only that task changes: its time window, power, charging source and SoC target stay as they are. Switches appear on their own as the unit reports its tasks, without a restart, and are enabled by default. Enhanced Mode only, on the STREAM AC 5000 (`ES22`) and the STREAM 5000 (`ES21`).
+Each schedule task the unit holds gets its own switch, named **Scheduled Charge Task N** or **Scheduled Discharge Task N**. The switch is on while the task is switched on in the unit and off while it is switched off. Turning it on or off from Home Assistant sends a single-task update whose entry matches what the EcoFlow app writes for that task (the app itself sends the whole task list), and only that task changes: its time window, power, charging source and SoC target stay as they are. Switches appear on their own as the unit reports its tasks, without a restart, and are enabled by default. Enhanced Mode only, on the STREAM AC 5000 (`ES22`) and the STREAM 5000 (`ES21`).
 
 - **N is the unit's own task number, not the task's position in the app list.** After tasks have been deleted the two can differ. The `slot` field in the `tasks` attribute of the Scheduled Tasks sensor shows the number each switch uses.
 - **A deleted task and a new one can share a switch.** If a task is deleted and a task of the same kind is created again and the unit gives it the same number, that switch controls the new task, so an automation aimed at it then acts on the new task. A click always acts on the task the switch is showing at that moment.
 - **Weekly and monthly tasks are refused for now.** The switch of a task that repeats weekly or monthly reports an error when it is used, and nothing is sent. A daily task or a task that runs once can be switched.
 - **The state can take up to about two minutes to settle.** The switch is a read-back of what the unit reports, not of what was last sent. After a switch from Home Assistant it shows the new state at once and holds it for a few seconds. If the unit has not reported the change by then, the switch can show the old state until the unit's next task list, which arrives within about two minutes.
 - **A task that disappears makes its switch unavailable.** The switch is kept, not removed, so an automation that names it does not break. It is also unavailable until the unit has reported its task list.
-- **Pre-release.** The command is rebuilt from an app session recorded on a STREAM AC 5000. Whether the unit accepts it from Home Assistant is still to be confirmed on hardware, and the STREAM 5000 has no recording of it at all.
+- **Pre-release.** The task entry is rebuilt from an app session recorded on a STREAM AC 5000. Whether the unit accepts a single-task update with it from Home Assistant is still to be confirmed on hardware, and the STREAM 5000 has no recording of it at all.
 
 ## Sensors - Battery Diagnostics
 
