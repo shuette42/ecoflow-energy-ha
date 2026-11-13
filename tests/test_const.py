@@ -595,7 +595,7 @@ class TestPowerOceanSensors:
         }
         ems_extended = _PO_EMS_EXTENDED
         original = [k for k in non_pack if k not in ems_extended and k not in mppt_plus]
-        assert len(original) == 147, f"Expected 147 core sensors, got {len(original)}"
+        assert len(original) == 148, f"Expected 148 core sensors, got {len(original)}"
 
     def test_mppt_plus_sensor_count(self):
         """6 PowerOcean Plus MPPT sensors (strings 3 and 4)."""
@@ -628,9 +628,9 @@ class TestPowerOceanSensors:
         assert len(found) == 28, f"Expected 28 EMS extended sensors, got {len(found)}"
 
     def test_total_sensor_count(self):
-        """Total PowerOcean sensors = 147 + 6 + 120 + 28 = 301."""
+        """Total PowerOcean sensors = 148 + 6 + 120 + 28 = 302."""
         keys = _extract_sensor_keys("POWEROCEAN_SENSORS")
-        assert len(keys) == 301, f"Expected 301 total sensors, got {len(keys)}"
+        assert len(keys) == 302, f"Expected 302 total sensors, got {len(keys)}"
 
     def test_only_soc_has_battery_device_class(self):
         """Only the primary soc_pct should have device_class='battery'.

@@ -394,7 +394,7 @@ Created once the PowerOcean reports a PowerGlow heating rod, and only with accou
 
 ## Sensors - PowerPulse Wallbox (accessory, Enhanced Mode)
 
-Created only once a coupled wallbox reports a charging session. See the note at the top. These are the PowerPulse 1; the PowerPulse 2 has [its own page](powerpulse-2.md).
+Session readings are created once a coupled wallbox reports a charging session; the schedule sensor appears once it reports its schedule. See the note at the top. These are the PowerPulse 1; the PowerPulse 2 has [its own page](powerpulse-2.md).
 
 | Entity | Description | Default |
 |---|---|---|
@@ -403,6 +403,7 @@ Created only once a coupled wallbox reports a charging session. See the note at 
 | Wallbox Session Duration | How long the current session has been running, in seconds | enabled |
 | Wallbox Charging Status | Unplugged, vehicle connected, charging, paused by charger, paused by vehicle, charging session ended, or fault | enabled |
 | Wallbox Vehicle | The vehicle the charger has recognized. Empty until a car is identified | enabled |
+| Wallbox Charging Schedule | Number of enabled tasks. The `tasks` attribute lists each task's number, enabled state, current in A, time window, repeat (`daily`, `weekly`, or empty for any other kind), and weekdays (only for weekly, checked against one recording of a Monday and Thursday task). Repeat `once` is shown as empty until a recording shows it. Enhanced Mode only; appears once the wallbox has reported its schedule | enabled |
 
 ---
 

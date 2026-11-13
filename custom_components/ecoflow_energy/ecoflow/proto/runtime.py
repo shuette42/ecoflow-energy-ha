@@ -211,6 +211,14 @@ def _build_powerocean_table(pb2: Any) -> dict[tuple[int, int], CmdConfig]:
             parse_path="typed_runtime:ev_charging_param",
             flags={"_is_ev_charging_param": True},
         ),
+        # The wallbox's charging schedule, forwarded the same way: a live
+        # push when the owner edits it in the app, and a member of the
+        # get-all reply. The whole task list travels in one message (#731).
+        (209, 2): CmdConfig(
+            msg_class=pb2.EVChargingTimerTaskReport,
+            parse_path="typed_runtime:ev_timer_task_list",
+            flags={"_is_ev_timer_task": True},
+        ),
         # PowerGlow heating rod, forwarded by the PowerOcean it is coupled to.
         # The rod also travels on (212, 33) and (212, 34). This one is the
         # only frame carrying the water temperature, the drawn power and both
@@ -345,6 +353,7 @@ def _empty_mapped() -> dict[str, Any]:
         "_is_delta3_bms_heartbeat": False,
         "_is_timer_task_list": False,
         "_is_tou_task_list": False,
+        "_is_ev_timer_task": False,
     }
 
 

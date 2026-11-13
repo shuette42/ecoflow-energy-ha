@@ -1687,6 +1687,9 @@
       "ev_vehicle_id": {
         "name": "Wallbox Vehicle"
       },
+      "ev_scheduled_tasks": {
+        "name": "Wallbox Charging Schedule"
+      },
       "ev_charge_status": {
         "name": "Wallbox Charging Status",
         "state": {

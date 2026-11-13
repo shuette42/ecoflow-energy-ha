@@ -1011,6 +1011,63 @@ def _format_window(time_table: int | None) -> str | None:
     return f"{start // 60:02d}:{start % 60:02d}-{end // 60:02d}:{end % 60:02d}"
 
 
+# The wallbox charging schedule (209/2) is published as one list, not one key
+# per task: the device sends the whole list in one message, and a list that is
+# replaced as a whole retracts a deleted task without index tracking.
+EV_TASK_LIST_KEY = "ev_scheduled_tasks"
+
+# Low nibble of `time_mode`. Only the two values seen against the app are
+# named; anything else is published as None rather than guessed.
+_EV_TASK_REPEAT = {1: "daily", 2: "weekly"}
+
+# `time_param` of a weekly task: bit 0 is Monday, bit 6 Sunday. One sample
+# (#731): 9 with Monday and Thursday selected in the app.
+_WEEKDAYS: tuple[str, ...] = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
+def _ev_task_entry(task: dict[str, Any]) -> dict[str, Any]:
+    """One wallbox schedule task as the list sensor shows it."""
+    time_mode = task.get("time_mode")
+    repeat = (
+        _EV_TASK_REPEAT.get(time_mode & 0x0F) if isinstance(time_mode, int) else None
+    )
+    weekdays: list[str] = []
+    time_param = task.get("time_param")
+    if repeat == "weekly" and isinstance(time_param, int):
+        weekdays = [
+            name for bit, name in enumerate(_WEEKDAYS) if time_param & (1 << bit)
+        ]
+    current = task.get("param")
+    return {
+        "task": task.get("task_index"),
+        # A proto bool that is false is not serialised, so absent means off.
+        "enabled": bool(task.get("is_enable", False)),
+        "current_a": current if isinstance(current, int) else None,
+        "window": _format_window(_decode_time_table(task.get("time_table"))),
+        "repeat": repeat,
+        "weekdays": weekdays,
+    }
+
+
+def remap_ev_timer_task_keys(raw: dict[str, Any]) -> dict[str, Any]:
+    """Remap a PowerPulse charging schedule report (cmd_func 209, cmd_id 2).
+
+    Returns `{EV_TASK_LIST_KEY: [entry, ...]}` in the order the device sends
+    the tasks. A report naming the wallbox but carrying no task is an empty
+    schedule and yields `[]`; a report with neither yields nothing.
+    """
+    tasks = raw.get("ev_time_task_cfg")
+    if not isinstance(tasks, list):
+        if raw.get("ev_sn") is None:
+            return {}
+        tasks = []
+    return {
+        EV_TASK_LIST_KEY: [
+            _ev_task_entry(task) for task in tasks if isinstance(task, dict)
+        ]
+    }
+
+
 def remap_timer_task_keys(
     raw: dict[str, Any], known_indices: set[int]
 ) -> dict[str, Any]:

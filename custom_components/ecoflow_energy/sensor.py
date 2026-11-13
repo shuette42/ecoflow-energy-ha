@@ -47,6 +47,7 @@ from .const import (
     DEVICE_TYPE_STREAM_AC5000,
     DEVICE_TYPE_WAVE3,
     DOMAIN,
+    EV_TASK_LIST_KEY,
     OCEAN2_SENSORS,
     OCEANPRO_SENSORS,
     POWEROCEAN_LOCAL_SENSOR_DEFS,
@@ -76,6 +77,8 @@ from .entity import (
 from .fault_codes import FAULT_CODES_KEY, async_load_fault_names
 
 _LOGGER = logging.getLogger(__name__)
+
+TASK_LIST_KEYS = (TASK_LIST_KEY, EV_TASK_LIST_KEY)
 
 # Map string → HA enum
 _STATE_CLASS_MAP = {
@@ -134,10 +137,7 @@ async def async_setup_entry(
             if is_local and sensor_def.key == FAULT_CODES_KEY:
                 entities.append(EcoFlowFaultCodesSensor(coordinator, sensor_def))
                 continue
-            if sensor_def.key == TASK_LIST_KEY:
-                entities.append(EcoFlowTaskListSensor(coordinator, sensor_def))
-                continue
-            entities.append(EcoFlowSensor(coordinator, sensor_def))
+            entities.append(_create_sensor(coordinator, sensor_def))
 
         # Diagnostic sensors (coordinator properties, not data-driven)
         if not is_local:
@@ -259,6 +259,15 @@ def _drop_stale_accessory_entity(
     registry.async_remove(entity_id)
 
 
+def _create_sensor(
+    coordinator: EcoFlowDeviceCoordinator, definition: EcoFlowSensorDef
+) -> EcoFlowSensor:
+    """Select the sensor class at setup and on the first accessory report."""
+    if definition.key in TASK_LIST_KEYS:
+        return EcoFlowTaskListSensor(coordinator, definition)
+    return EcoFlowSensor(coordinator, definition)
+
+
 @callback
 def _watch_for_accessory(
     config_entry: ConfigEntry,
@@ -295,7 +304,7 @@ def _watch_for_accessory(
             pending.remove(definition)
         if ready:
             async_add_entities(
-                [EcoFlowSensor(coordinator, definition) for definition in ready]
+                [_create_sensor(coordinator, definition) for definition in ready]
             )
         if not cleaned and coordinator.device_data:
             cleaned = True
@@ -507,7 +516,7 @@ class EcoFlowFaultCodesSensor(EcoFlowSensor):
 
 
 class EcoFlowTaskListSensor(EcoFlowSensor):
-    """The schedule tasks of a STREAM AC 5000, one entry per task as attribute.
+    """The device's schedule tasks, one entry per task as attribute.
 
     The state is the number of enabled tasks, 0 for an empty list. It is
     unknown while the unit's list is unknown (no list seen yet, or one block
@@ -534,7 +543,7 @@ class EcoFlowTaskListSensor(EcoFlowSensor):
 
     def _tasks(self) -> list[dict[str, Any]] | None:
         data = self.coordinator.data
-        tasks = data.get(TASK_LIST_KEY) if data is not None else None
+        tasks = data.get(self._definition.key) if data is not None else None
         return list(tasks) if isinstance(tasks, list) else None
 
     @property

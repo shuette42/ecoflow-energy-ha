@@ -83,6 +83,7 @@ WALLBOX_KEYS = {
     "ev_session_duration_s",
     "ev_charge_status",
     "ev_vehicle_id",
+    "ev_scheduled_tasks",
 }
 
 # The inverters of a parallel pair are the fourth (#436). A pair sends one

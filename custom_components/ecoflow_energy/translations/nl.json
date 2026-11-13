@@ -1687,6 +1687,9 @@
       "ev_vehicle_id": {
         "name": "Voertuig laadpaal"
       },
+      "ev_scheduled_tasks": {
+        "name": "Laadschema laadpaal"
+      },
       "ev_charge_status": {
         "name": "Laadstatus laadpaal",
         "state": {
