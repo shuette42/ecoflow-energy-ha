@@ -1647,10 +1647,10 @@ _MIN_SLOT_S = 0.001
 # several settings at once, and rather than many because these sit on top of
 # the per-type budget instead of inside it. Worst case for a whole capture is
 # therefore keys_max * (per_key_max + 4) frames rather than
-# keys_max * per_key_max: 280 rather than 200 at the coordinator's settings.
+# keys_max * per_key_max: 280 rather than 200 for 20 types at depth 10.
 # The write reserve raises the type count the same way, beside the budget
 # rather than inside it: (keys_max + WRITE_CLASS_RESERVE) * (per_key_max + 4),
-# 392 rather than 280 at those settings.
+# 392 rather than 280 at 20 types, depth 10 and the default reserve of 8.
 _NOVEL_PER_KEY_MAX = 4
 
 # How many frames a reading must hold one value before a change to it is

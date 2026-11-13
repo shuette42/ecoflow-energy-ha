@@ -402,7 +402,10 @@ RAW_FRAME_LOG_PER_KEY_MAX = 3
 # (5120 KiB) of telemetry frame payload per device, plus the sixteen write
 # slots on top, and only for a device that bundles on every one of its
 # thirty-two types at full width. A device that never bundles is bounded at
-# 32 * 10 * 1024 B = 327 680 B (320 KiB) of telemetry. Both end when the
+# 32 * 10 * 1024 B = 327 680 B (320 KiB) of telemetry. These figures count the
+# per-type budget only, as those of the buffer above do: each type may keep
+# four more frames for new content and the write types come on top, so the
+# frame count tops out at (32 + 16) * (10 + 4) = 672. Both end when the
 # window closes and the entry reloads with the buffer above.
 RAW_FRAME_WINDOW_KEYS_MAX = 32
 RAW_FRAME_WINDOW_WRITE_RESERVE = 16
