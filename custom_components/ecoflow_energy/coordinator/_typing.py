@@ -89,6 +89,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _power_to_energy: dict[str, str]
     _firmware: dict[str, dict[str, Any]]
     _schedule_armed_latch: dict[str, tuple[bool, float]]
+    _schedule_armed_identity: dict[str, tuple[str, Any]]
     _shutdown_complete: asyncio.Event
     _shutdown_task: asyncio.Task[None] | None
     _keepalive_unsub: asyncio.TimerHandle | None
@@ -163,7 +164,14 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
 
     def _ocean2_reject_write(self, write: _Ocean2Write) -> None: ...
 
-    def latch_schedule_armed(self, state_key: str, armed: bool) -> None: ...
+    def latch_schedule_armed(
+        self,
+        state_key: str,
+        armed: bool,
+        *,
+        hold_s: float = ...,
+        held_identity: tuple[str, Any] | None = None,
+    ) -> None: ...
 
     def clear_schedule_armed_latch(self, state_key: str) -> None: ...
 

@@ -9,6 +9,7 @@ off: every first report after a write is stale.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from pathlib import Path
@@ -222,6 +223,89 @@ class TestHoldAgainstTheStaleReport:
 
         assert coordinator.data[HOLD_KEY] is True
 
+    async def test_the_hold_covers_the_stale_report_only(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """5 s: the stale report is held, a disagreeing one after it wins."""
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_on_stale")
+        with patch(CLOCK, return_value=1000.0):
+            assert await coordinator.async_set_stream_ac5000_task_enabled(
+                1, "charge", False
+            )
+        assert coordinator._schedule_armed_latch[HOLD_KEY] == (False, 1005.0)
+
+        # The stale get-all reply of the recording, +0.126 s.
+        with patch(CLOCK, return_value=1000.126):
+            coordinator._apply_data(_report("task2_off"))
+        assert coordinator.data[HOLD_KEY] is False
+
+        # Switched back on in the app, reported 0.5 s after the window.
+        with patch(CLOCK, return_value=1005.5):
+            coordinator._apply_data(_report("task2_on_again"))
+        assert coordinator.data[HOLD_KEY] is True
+        assert coordinator._schedule_armed_latch == {}
+
+
+def _enabled_of(entry: bytes) -> int:
+    """Field 3 (task on/off) of one `39.1` task entry, 0 when omitted."""
+    ((_number, inner, _raw),) = _fields(entry)
+    assert isinstance(inner, bytes)
+    values = {number: value for number, value, _raw in _fields(inner)}
+    value = values.get(3, 0)
+    assert isinstance(value, int)
+    return value
+
+
+class TestHoldBelongsToTheTask:
+    @pytest.mark.parametrize(
+        "change",
+        [
+            {HOLD_KEY: None, "scheduled_charge_task_slot": None},
+            {HOLD_KEY: True, "scheduled_charge_task_slot": 2},
+        ],
+        ids=["task_deleted", "other_task_settable"],
+    )
+    async def test_a_report_about_another_task_ends_the_hold(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        change: dict[str, Any],
+    ) -> None:
+        """Task 1 deleted in the app inside the window: the report is applied."""
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_on_stale")
+        with patch(CLOCK, return_value=1000.0):
+            assert await coordinator.async_set_stream_ac5000_task_enabled(
+                1, "charge", False
+            )
+
+        report = _report("task2_off")
+        report.update(change)
+        with patch(CLOCK, return_value=1001.0):
+            coordinator._apply_data(report)
+
+        assert coordinator.data[HOLD_KEY] is change[HOLD_KEY]
+        assert coordinator._schedule_armed_latch == {}
+
+    async def test_a_power_write_does_not_echo_the_old_task(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_on_stale")
+        with patch(CLOCK, return_value=1000.0):
+            assert await coordinator.async_set_stream_ac5000_task_enabled(
+                1, "charge", False
+            )
+        report = _report("task2_off")
+        report.update({HOLD_KEY: True, "scheduled_charge_task_slot": 2})
+        with patch(CLOCK, return_value=1001.0):
+            coordinator._apply_data(report)
+            assert await coordinator.async_set_stream_ac5000_task_power("charge", 1800)
+
+        # Positive control: field 3 is the on/off of the entry.
+        assert _enabled_of(_task_one(1800, enabled=True)) == 1
+        assert _enabled_of(_task_one(1800, enabled=False)) != 1
+        _switch, power = (calls[0] for calls in _sent_entries(coordinator))
+        assert _enabled_of(power) == 1
+
 
 def _edit_echo(coordinator: EcoFlowDeviceCoordinator, **values: Any) -> None:
     echo = coordinator.data["scheduled_task_echo"]
@@ -311,6 +395,67 @@ class TestFailedSend:
             1, "charge", False
         )
 
+        assert coordinator.data[HOLD_KEY] is True
+        assert coordinator.device_data[HOLD_KEY] is True
+        assert coordinator._schedule_armed_latch == {}
+
+    async def test_the_seed_is_in_place_during_the_send_and_rolled_back(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """The stale report can arrive before the send returns."""
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_on_stale")
+        during: list[tuple[Any, bool]] = []
+
+        async def send(*_args: Any, **_kwargs: Any) -> bool:
+            during.append(
+                (
+                    coordinator.data[HOLD_KEY],
+                    HOLD_KEY in coordinator._schedule_armed_latch,
+                )
+            )
+            return False
+
+        coordinator.async_send_proto_set_command = AsyncMock(side_effect=send)
+
+        assert not await coordinator.async_set_stream_ac5000_task_enabled(
+            1, "charge", False
+        )
+
+        assert during == [(False, True)]
+        assert coordinator.data[HOLD_KEY] is True
+        assert coordinator.device_data[HOLD_KEY] is True
+        assert coordinator._schedule_armed_latch == {}
+
+
+class TestShutdown:
+    async def test_a_toggle_queued_behind_the_lock_does_not_send(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_off")
+        async with coordinator._device_config_lock:
+            toggle = asyncio.create_task(
+                coordinator.async_set_stream_ac5000_task_enabled(2, "charge", True)
+            )
+            await asyncio.sleep(0)
+            coordinator._shutdown = True
+
+        assert not await toggle
+        assert _sent_entries(coordinator) == []
+
+    async def test_shutdown_during_the_send_leaves_no_seed(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_on_stale")
+
+        async def send(*_args: Any, **_kwargs: Any) -> bool:
+            coordinator._shutdown = True
+            return True
+
+        coordinator.async_send_proto_set_command = AsyncMock(side_effect=send)
+
+        assert not await coordinator.async_set_stream_ac5000_task_enabled(
+            1, "charge", False
+        )
         assert coordinator.data[HOLD_KEY] is True
         assert coordinator.device_data[HOLD_KEY] is True
         assert coordinator._schedule_armed_latch == {}

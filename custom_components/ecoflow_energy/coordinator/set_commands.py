@@ -62,11 +62,12 @@ _LOGGER = logging.getLogger(__name__)
 _UNSET = object()
 
 # How long a STREAM AC 5000 task on/off write holds its value against a report
-# that disagrees (#681). The first report after every write is stale (+0.13 s
-# in the recording); the fresh list follows about 1 s later when the unit
-# pushes and about 2 min later when it does not. A report that agrees ends the
-# hold at once, the first one after this window ends it either way.
-STREAM_AC5000_TASK_ENABLED_HOLD_S = 150.0
+# that disagrees (#681), the same 5 s as the PowerOcean arming hold. It covers
+# only the stale report that follows a write: +0.13 s in the #681 recording
+# (twice) and +2.2 s on #234. A report that agrees ends the hold at once, and
+# the first report after the window ends it either way and wins, so a toggle
+# made in the app or a write the unit rejected shows from that report on.
+STREAM_AC5000_TASK_ENABLED_HOLD_S = 5.0
 
 # Ocean 2 read-back (Backup Reserve, PLAN-151; Storm Guard, PLAN-192). The read
 # before a reserve write waits at most 5 s for a get-all answer; the follow-up
@@ -1685,12 +1686,18 @@ class SetCommandsMixin(_Base):
         charge limit come from the `scheduled_{kind}_*` values instead, which
         also carry a power write the list has not shown yet.
 
-        After a send the settable task's `scheduled_{kind}_enabled` is seeded
-        and held against a disagreeing report for
-        `STREAM_AC5000_TASK_ENABLED_HOLD_S` (the arming-flag hold): the first
-        report after the write is stale, and a power write that read it would
+        For the settable task `scheduled_{kind}_enabled` is seeded before the
+        send and held against a disagreeing report for
+        `STREAM_AC5000_TASK_ENABLED_HOLD_S` (the arming-flag hold, bound to
+        this task number): the first report after the write is stale and can
+        arrive before the send returns, and a power write that read it would
         send the old state back. Another task has no such value to hold. A
-        failed send seeds and holds nothing.
+        failed send puts the previous value back and drops the hold.
+
+        A write refused at unload is refused again once the lock is taken,
+        since a toggle may have queued behind another write while unload
+        began; a send that returns after unload began is rolled back and
+        reported as not done.
 
         Raises:
             DeviceValueNotReported: no decoded task list, or no task with this
@@ -1703,6 +1710,8 @@ class SetCommandsMixin(_Base):
         if self._shutdown:
             return False
         async with self._device_config_lock:
+            if self._shutdown:
+                return False
             data = self.data or {}
             tasks = data.get("scheduled_tasks")
             echoes = data.get("scheduled_task_echo")
@@ -1764,18 +1773,25 @@ class SetCommandsMixin(_Base):
                 time_param=0 if time_param is None else time_param,
                 charge_source=charge_source,
             )
-            if not await self.async_send_proto_set_command(
-                payload, label=f"stream_ac5000_{kind}_task_enabled"
-            ):
-                return False
+            state_key = f"scheduled_{kind}_enabled"
+            previous = self._device_data.get(state_key, _UNSET)
             if settable:
-                state_key = f"scheduled_{kind}_enabled"
                 self._seed_device_values(**{state_key: enabled})
-                self._schedule_armed_latch[state_key] = (
+                self.latch_schedule_armed(
+                    state_key,
                     enabled,
-                    time.monotonic() + STREAM_AC5000_TASK_ENABLED_HOLD_S,
+                    hold_s=STREAM_AC5000_TASK_ENABLED_HOLD_S,
+                    held_identity=(f"scheduled_{kind}_task_slot", slot),
                 )
-            return True
+            sent = await self.async_send_proto_set_command(
+                payload, label=f"stream_ac5000_{kind}_task_enabled"
+            )
+            if sent and not self._shutdown:
+                return True
+            if settable:
+                self._restore_device_values(**{state_key: previous})
+                self.clear_schedule_armed_latch(state_key)
+            return False
 
     def _seed_device_values(self, **values: Any) -> None:
         """Record values just sent, in both the store and the snapshot.
