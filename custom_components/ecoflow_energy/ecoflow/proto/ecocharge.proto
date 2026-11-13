@@ -903,6 +903,40 @@ message EVChargingParamReport {
   oneof _switch_bits { uint32 switch_bits = 18; }
 }
 
+// --- PowerPulse charging schedule, reported by the PowerOcean on 209/2 ---
+//
+// The wallbox's own timer tasks, forwarded by the PowerOcean as a live push
+// and inside the get-all reply. Two deliberate departures from the published
+// message definition, both read off the four 209/2 pushes in the reporter
+// diagnostics on #731:
+// 1. Field 9 is length-delimited on the wire and holds one varint
+//    (`start | end << 16`, minutes since local midnight), the same shape as
+//    field 10 of `EmsTimerTaskCfg`. Declared as uint32 the parser would drop
+//    it into the unknown fields, so it is declared `bytes`.
+// 2. The definition groups fields 1, 2, 3, 4 and 9 into one `oneof`, which
+//    cannot be literal: fields 2, 3, 4 and 9 arrive together in every frame.
+//    Each field is independently optional, as on `EmsTimerTaskCfg`.
+// The list field is named `ev_time_task_cfg` here, not `time_task_cfg`: the
+// PowerOcean's own schedule already uses that name at field 1, and every
+// registered message shares one name space per device.
+
+message EVChargingTimerTaskCfg {
+  oneof _is_cfg { uint32 is_cfg = 1; }
+  oneof _task_index { uint32 task_index = 2; }
+  oneof _is_enable { bool is_enable = 3; }
+  oneof _is_effect { bool is_effect = 4; }
+  oneof _type { uint32 type = 5; }
+  oneof _param { int32 param = 6; }
+  oneof _time_mode { uint32 time_mode = 7; }
+  oneof _time_param { uint32 time_param = 8; }
+  oneof _time_table { bytes time_table = 9; }
+}
+
+message EVChargingTimerTaskReport {
+  oneof _ev_sn { string ev_sn = 1; }
+  repeated EVChargingTimerTaskCfg ev_time_task_cfg = 2;
+}
+
 // --- PowerGlow heating rod, reported by the PowerOcean on cmd_func 212 ---
 //
 // The PowerOcean forwards the state of an attached PowerGlow. All twelve fields

@@ -12,10 +12,15 @@ fail on exactly this pair.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
 from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+    EV_TASK_LIST_KEY,
     remap_ev_charging_keys,
+    remap_ev_timer_task_keys,
 )
 from ecoflow_energy.ecoflow.proto.runtime import (
     decode_proto_runtime_headers,
@@ -146,3 +151,106 @@ def test_a_bundled_frame_still_reaches_the_mapping() -> None:
     """The idle payload arrived inside a get-reply bundle rather than on its
     own, which is the path the coupled and uncoupled captures both use."""
     assert _from_payload(FRAME_IDLE)
+
+
+# --- Charging schedule on 209/2 (#731) --------------------------------------
+#
+# Real frames from the reporter diagnostics on #731 (PowerOcean Plus with a
+# PowerPulse 1), recorded while the one schedule task was edited in the app.
+# The serial was already masked in the download.
+
+_SCHEDULE_FIXTURE = (
+    Path(__file__).parent
+    / "fixtures"
+    / "powerpulse"
+    / "r372_timer_task_731_20261112.json"
+)
+
+
+def _schedule_frame(label: str) -> bytes:
+    frames = json.loads(_SCHEDULE_FIXTURE.read_text())["frames"]
+    return bytes.fromhex(next(f["hex"] for f in frames if f["label"] == label))
+
+
+def _schedule_from_frame(frame: bytes) -> dict:
+    results = decode_proto_runtime_headers(frame, device_type=DEVICE_TYPE_POWEROCEAN)
+    mapped = [r.mapped for r in results if r.mapped.get("_is_ev_timer_task")]
+    assert mapped, "the 209/2 header was not routed"
+    raw = {k: v for k, v in mapped[0].items() if not k.startswith("_")}
+    return remap_ev_timer_task_keys(raw)
+
+
+def _task(current_a: int, window: str, repeat: str, weekdays: list[str]) -> dict:
+    return {
+        "task": 1,
+        "enabled": True,
+        "current_a": current_a,
+        "window": window,
+        "repeat": repeat,
+        "weekdays": weekdays,
+    }
+
+
+class TestChargingSchedule:
+    @pytest.mark.parametrize(
+        ("label", "expected"),
+        [
+            # 21:23:12 UTC: 16 A, 23:30 to midnight, every day.
+            ("daily_16a_2330_2400", _task(16, "23:30-24:00", "daily", [])),
+            # 21:25:50 UTC: current and start changed; a 96/8 rides along.
+            ("daily_10a_2300_2400_with_96_8", _task(10, "23:00-24:00", "daily", [])),
+            # 21:27:56 UTC: weekly, Monday and Thursday (time_param 9).
+            ("weekly_mon_thu", _task(10, "23:00-24:00", "weekly", ["mon", "thu"])),
+            # 21:30:09 UTC: back to daily, the weekday mask drops to 0.
+            ("daily_again", _task(10, "23:00-24:00", "daily", [])),
+            # 21:04:19 UTC: the get-all reply, before any edit (6 A).
+            ("get_all_reply_with_209_2", _task(6, "23:30-24:00", "daily", [])),
+        ],
+    )
+    def test_each_recorded_push_maps_to_the_app_setting(
+        self, label: str, expected: dict
+    ) -> None:
+        result = _schedule_from_frame(_schedule_frame(label))
+
+        assert result == {EV_TASK_LIST_KEY: [expected]}
+
+    def test_the_command_tuple_is_routed_for_the_powerocean_only(self) -> None:
+        from ecoflow_energy.ecoflow.proto.runtime import _build_cmd_registry
+
+        registry = _build_cmd_registry()
+
+        assert registry[DEVICE_TYPE_POWEROCEAN][(209, 2)].flags == {
+            "_is_ev_timer_task": True
+        }
+        others = [
+            device_type
+            for device_type, table in registry.items()
+            if device_type != DEVICE_TYPE_POWEROCEAN and (209, 2) in table
+        ]
+        assert others == []
+
+    def test_a_report_with_the_wallbox_and_no_task_is_an_empty_schedule(
+        self,
+    ) -> None:
+        assert remap_ev_timer_task_keys({"ev_sn": "X" * 16}) == {EV_TASK_LIST_KEY: []}
+
+    def test_a_report_with_nothing_in_it_yields_nothing(self) -> None:
+        assert remap_ev_timer_task_keys({}) == {}
+
+    def test_absent_current_and_window_stay_none_not_zero(self) -> None:
+        result = remap_ev_timer_task_keys(
+            {"ev_time_task_cfg": [{"task_index": 2, "time_mode": 66, "time_param": 0}]}
+        )
+
+        assert result == {
+            EV_TASK_LIST_KEY: [
+                {
+                    "task": 2,
+                    "enabled": False,
+                    "current_a": None,
+                    "window": None,
+                    "repeat": "weekly",
+                    "weekdays": [],
+                }
+            ]
+        }

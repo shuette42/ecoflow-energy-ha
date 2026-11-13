@@ -58,6 +58,7 @@ from ..ecoflow.parsers.powerocean_proto import (
     remap_ems_param_change_keys,
     remap_ems_state_keys,
     remap_ev_charging_keys,
+    remap_ev_timer_task_keys,
     remap_heating_rod_keys,
     remap_heating_rod_power_source_keys,
     remap_parallel_unit_keys,
@@ -990,6 +991,9 @@ class MqttIngestMixin(_Base):
                     continue
                 if result.mapped.get("_is_ev_charging_param"):
                     merged.update(remap_ev_charging_keys(raw))
+                    continue
+                if result.mapped.get("_is_ev_timer_task"):
+                    merged.update(remap_ev_timer_task_keys(raw))
                     continue
                 if result.mapped.get("_is_heating_rod_param"):
                     rod = remap_heating_rod_keys(raw)
