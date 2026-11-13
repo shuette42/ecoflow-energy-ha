@@ -389,6 +389,23 @@ HTTP_FALLBACK_INTERVAL_S = 30
 # real PowerOcean bundles on one message type rather than twenty.
 RAW_FRAME_LOG_KEYS_MAX = 20
 RAW_FRAME_LOG_PER_KEY_MAX = 3
+# While the 24-hour diagnostic recording is open, the same buffer tracks more
+# message types and reserves more slots for writes. One wallbox download
+# (#731) saw 2847 frames of 28 types: twenty telemetry slots dropped 255
+# frames of eight types, and a periodic app keepalive (96/97, 157 frames) plus
+# other write types filled the eight write slots, so the settings writes the
+# user made in the app and their replies (209/100, 209/101) never reached the
+# download. The always-on buffer above keeps its size; only the opt-in,
+# time-limited window grows.
+#
+# Worst case while the window is open: 32 * 10 * 16384 B = 5 242 880 B
+# (5120 KiB) of telemetry frame payload per device, plus the sixteen write
+# slots on top, and only for a device that bundles on every one of its
+# thirty-two types at full width. A device that never bundles is bounded at
+# 32 * 10 * 1024 B = 327 680 B (320 KiB) of telemetry. Both end when the
+# window closes and the entry reloads with the buffer above.
+RAW_FRAME_WINDOW_KEYS_MAX = 32
+RAW_FRAME_WINDOW_WRITE_RESERVE = 16
 # One message, or none that decoded. The largest single-message frames in
 # the corpus are 587 B on a Delta 3 and 527 B on a PowerOcean, both above
 # the 512 B this replaces - so both were being cut, in silence, on devices

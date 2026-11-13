@@ -34,6 +34,8 @@ from ecoflow_energy.const import (
     RAW_FRAME_LOG_PER_KEY_MAX,
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
+    RAW_FRAME_WINDOW_KEYS_MAX,
+    RAW_FRAME_WINDOW_WRITE_RESERVE,
     SCHEDULE_MAX_INDEX,
     SMARTPLUG_NUMBERS,
     SMARTPLUG_SENSORS,
@@ -62,6 +64,7 @@ from ecoflow_energy.ecoflow.const import (
     OCEAN2_AC_SIGN_INVERTED,
     POWEROCEAN_SCHEDULE_POWER_MAX_W,
 )
+from ecoflow_energy.ecoflow.frame_capture import WRITE_CLASS_RESERVE
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -1265,6 +1268,7 @@ class TestFrameCaptureFootprint:
         buffers = {
             (RAW_FRAME_LOG_KEYS_MAX, RAW_FRAME_LOG_PER_KEY_MAX),
             (RAW_FRAME_KEYS_MAX, RAW_FRAME_PER_KEY_MAX),
+            (RAW_FRAME_WINDOW_KEYS_MAX, RAW_FRAME_PER_KEY_MAX),
         }
         budgets = {
             RAW_FRAME_MAX_BYTES,
@@ -1282,6 +1286,12 @@ class TestFrameCaptureFootprint:
 
         assert (RAW_FRAME_LOG_KEYS_MAX, RAW_FRAME_LOG_PER_KEY_MAX) in stated
         assert (RAW_FRAME_KEYS_MAX, RAW_FRAME_PER_KEY_MAX) in stated
+        assert (RAW_FRAME_WINDOW_KEYS_MAX, RAW_FRAME_PER_KEY_MAX) in stated
+
+    def test_the_window_only_widens_the_buffer(self) -> None:
+        """The opt-in window may grow the buffer, never shrink it (#731)."""
+        assert RAW_FRAME_WINDOW_KEYS_MAX > RAW_FRAME_LOG_KEYS_MAX
+        assert RAW_FRAME_WINDOW_WRITE_RESERVE > WRITE_CLASS_RESERVE
 
     def test_the_bundle_budget_is_the_larger_one(self) -> None:
         """Inverted, the split would cut exactly the frames it exists for."""

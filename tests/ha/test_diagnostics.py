@@ -22,9 +22,12 @@ from custom_components.ecoflow_energy.const import (
     DOMAIN,
     MODE_STANDARD,
     RAW_FRAME_BUNDLE_MAX_BYTES,
+    RAW_FRAME_LOG_KEYS_MAX,
     RAW_FRAME_LOG_PER_KEY_MAX,
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
+    RAW_FRAME_WINDOW_KEYS_MAX,
+    RAW_FRAME_WINDOW_WRITE_RESERVE,
     UNKNOWN_FIELD_CMDS_MAX,
     UNKNOWN_FIELD_NUMBERS_MAX,
 )
@@ -39,7 +42,10 @@ from custom_components.ecoflow_energy.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.ecoflow_energy.ecoflow.const import device_log_tag
-from custom_components.ecoflow_energy.ecoflow.frame_capture import build_frame_entry
+from custom_components.ecoflow_energy.ecoflow.frame_capture import (
+    WRITE_CLASS_RESERVE,
+    build_frame_entry,
+)
 
 from .conftest import (
     MOCK_DELTA3_DEVICE,
@@ -1779,6 +1785,49 @@ class TestRawFrameDiagnostics:
         section = _device_diagnostics(coordinator)["raw_frames"]
 
         assert section["sampling"]["per_key_max"] == expected
+
+    @pytest.mark.parametrize(
+        ("capture", "keys_max", "write_reserve"),
+        [
+            (False, RAW_FRAME_LOG_KEYS_MAX, WRITE_CLASS_RESERVE),
+            (True, RAW_FRAME_WINDOW_KEYS_MAX, RAW_FRAME_WINDOW_WRITE_RESERVE),
+        ],
+        ids=["always_on_budget", "window_budget"],
+    )
+    async def test_the_window_widens_types_and_write_slots(
+        self,
+        hass: HomeAssistant,
+        enhanced_config_entry: MockConfigEntry,
+        capture: bool,
+        keys_max: int,
+        write_reserve: int,
+    ) -> None:
+        """Open, the recording keeps more types and writes (#731).
+
+        Closed, the always-on buffer keeps exactly the budget it had: it runs
+        on every Enhanced Mode device for as long as the entry is loaded.
+        """
+        now = 1_800_000_000.0
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                **enhanced_config_entry.data,
+                CONF_RAW_CAPTURE: capture,
+                CONF_RAW_CAPTURE_UNTIL: now + 3600,
+            },
+            unique_id="budget@example.com",
+        )
+        entry.add_to_hass(hass)
+
+        with patch(
+            "custom_components.ecoflow_energy.const.time.time", return_value=now
+        ):
+            coordinator = EcoFlowDeviceCoordinator(hass, entry, MOCK_POWEROCEAN_DEVICE)
+
+        sampling = coordinator._raw_frames.stats()
+        assert sampling["keys_max"] == keys_max
+        assert sampling["write_slots_reserved"] == write_reserve
 
 
 class TestUnroutedDeviceCapture:
