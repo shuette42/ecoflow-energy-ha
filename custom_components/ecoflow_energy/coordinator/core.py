@@ -57,6 +57,8 @@ from ..const import (
     RAW_FRAME_LOG_KEYS_MAX,
     RAW_FRAME_LOG_PER_KEY_MAX,
     RAW_FRAME_PER_KEY_MAX,
+    RAW_FRAME_WINDOW_KEYS_MAX,
+    RAW_FRAME_WINDOW_WRITE_RESERVE,
     SMARTPLUG_ENERGY_FROM_API,
     SMARTPLUG_POWER_TO_ENERGY,
     STREAM_ENERGY_FROM_API,
@@ -497,12 +499,20 @@ class EcoFlowDeviceCoordinator(
         # and builds a new coordinator, so the depth is read once here and
         # never has to change underneath a live buffer. Do not add a second
         # path that resizes one.
-        self._raw_frames = TypedFrameBuffer(
-            RAW_FRAME_LOG_KEYS_MAX,
-            RAW_FRAME_PER_KEY_MAX
-            if raw_capture_window_open(entry.data)
-            else RAW_FRAME_LOG_PER_KEY_MAX,
-        )
+        # The window also widens the type budget and the write reserve (#731):
+        # a long settings session in the app outran both. Closed, the buffer
+        # is exactly the always-on one.
+        if raw_capture_window_open(entry.data):
+            self._raw_frames = TypedFrameBuffer(
+                RAW_FRAME_WINDOW_KEYS_MAX,
+                RAW_FRAME_PER_KEY_MAX,
+                write_reserve=RAW_FRAME_WINDOW_WRITE_RESERVE,
+            )
+        else:
+            self._raw_frames = TypedFrameBuffer(
+                RAW_FRAME_LOG_KEYS_MAX,
+                RAW_FRAME_LOG_PER_KEY_MAX,
+            )
         # TypedFrameBuffer.add() is not atomic the way deque.append() was, and
         # it is called from the Paho thread while diagnostics read it on the
         # event loop.

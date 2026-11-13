@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - The `last_reported` time of Heating Rod Power, Heating Rod Power from PV, Heating Rod Power from Battery and Heating Rod Power from Grid (PowerGlow on a PowerOcean) now advances on every report that carries the reading, even when the value is the same, so an automation can tell a confirmed reading from missing data. Only these four sensors do this, and it adds no rows to the recorder history. In our recordings Heating Rod Power is reported only when it changes, so its time goes stale while the rod is off; the three shares are reported about every five seconds. While Heating Rod Power is known to be 0 W, a share report that carries no power now sets the three shares to 0 W, so after a restart with the rod off they read 0 W instead of unavailable. While the rod draws power, or before its power is known, such a report still leaves the shares as they were. Thanks to @Xygen for the write-up and for noticing the unavailable shares after a restart. (Ref #700)
+- While the 24-hour diagnostic recording is on, it keeps up to 32 message types and 16 write message types per device instead of 20 and 8, so a long settings session in the vendor app is no longer cut short. Thanks to @rhaschke for the timed recording of the PowerPulse in the app that showed where it ran out. (Ref #731)
 
 ## [1.27.1] - 2026-11-11
 

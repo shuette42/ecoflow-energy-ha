@@ -616,7 +616,7 @@ Since v1.8.3, the integration handles this gracefully: error 1006 is logged once
 
 Have a quick look through the file before you attach it to a public issue. The redaction removes the keys, the account and every serial shape it knows, and it is checked against every recording on file, but a field EcoFlow adds later is unknown until someone sees it. Treat the redaction as a strong safety net, not as a guarantee.
 
-In Enhanced Mode the download also carries a sample of the raw messages your devices send, including devices that are already supported - a supported device is not a dead end for improving it. The **Record extra diagnostic data for 24 hours** option in the integration options only makes that sample deeper, so switch it on when an issue asks for it and take the download while it is still running. It stops by itself after 24 hours and never sends anything to your devices.
+In Enhanced Mode the download also carries a sample of the raw messages your devices send, including devices that are already supported - a supported device is not a dead end for improving it. The **Record extra diagnostic data for 24 hours** option in the integration options only makes that sample larger: more frames per message type, more message types and more room for the settings you change in the EcoFlow app. Switch it on when an issue asks for it and take the download while it is still running. It stops by itself after 24 hours and never sends anything to your devices.
 
 </details>
 

@@ -10,7 +10,11 @@ import pytest
 from ecoflow_energy.const import (
     RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
+    RAW_FRAME_LOG_KEYS_MAX,
     RAW_FRAME_MAX_BYTES,
+    RAW_FRAME_PER_KEY_MAX,
+    RAW_FRAME_WINDOW_KEYS_MAX,
+    RAW_FRAME_WINDOW_WRITE_RESERVE,
 )
 from ecoflow_energy.ecoflow.frame_capture import (
     _ANCHOR_DEPTH,
@@ -3134,3 +3138,63 @@ class TestNullPaddingUnderTheMask:
 
         assert b"ABCDEFGHIJK" not in sanitized
         assert b"HJ31" not in sanitized
+
+
+def _wallbox_settings_session() -> list[tuple[str, dict[str, Any]]]:
+    """A session in the shape of the #731 wallbox download.
+
+    28 telemetry types, the first 20 of them busy before anything else
+    arrives, and 16 write types: the app's periodic keepalive (96/97) seen
+    150 times, then 15 rare writes ending in the 209/101 setting and its
+    reply - the frames the recording was opened for.
+    """
+    frames: list[tuple[str, dict[str, Any]]] = []
+    t = 0.0
+    for _ in range(10):
+        for i in range(20):
+            t += 1.0
+            frames.append((f"property:proto/209.{i}", _entry(t)))
+    for _ in range(150):
+        t += 1.0
+        frames.append(("set:proto/96.97", _entry(t, write=True)))
+    for i in range(20, 28):
+        t += 1.0
+        frames.append((f"property:proto/224.{i}", _entry(t)))
+    t += 1.0
+    frames.append(("set:proto/240.2", _entry(t, write=True)))
+    for cmd in range(95, 102):
+        for kind in ("set", "set_reply"):
+            t += 1.0
+            frames.append((f"{kind}:proto/209.{cmd}", _entry(t, write=True)))
+    return frames
+
+
+class TestDiagnosticWindowBudget:
+    """While the 24-hour recording is open, a settings session fits (#731)."""
+
+    def _run(self, keys_max: int, write_reserve: int) -> dict[str, Any]:
+        buffer = TypedFrameBuffer(
+            keys_max, RAW_FRAME_PER_KEY_MAX, write_reserve=write_reserve
+        )
+        for key, entry in _wallbox_settings_session():
+            buffer.add(key, entry)
+        return buffer.stats()
+
+    def test_the_window_keeps_every_type_of_the_session(self) -> None:
+        stats = self._run(RAW_FRAME_WINDOW_KEYS_MAX, RAW_FRAME_WINDOW_WRITE_RESERVE)
+
+        session_keys = {key for key, _ in _wallbox_settings_session()}
+        assert len(session_keys) == 28 + 16
+        assert set(stats["per_key"]) == session_keys
+        assert stats["dropped_per_key"] == {}
+        assert "set:proto/209.101" in stats["per_key"]
+        assert "set_reply:proto/209.101" in stats["per_key"]
+
+    def test_the_always_on_budget_loses_part_of_the_same_session(self) -> None:
+        """Control: the old limits really drop what the window keeps."""
+        stats = self._run(RAW_FRAME_LOG_KEYS_MAX, WRITE_CLASS_RESERVE)
+
+        dropped = set(stats["dropped_per_key"])
+        assert {f"property:proto/224.{i}" for i in range(20, 28)} <= dropped
+        assert "set:proto/209.101" in dropped
+        assert "set_reply:proto/209.101" in dropped
