@@ -108,8 +108,10 @@ def _build_envelope(
       5  d_dest = 1      15  product_id
       8  cmd_func = 254
 
-    The device answers on the same topic with src and dest swapped and the
-    same payload, which the integration logs but does not parse.
+    The device answers on the same topic with src and dest swapped. For a
+    task write the payload is the unit's own rewrite of the task, not a copy
+    of the sent bytes (recording of 2026-11-13). The integration logs the
+    answer but does not parse it.
     """
     if not device_sn:
         raise ValueError("device_sn is required for /app/ routing")

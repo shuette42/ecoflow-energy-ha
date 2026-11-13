@@ -104,7 +104,7 @@ A template can read one task, for example whether the second task in the list is
 {{ state_attr('sensor.stream_ac_5000_scheduled_tasks', 'tasks')[1].enabled }}
 ```
 
-The list follows the unit's own report. After a power change made in Home Assistant, the Scheduled Charge Power number shows the new value at once, and the list follows within about two minutes. The state is unknown until the unit has reported its task list.
+The list follows the unit's own report. After a power change made in Home Assistant, the Scheduled Charge Power number shows the new value at once, and the list follows once the unit sends its next task list. The state is unknown until the unit has reported its task list.
 
 ### Scheduled Task switches
 
@@ -113,7 +113,7 @@ Each schedule task the unit holds gets its own switch, named **Scheduled Charge 
 - **N is the unit's own task number, not the task's position in the app list.** After tasks have been deleted the two can differ. The `slot` field in the `tasks` attribute of the Scheduled Tasks sensor shows the number each switch uses.
 - **A deleted task and a new one can share a switch.** If a task is deleted and a task of the same kind is created again and the unit gives it the same number, that switch controls the new task, so an automation aimed at it then acts on the new task. A click always acts on the task the switch is showing at that moment.
 - **Weekly and monthly tasks are refused for now.** The switch of a task that repeats weekly or monthly reports an error when it is used, and nothing is sent. A daily task or a task that runs once can be switched.
-- **The state can take up to about two minutes to settle.** The switch is a read-back of what the unit reports, not of what was last sent. After a switch from Home Assistant it shows the new state at once and holds it for a few seconds. If the unit has not reported the change by then, the switch can show the old state until the unit's next task list, which arrives within about two minutes.
+- **The state follows the unit's task list.** The switch is a read-back of what the unit reports, not of what was last sent. After a switch from Home Assistant it shows the new state at once and holds it for a few seconds. If the unit has not reported the change by then, the switch can show the old state until the unit sends a new task list or the integration reloads.
 - **A task that disappears makes its switch unavailable.** The switch is kept, not removed, so an automation that names it does not break. It is also unavailable until the unit has reported its task list.
 - **Pre-release.** The task entry is rebuilt from an app session recorded on a STREAM AC 5000. Whether the unit accepts a single-task update with it from Home Assistant is still to be confirmed on hardware, and the STREAM 5000 has no recording of it at all.
 

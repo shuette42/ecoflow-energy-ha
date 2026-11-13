@@ -394,8 +394,8 @@ RAW_FRAME_LOG_KEYS_MAX = 20
 RAW_FRAME_LOG_PER_KEY_MAX = 3
 # While the 24-hour diagnostic recording is open, the same buffer tracks more
 # message types and reserves more slots for writes. One wallbox download
-# (#731) saw 2847 frames of 28 types: twenty telemetry slots dropped 255
-# frames of eight types, and a periodic app keepalive (96/97, 157 frames) plus
+# (#731) saw 2847 frames of 28 types: twenty telemetry slots could not hold
+# them all, and a periodic app keepalive (96/97, 157 frames) plus
 # other write types filled the eight write slots, so the settings writes the
 # user made in the app and their replies (209/100, 209/101) never reached the
 # download. The always-on buffer above keeps its size; only the opt-in,
