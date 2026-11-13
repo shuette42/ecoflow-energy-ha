@@ -540,6 +540,57 @@ class TestRollbackKeepsANewerReport:
         assert coordinator._schedule_armed_latch == {}
         assert coordinator._schedule_armed_identity == {}
 
+    async def test_a_failed_second_toggle_keeps_the_first_hold(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        """OFF lands, ON fails inside the window: OFF's hold still covers it."""
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_on_stale")
+        coordinator.async_send_proto_set_command = AsyncMock(
+            side_effect=[True, False, True]
+        )
+        with patch(CLOCK, return_value=1000.0):
+            assert await coordinator.async_set_stream_ac5000_task_enabled(
+                1, "charge", False
+            )
+        off_hold = coordinator._schedule_armed_latch[HOLD_KEY]
+        assert off_hold == (False, 1000.0 + STREAM_AC5000_TASK_ENABLED_HOLD_S)
+
+        with patch(CLOCK, return_value=1002.0):
+            assert not await coordinator.async_set_stream_ac5000_task_enabled(
+                1, "charge", True
+            )
+        assert coordinator._schedule_armed_latch == {HOLD_KEY: off_hold}
+        assert coordinator._schedule_armed_identity == {
+            HOLD_KEY: ("scheduled_charge_task_slot", 1)
+        }
+        assert coordinator.data[HOLD_KEY] is False
+
+        # OFF's stale report still lists the task on.
+        with patch(CLOCK, return_value=1003.0):
+            coordinator._apply_data(_report("task2_on_stale"))
+            assert coordinator.data[HOLD_KEY] is False
+            assert await coordinator.async_set_stream_ac5000_task_power("charge", 1800)
+
+        power = _sent_entries(coordinator)[2][0]
+        assert power == _task_one(1800, enabled=False)
+
+    async def test_a_failed_toggle_without_an_earlier_hold_leaves_none(
+        self, hass: HomeAssistant, enhanced_config_entry: MockConfigEntry
+    ) -> None:
+        coordinator = _coordinator(hass, enhanced_config_entry, "task2_on_stale")
+        coordinator.async_send_proto_set_command = AsyncMock(return_value=False)
+        assert coordinator._schedule_armed_latch == {}
+
+        with patch(CLOCK, return_value=1000.0):
+            assert not await coordinator.async_set_stream_ac5000_task_enabled(
+                1, "charge", False
+            )
+
+        assert coordinator.data[HOLD_KEY] is True
+        assert coordinator.device_data[HOLD_KEY] is True
+        assert coordinator._schedule_armed_latch == {}
+        assert coordinator._schedule_armed_identity == {}
+
 
 class TestShutdown:
     async def test_a_toggle_queued_behind_the_lock_does_not_send(
