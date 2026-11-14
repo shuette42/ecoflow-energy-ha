@@ -492,6 +492,8 @@ class TestStreamPushUnmappedKeysDiagnostics:
             "count": 2,
             "names": ["temp", "vol"],
             "withheld": 1,
+            "full": False,
+            "values": {"by_num": {}, "num_overflow": 0},
         }
 
     async def test_only_withheld_keys_still_show_the_section(
@@ -511,7 +513,52 @@ class TestStreamPushUnmappedKeysDiagnostics:
             "count": 0,
             "names": [],
             "withheld": 1,
+            "full": False,
+            "values": {"by_num": {}, "num_overflow": 0},
         }
+
+    async def test_a_full_names_list_still_shows_the_values(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """`full` marks the names cap, `values` carries the peek (#702)."""
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_STREAM_DEVICE
+        )
+        coordinator._note_stream_push_unmapped_keys(
+            [f"key{chr(97 + i // 26)}{chr(97 + i % 26)}" for i in range(128)], []
+        )
+        coordinator._note_stream_push_peek({"temp": 24, "num": 0}, True, 0)
+
+        block = _device_diagnostics(coordinator)["stream_push_unmapped_keys"]
+
+        assert block["count"] == 128
+        assert block["full"] is True
+        assert block["values"]["by_num"]["0"]["keys"]["temp"] == {
+            "count": 1,
+            "last": 24,
+            "min": 24,
+            "max": 24,
+        }
+        assert block["values"]["by_num"]["0"]["with_soh"] == 1
+
+    async def test_values_alone_show_the_section(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        standard_config_entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(
+            hass, standard_config_entry, MOCK_STREAM_DEVICE
+        )
+        coordinator._note_stream_push_peek({"temp": 24}, False, None)
+
+        block = _device_diagnostics(coordinator)["stream_push_unmapped_keys"]
+
+        assert block["full"] is False
+        assert block["values"]["by_num"]["none"]["pushes"] == 1
 
     async def test_enhanced_stream_has_no_section(
         self,

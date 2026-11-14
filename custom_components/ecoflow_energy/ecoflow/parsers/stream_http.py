@@ -60,6 +60,7 @@ Field notes:
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
@@ -180,6 +181,85 @@ def unmapped_stream_quota_keys(raw: Any) -> tuple[list[str], list[str]]:
             withheld.append(key)
     names.sort()
     return names, withheld
+
+
+# Push keys whose values the diagnostics download shows (#702). A fixed list
+# of field names, read only and mapped to no sensor: it lets a Standard Mode
+# download show the value, unit and pack index of the battery and grid keys
+# before any of them is mapped. A fixed name cannot carry a serial, which is
+# why `bmsSn` is not on it.
+STREAM_PUSH_PEEK_KEYS: tuple[str, ...] = (
+    "vol",
+    "temp",
+    "amp",
+    "remainCap",
+    "fullCap",
+    "designCap",
+    "cycles",
+    "cycleSoh",
+    "maxCellTemp",
+    "minCellTemp",
+    "maxCellVol",
+    "minCellVol",
+    "bmsMaxCellTemp",
+    "cellVol",
+    "cellTemp",
+    "num",
+    "f32ShowSoc",
+    "gridConnectionSta",
+    "gridConnectionAmp",
+    "invIl1Rms",
+    "feedGridModePowLimit",
+)
+PEEK_STRING_MAX = 32
+PEEK_LIST_HEAD = 4
+
+
+def _is_number(value: Any) -> bool:
+    """Return True for a finite int or float that is not a bool."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    return math.isfinite(value)
+
+
+def _peek_value(value: Any) -> Any:
+    """Return a value as the peek shows it, or None to drop it.
+
+    Numbers, bools and strings up to 32 characters pass as they are. A list
+    becomes its length plus its first four finite numbers. NaN, infinity and
+    anything else are dropped.
+    """
+    if isinstance(value, bool) or _is_number(value):
+        return value
+    if isinstance(value, str):
+        return value if len(value) <= PEEK_STRING_MAX else None
+    if isinstance(value, list):
+        head = [item for item in value[:PEEK_LIST_HEAD] if _is_number(item)]
+        return {"len": len(value), "head": head}
+    return None
+
+
+def peek_stream_quota_values(raw: Any) -> tuple[dict[str, Any], bool, int | None]:
+    """Return the allow-listed values of a Stream quota push, for diagnostics.
+
+    Returns the present `STREAM_PUSH_PEEK_KEYS` with their shown values,
+    whether `soh` sat in the same payload (the BMS heartbeat it comes from),
+    and the payload's integer `num`, or None. `raw` is the payload the parser
+    reads, already taken out of `param`/`params`.
+    """
+    if not isinstance(raw, dict):
+        return {}, False, None
+    values: dict[str, Any] = {}
+    for key in STREAM_PUSH_PEEK_KEYS:
+        if key not in raw:
+            continue
+        shown = _peek_value(raw[key])
+        if shown is not None:
+            values[key] = shown
+    num = raw.get("num")
+    if isinstance(num, bool) or not isinstance(num, int):
+        num = None
+    return values, "soh" in raw, num
 
 
 def _feed_in_enabled(value: Any) -> bool | None:

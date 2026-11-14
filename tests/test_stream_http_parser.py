@@ -5,7 +5,9 @@ from pathlib import Path
 
 import pytest
 from ecoflow_energy.ecoflow.parsers.stream_http import (
+    STREAM_PUSH_PEEK_KEYS,
     parse_stream_quota,
+    peek_stream_quota_values,
     unmapped_stream_quota_keys,
 )
 from ecoflow_energy.ecoflow.parsers.stream_proto import SOC_FALLBACK_KEY
@@ -535,3 +537,87 @@ class TestUnmappedKeys:
 
     def test_not_a_dict_yields_nothing(self) -> None:
         assert unmapped_stream_quota_keys(["temp"]) == ([], [])
+
+
+class TestPushValuePeek:
+    """Values of a fixed list of push keys, for the diagnostics download (#702).
+
+    The payloads are synthetic: key names from the reporter's posted list of
+    a BK41 push, values invented. No Standard Mode capture with values exists.
+    """
+
+    PUSH = {
+        "num": 0,
+        "soh": 100,
+        "soc": 80,
+        "vol": 51200,
+        "temp": 23,
+        "remainCap": 4100,
+        "fullCap": 5120,
+        "cycleSoh": 99.5,
+        "gridConnectionSta": "PANEL_GRID_IN",
+        "bmsSn": "HJ31TESTDUMMY01",
+        "minEnvTemp": 12,
+        "cellVol": [3301, 3302, 3303, 3304, 3305],
+    }
+
+    def test_only_allow_listed_keys_are_valued(self) -> None:
+        values, with_soh, num = peek_stream_quota_values(self.PUSH)
+
+        assert set(values) == {
+            "num",
+            "vol",
+            "temp",
+            "remainCap",
+            "fullCap",
+            "cycleSoh",
+            "gridConnectionSta",
+            "cellVol",
+        }
+        assert "bmsSn" not in STREAM_PUSH_PEEK_KEYS
+        assert values["vol"] == 51200
+        assert with_soh is True
+        assert num == 0
+
+    def test_scalars_pass_lists_shrink_and_the_rest_is_dropped(self) -> None:
+        values, with_soh, num = peek_stream_quota_values(
+            {
+                "temp": True,
+                "amp": {"nested": 1},
+                "gridConnectionSta": "x" * 33,
+                "f32ShowSoc": "x" * 32,
+                "cellVol": [3301, "a", 3303, 3304, 3305],
+                "cellTemp": [],
+                "num": "1",
+            }
+        )
+
+        assert values == {
+            "temp": True,
+            "f32ShowSoc": "x" * 32,
+            "cellVol": {"len": 5, "head": [3301, 3303, 3304]},
+            "cellTemp": {"len": 0, "head": []},
+            "num": "1",
+        }
+        assert with_soh is False
+        assert num is None
+
+    def test_not_a_dict_yields_nothing(self) -> None:
+        assert peek_stream_quota_values(["vol"]) == ({}, False, None)
+
+    def test_nan_and_infinity_never_reach_the_download(self) -> None:
+        """Strict JSON readers refuse bare NaN, so the peek drops it (#702)."""
+        values, _, _ = peek_stream_quota_values(
+            {
+                "temp": float("nan"),
+                "vol": float("inf"),
+                "amp": float("-inf"),
+                "cycleSoh": 99.5,
+                "cellVol": [float("nan"), 3301, float("inf"), 3303],
+            }
+        )
+
+        assert values == {
+            "cycleSoh": 99.5,
+            "cellVol": {"len": 4, "head": [3301, 3303]},
+        }
