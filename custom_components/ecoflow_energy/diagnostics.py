@@ -837,20 +837,28 @@ def _device_diagnostics(coordinator: EcoFlowDeviceCoordinator) -> dict[str, Any]
 
     # Stream in Standard Mode: the names of `/quota` push keys the parser
     # drops (#702). The raw quota above is the HTTP snapshot, and a key that
-    # only the push carries would otherwise leave no trace. Names only;
+    # only the push carries would otherwise leave no trace. Names, plus
+    # the values of a fixed key list (below);
     # `withheld` counts the keys not shown because a name looked like a
     # serial or not like a field name, or did not fit the cap, so "not sent"
     # and "filtered" stay apart.
     if coordinator.device_type == DEVICE_TYPE_STREAM and not (
         coordinator._enhanced_mode
     ):
+        # `full` says the names list stopped at its cap, so a key missing
+        # from it may still have been sent. `values` holds the values of a
+        # fixed key list per payload `num`, filled whether or not the names
+        # list is full.
         push_keys = coordinator.stream_push_unmapped_keys
         withheld = coordinator.stream_push_withheld_count
-        if push_keys or withheld:
+        peek = coordinator.stream_push_peek
+        if push_keys or withheld or peek["by_num"] or peek["num_overflow"]:
             diag["stream_push_unmapped_keys"] = {
                 "count": len(push_keys),
                 "names": push_keys,
                 "withheld": withheld,
+                "full": coordinator.stream_push_unmapped_keys_full,
+                "values": peek,
             }
 
     # Enhanced Mode: the field numbers the device sent that our protobuf

@@ -8616,6 +8616,7 @@ class TestStreamQuotaRouting:
         coordinator._parse_message("/open/cert/SN001/quota", payload)
 
         assert coordinator.stream_push_unmapped_keys == []
+        assert coordinator.stream_push_peek["by_num"] == {}
 
     async def test_full_collector_skips_the_key_scan(
         self,
@@ -8638,6 +8639,101 @@ class TestStreamQuotaRouting:
             coordinator._parse_message("/open/cert/SN001/quota", payload)
 
         scan.assert_not_called()
+
+    async def test_a_full_names_list_does_not_stop_the_value_peek(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """The names cap leaves the value peek running (#702).
+
+        Synthetic push: key names from the reporter's BK41 list, values
+        invented; no Standard Mode capture with values exists.
+        """
+        import json as json_mod
+
+        coordinator = self._coordinator(hass, standard_config_entry)
+        coordinator._note_stream_push_unmapped_keys(
+            [f"key{chr(97 + i // 26)}{chr(97 + i % 26)}" for i in range(128)], []
+        )
+        payload = json_mod.dumps(
+            {"params": {"num": 0, "soh": 100, "temp": 23, "bmsSn": "HJ31TESTDUMMY01"}}
+        ).encode()
+
+        coordinator._parse_message("/open/cert/SN001/quota", payload)
+
+        bucket = coordinator.stream_push_peek["by_num"]["0"]
+        assert bucket["pushes"] == 1
+        assert bucket["with_soh"] == 1
+        assert set(bucket["keys"]) == {"num", "temp"}
+        assert "temp" not in coordinator._device_data
+
+    async def test_two_num_values_keep_their_own_min_and_max(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """A second pack index never mixes into the first one's range (#702)."""
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        coordinator._note_stream_push_peek({"temp": 20, "vol": 51000}, True, 0)
+        coordinator._note_stream_push_peek({"temp": 30}, False, 1)
+        coordinator._note_stream_push_peek({"temp": 22, "vol": 51200}, True, 0)
+        coordinator._note_stream_push_peek({"gridConnectionSta": "on"}, False, 0)
+
+        by_num = coordinator.stream_push_peek["by_num"]
+        assert by_num["0"]["keys"]["temp"] == {
+            "count": 2,
+            "last": 22,
+            "min": 20,
+            "max": 22,
+        }
+        assert by_num["0"]["keys"]["vol"]["min"] == 51000
+        assert by_num["0"]["keys"]["gridConnectionSta"] == {"count": 1, "last": "on"}
+        assert by_num["0"]["pushes"] == 3
+        assert by_num["0"]["with_soh"] == 2
+        assert by_num["1"]["keys"]["temp"] == {
+            "count": 1,
+            "last": 30,
+            "min": 30,
+            "max": 30,
+        }
+
+    async def test_nan_and_bool_values_leave_min_and_max_alone(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """Only a finite number moves the range; a flag is shown as is (#702)."""
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        coordinator._note_stream_push_peek({"temp": float("nan")}, False, 0)
+        coordinator._note_stream_push_peek({"temp": 20}, False, 0)
+        coordinator._note_stream_push_peek({"temp": 22}, False, 0)
+        coordinator._note_stream_push_peek({"vol": True}, False, 0)
+
+        keys = coordinator.stream_push_peek["by_num"]["0"]["keys"]
+        assert keys["temp"]["min"] == 20
+        assert keys["temp"]["max"] == 22
+        assert keys["vol"] == {"count": 1, "last": True}
+
+    async def test_a_ninth_num_value_is_only_counted(
+        self,
+        hass: HomeAssistant,
+        standard_config_entry: MockConfigEntry,
+    ) -> None:
+        """At most eight pack indexes are kept, the rest is counted (#702)."""
+        coordinator = self._coordinator(hass, standard_config_entry)
+
+        for num in range(8):
+            coordinator._note_stream_push_peek({"temp": num}, False, num)
+        coordinator._note_stream_push_peek({"temp": 99}, False, 8)
+        coordinator._note_stream_push_peek({"temp": 98}, False, 3)
+
+        peek = coordinator.stream_push_peek
+        assert sorted(peek["by_num"]) == [str(num) for num in range(8)]
+        assert peek["num_overflow"] == 1
+        assert peek["by_num"]["3"]["keys"]["temp"]["last"] == 98
 
     async def test_dropped_key_names_are_capped_and_counted(
         self,

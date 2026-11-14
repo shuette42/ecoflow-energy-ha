@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import threading
 import time
 from collections import deque
@@ -96,6 +97,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # Total cap on the Stream push key names kept for diagnostics (#702).
 STREAM_PUSH_UNMAPPED_KEYS_MAX = 128
+# Distinct `num` values whose push values are kept for diagnostics (#702).
+STREAM_PUSH_PEEK_NUM_MAX = 8
 
 
 @dataclass(frozen=True)
@@ -537,6 +540,12 @@ class EcoFlowDeviceCoordinator(
         self._stream_push_unmapped_keys: set[str] = set()
         self._stream_push_withheld_keys: set[str] = set()
         self._stream_push_unmapped_keys_lock = threading.Lock()
+        # Values of a fixed list of those push keys, per payload `num`
+        # (#702): last, min, max, count. Guarded by the same lock; at most
+        # STREAM_PUSH_PEEK_NUM_MAX `num` values, a push for a further one is
+        # only counted.
+        self._stream_push_peek: dict[str, dict[str, Any]] = {}
+        self._stream_push_peek_num_overflow = 0
         # Stable SN → pack index mapping for proto heartbeats (cmd_id=7).
         # Each heartbeat contains only one pack; this map ensures the same
         # physical pack always maps to the same pack{n}_* sensor keys.
@@ -1042,6 +1051,60 @@ class EcoFlowDeviceCoordinator(
                 if len(hidden) >= STREAM_PUSH_UNMAPPED_KEYS_MAX:
                     break
                 hidden.add(name)
+
+    def _note_stream_push_peek(
+        self, values: dict[str, Any], with_soh: bool, num: int | None
+    ) -> None:
+        """Keep the peeked push values per `num`, for diagnostics (#702).
+
+        Called from the Paho thread. Per key: the last value, the push count
+        and, for numbers, min and max. Values of two `num` values never mix.
+        """
+        if not values:
+            return
+        label = "none" if num is None else str(num)
+        with self._stream_push_unmapped_keys_lock:
+            bucket = self._stream_push_peek.get(label)
+            if bucket is None:
+                if len(self._stream_push_peek) >= STREAM_PUSH_PEEK_NUM_MAX:
+                    self._stream_push_peek_num_overflow += 1
+                    return
+                bucket = {"pushes": 0, "with_soh": 0, "keys": {}}
+                self._stream_push_peek[label] = bucket
+            bucket["pushes"] += 1
+            if with_soh:
+                bucket["with_soh"] += 1
+            keys = bucket["keys"]
+            for key, value in values.items():
+                entry = keys.setdefault(key, {"count": 0})
+                entry["count"] += 1
+                entry["last"] = value
+                if (
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(value)
+                ):
+                    entry["min"] = min(entry.get("min", value), value)
+                    entry["max"] = max(entry.get("max", value), value)
+
+    @property
+    def stream_push_peek(self) -> dict[str, Any]:
+        """Return the peeked push values per `num` and the overflow count."""
+        with self._stream_push_unmapped_keys_lock:
+            return {
+                "by_num": {
+                    label: {
+                        "pushes": bucket["pushes"],
+                        "with_soh": bucket["with_soh"],
+                        "keys": {
+                            key: dict(entry)
+                            for key, entry in sorted(bucket["keys"].items())
+                        },
+                    }
+                    for label, bucket in sorted(self._stream_push_peek.items())
+                },
+                "num_overflow": self._stream_push_peek_num_overflow,
+            }
 
     @property
     def stream_push_unmapped_keys_full(self) -> bool:

@@ -183,6 +183,10 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
         self, names: list[str], withheld: list[str]
     ) -> None: ...
 
+    def _note_stream_push_peek(
+        self, values: dict[str, Any], with_soh: bool, num: int | None
+    ) -> None: ...
+
     @property
     def stream_push_unmapped_keys_full(self) -> bool: ...
 

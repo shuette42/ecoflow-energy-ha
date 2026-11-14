@@ -87,6 +87,7 @@ from ..ecoflow.parsers.solar_tracker_proto import parse_solar_tracker_message
 from ..ecoflow.parsers.stream_ac5000_proto import parse_stream_ac5000_message
 from ..ecoflow.parsers.stream_http import (
     parse_stream_quota,
+    peek_stream_quota_values,
     unmapped_stream_quota_keys,
 )
 from ..ecoflow.parsers.stream_proto import parse_stream_proto_message
@@ -725,12 +726,15 @@ class MqttIngestMixin(_Base):
                     # Names of the keys the parser drops, for diagnostics
                     # (#702). Standard Mode only: this is the Developer API
                     # push, and Enhanced Mode has no such quota.
-                    if (
-                        not self._enhanced_mode
-                        and not self.stream_push_unmapped_keys_full
-                    ):
-                        self._note_stream_push_unmapped_keys(
-                            *unmapped_stream_quota_keys(payload_obj)
+                    if not self._enhanced_mode:
+                        if not self.stream_push_unmapped_keys_full:
+                            self._note_stream_push_unmapped_keys(
+                                *unmapped_stream_quota_keys(payload_obj)
+                            )
+                        # Values of a fixed key list; the names cap above
+                        # must not stop them.
+                        self._note_stream_push_peek(
+                            *peek_stream_quota_values(payload_obj)
                         )
                     parsed = parse_stream_quota(payload_obj)
                     return parsed if parsed else None
