@@ -75,6 +75,7 @@ from ..const import (
     raw_capture_window_open,
 )
 from ..ecoflow.energy_integrator import EnergyIntegrator
+from ..ecoflow.energy_stream import powerpulse_controls
 from ..ecoflow.frame_capture import TypedFrameBuffer
 from .availability import AvailabilityMixin
 from .credentials import CredentialsMixin
@@ -780,7 +781,9 @@ class EcoFlowDeviceCoordinator(
         own set topic (ADR-009 addendum of 2026-09-12, from one recording of
         the app doing exactly that). `None`: two or more PowerOceans, where
         the relayed command has no way to pick the parent and the own-topic
-        command has not been observed on such an account - and also while
+        command has not been observed on such an account; with no
+        PowerOcean for a variant whose `POWERPULSE_CONTROLS` row has
+        `own_route` False (`C371`, #725) or that has no row at all - and also while
         the entry is torn down and its coordinator table is gone, so a press
         racing the unload sends nothing on either route. Resolved fresh on
         every call, like `powerocean_sibling()`.
@@ -791,7 +794,10 @@ class EcoFlowDeviceCoordinator(
         if len(matches) == 1:
             return "sibling"
         if not matches:
-            return "own"
+            # The own route only where the variant's row admits it (#725): a
+            # `C371` was never seen written on its own topic.
+            row = powerpulse_controls(self.device_sn)
+            return "own" if row is not None and row.own_route else None
         return None
 
     @property

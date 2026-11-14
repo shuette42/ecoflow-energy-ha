@@ -74,7 +74,8 @@ async def async_setup_entry(
         route = coordinator.charge_action_route()
         if route is None:
             _LOGGER.debug(
-                "Skipping wallbox buttons - two or more PowerOceans in entry (%s)",
+                "Skipping wallbox buttons - two or more PowerOceans in entry, "
+                "or no PowerOcean and no own route for this model (%s)",
                 coordinator.device_tag,
             )
             continue

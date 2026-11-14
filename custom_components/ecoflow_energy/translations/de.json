@@ -4102,6 +4102,9 @@
     "powerpulse_phase_setting_needs_powerocean": {
       "message": "Die Phaseneinstellung lässt sich nur über eine PowerOcean im selben Konto setzen; dieser Eintrag hat keine."
     },
+    "powerpulse_setting_not_supported": {
+      "message": "Dieses Wallbox-Modell nimmt diese Einstellung noch nicht von Home Assistant an. Es wurde nichts gesendet."
+    },
     "powerpulse_phase_setting_not_confirmed": {
       "message": "Die Wallbox hat die neue Phaseneinstellung nicht innerhalb der erlaubten Zeit gemeldet. Zuletzt gemeldet: {reported}."
     },

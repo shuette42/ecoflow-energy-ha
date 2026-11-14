@@ -4102,6 +4102,9 @@
     "powerpulse_phase_setting_needs_powerocean": {
       "message": "Ustawienie faz można zmienić tylko przez PowerOcean na tym samym koncie; ten wpis go nie zawiera."
     },
+    "powerpulse_setting_not_supported": {
+      "message": "Ten model ładowarki nie przyjmuje jeszcze tego ustawienia z Home Assistant; nic nie zostało wysłane."
+    },
     "powerpulse_phase_setting_not_confirmed": {
       "message": "Wallbox nie zgłosił nowego ustawienia faz w wyznaczonym czasie. Ostatnie zgłoszone ustawienie: {reported}."
     },

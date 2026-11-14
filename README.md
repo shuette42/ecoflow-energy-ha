@@ -59,7 +59,7 @@
 | **Solar Tracker** | `HZ31` `S02F` | Enhanced only | 6 | none, read-only for now | none | ~3 s |
 | **WAVE 3** | `AC71` | Enhanced only | 18 + 5 binary | 4 switches · 5 numbers · 5 selects · 1 climate | 1 | ~2 s / 120 s |
 | **PowerPulse 2** | `C376` `C374` | Enhanced only | 21 + 1 binary | 2 buttons · 1 number with no PowerOcean, plus 5 numbers · 2 selects · 5 switches with exactly one PowerOcean in the entry | 1 | on change, refreshed after 20 min |
-| **PowerPulse 2** | `C371` | Enhanced only | 21 + 1 binary | none, read-only for now | 1 | ~1 min observed |
+| **PowerPulse 2** | `C371` | Enhanced only | 21 + 1 binary | 3 numbers · 1 select · 2 buttons (with one PowerOcean) | 1 | ~1 min observed |
 | **Ocean 2** | `RE11` `RE17` `RE41` `RE42` `RE43` | Enhanced only | 51 + 12 per module | 1 number · 1 switch on `RE11` and `RE41` (Backup Reserve, Storm Guard), 1 number on `RE43` (Backup Reserve), others read-only | 6 | ~3 s |
 | **OCEAN Smart Electrical Panel 40** | `HR61` | Enhanced only | 19 + 3 per circuit, 1 binary per circuit | none, read-only | - | ~3 s |
 | **OCEAN Pro** | `HR51` | Enhanced only | 30 | none, read-only | 2 | ~3 s |
@@ -102,7 +102,7 @@
 
 **PowerOcean Plus** (`R371`, `R372`, `R373`, `R374`, `HJ3C`) are the higher-power 3-phase hybrid units. They use the same entity set as a standard PowerOcean and are supported in Enhanced Mode. Beyond a standard unit they report per-phase **reactive power** (var) and **apparent power** (VA), and drive **MPPT strings 3 and 4**. These entities ship disabled by default so that standard units are not left with permanently empty sensors, so enable the ones you need after adding a Plus device. Field coverage is based on diagnostics from live Plus hardware; if your unit reports a value that no entity picks up, the raw data is available via **Download Diagnostics**.
 
-**PowerPulse 2 `C371`** gets the same sensors as the `C376` and `C374`. Charging power and session energy were checked against the app over one overnight charge. It is read-only for now: the buttons, numbers, selects and switches described below work on the `C376` and `C374` only, until a write to a `C371` is confirmed.
+**PowerPulse 2 `C371`** gets the same sensors as the `C376` and `C374`. Charging power and session energy were checked against the app over one overnight charge. Behind one PowerOcean it also has Maximum Current, Custom Charging Current and Solar Minimum Current from 6 to 32 A, Charging Mode and the Start and Stop Charging buttons. The switches, the Phase Setting select and the screen and LED controls stay with the `C376` and `C374` until they are checked on a `C371`, and a `C371` without a PowerOcean stays read-only.
 
 **Per-vehicle charging energy (opt-in).** PowerPulse 2 account sign-in entries can enable **Track completed PowerPulse charging energy by vehicle** in options. This adds one kWh sensor per vehicle profile found in completed charging records, plus a separate unassigned total when present, in addition to the fixed counts above. See [coverage and setup](documentation/entities/powerpulse-2.md#completed-energy-per-vehicle-profile).
 

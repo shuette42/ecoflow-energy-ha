@@ -26,7 +26,7 @@ from ecoflow_energy.const import (
     OCEAN2_CONTROLS,
     POWEROCEAN_BINARY_SENSORS,
     POWEROCEAN_SENSORS,
-    POWERPULSE_CONTROL_PREFIXES,
+    POWERPULSE_CONTROLS,
     RAW_FRAME_BUNDLE_HARD_CAP,
     RAW_FRAME_BUNDLE_MAX_BYTES,
     RAW_FRAME_KEYS_MAX,
@@ -1550,7 +1550,7 @@ class TestWave3Sensors:
         _SN_PREFIX_EXCLUDED_KEYS,
         STREAM_CONTROL_PREFIXES,
         STREAM_OUTLET_CONTROL_PREFIXES,
-        POWERPULSE_CONTROL_PREFIXES,
+        POWERPULSE_CONTROLS,
         STREAM_AC5000_CONTROL_PREFIXES,
         OCEAN2_CONTROLS,
         OCEAN2_AC_SIGN_INVERTED,
@@ -1602,3 +1602,44 @@ def test_only_the_heating_rod_power_sensors_write_on_report() -> None:
             "heating_rod_power_from_grid_w",
         ]
     )
+
+
+# --- #725: one table decides which PowerPulse 2 variants may be written to
+
+
+@pytest.mark.parametrize(
+    ("serial", "expected"),
+    [
+        ("C371TEST00000001", True),
+        ("C376TEST00000001", True),
+        ("C374TEST00000001", True),
+        ("C375TEST00000001", False),
+    ],
+)
+def test_supports_powerpulse_controls_follows_the_table(
+    serial: str, expected: bool
+) -> None:
+    from ecoflow_energy.const import supports_powerpulse_controls
+
+    assert supports_powerpulse_controls(serial) is expected
+
+
+def test_powerpulse_declared_current_range_is_derived_from_the_table() -> None:
+    from ecoflow_energy.const import POWERPULSE2_MAX_CURRENT_RANGE_A
+
+    assert POWERPULSE2_MAX_CURRENT_RANGE_A == (6, 32)
+
+
+def test_only_the_c371_row_withholds_the_settings_controls() -> None:
+    from ecoflow_energy.const import powerpulse_control_allowed
+
+    withheld = {
+        prefix
+        for prefix, row in POWERPULSE_CONTROLS.items()
+        if not row.settings_controls
+    }
+    assert withheld == {"C371"}
+    assert not powerpulse_control_allowed("C371TEST00000001", "ev_plug_and_play")
+    assert not powerpulse_control_allowed("C371TEST00000001", "ev_phase_setting")
+    assert powerpulse_control_allowed("C371TEST00000001", "ev_max_current_a")
+    assert powerpulse_control_allowed("C376TEST00000001", "ev_plug_and_play")

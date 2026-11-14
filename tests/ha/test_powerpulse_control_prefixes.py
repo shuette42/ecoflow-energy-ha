@@ -23,7 +23,7 @@ from .test_powerpulse2_controls import (
 
 
 @pytest.mark.parametrize(
-    "prefix,allowed", [("C371", False), ("C379", False), ("C374", True), ("C376", True)]
+    "prefix,allowed", [("C371", True), ("C379", False), ("C374", True), ("C376", True)]
 )
 @pytest.mark.parametrize("sibling", [False, True])
 async def test_control_creation_by_prefix(
@@ -44,12 +44,23 @@ async def test_control_creation_by_prefix(
     wallbox.set_device_value("ev_screen_enabled", True)
     wallbox.set_device_value("ev_led_brightness_pct", 50)
     wallbox.set_device_value("ev_screen_brightness_pct", 25)
-    for setup, expected in [
+    counts = [
         (button_setup, 2),
         (number_setup, 5 if sibling else 1),
         (select_setup, 2 * int(sibling)),
         (switch_setup, 5 * int(sibling)),
-    ]:
+    ]
+    if prefix == "C371":
+        # #725: behind one PowerOcean the start/stop buttons, the three
+        # current numbers and the charging mode; no own route, no settings or
+        # display controls.
+        counts = [
+            (button_setup, 2 * int(sibling)),
+            (number_setup, 3 * int(sibling)),
+            (select_setup, 1 * int(sibling)),
+            (switch_setup, 0),
+        ]
+    for setup, expected in counts:
         entities: list[Any] = []
         await setup(hass, entry, add_entities_collector(entities))
         # Exclude the sibling PowerOcean's own controls.

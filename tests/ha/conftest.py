@@ -33,6 +33,25 @@ def add_entities_collector(target: list[Any]) -> AddEntitiesCallback:
     return _add
 
 
+@pytest.fixture
+def masked_wallbox_is_c376(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let the masked wallbox descriptor (`X` * 16) stand for a `C376`.
+
+    The wallbox tests report the accessory descriptor with the fixtures'
+    masked serial, and the write builders bound each current by the
+    descriptor's row in `POWERPULSE_CONTROLS` (#725). The mask stands for the
+    `C376` the recordings came from; a test about another variant reports
+    that variant's own serial as the descriptor.
+    """
+    from custom_components.ecoflow_energy.ecoflow import energy_stream
+
+    monkeypatch.setitem(
+        energy_stream.POWERPULSE_CONTROLS,
+        "XXXX",
+        energy_stream.POWERPULSE_CONTROLS["C376"],
+    )
+
+
 @pytest.fixture(autouse=True)
 def _record_threads_before_test():
     """Record threads before test so the framework's leak-check only sees new ones.

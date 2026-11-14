@@ -9,7 +9,7 @@ Based on the public EcoFlow Portal JavaScript bundle.
 
 import time
 from collections.abc import Sequence
-from typing import Literal
+from typing import Literal, NamedTuple
 
 from .const import (
     POWERPULSE2_DISPLAY_BLOCK_LENGTHS,
@@ -378,9 +378,10 @@ def build_powerpulse_param_set_current_payload(
     match the captured frames.
 
     Args:
-        max_current_a: The new maximum current in whole amps, 6-16
-            inclusive - the range the owner's sweep covered end to end
-            (comment on #7, 2026-09-10T14:44:43Z).
+        max_current_a: The new maximum current in whole amps, from 6 to
+            the ceiling of the wallbox's row in `POWERPULSE_CONTROLS` (16 on
+            `C376`/`C374`, the range the owner's sweep covered end to end on
+            #7; 32 on `C371`, #725). An unregistered prefix raises.
         dev_addr: The wallbox's bus address as reported by its own settings
             message (`EDevRunDataSync`, 241/44) - 215 on every capture on
             file, never a constant assumed by this function.
@@ -389,12 +390,13 @@ def build_powerpulse_param_set_current_payload(
             carried in the envelope's field 25.
         seq: Sequence number. Default 0 generates from timestamp.
     """
-    if type(max_current_a) is not int or not (6 <= max_current_a <= 16):
-        raise ValueError(
-            f"max_current_a must be an int in 6..16, got {max_current_a!r}"
-        )
     _validate_powerpulse_serial("dev_sn", dev_sn)
     _validate_powerpulse_serial("powerocean_sn", powerocean_sn)
+    low, high = POWERPULSE_MIN_CURRENT_A, _powerpulse_max_current_a(dev_sn)
+    if type(max_current_a) is not int or not (low <= max_current_a <= high):
+        raise ValueError(
+            f"max_current_a must be an int in {low}..{high}, got {max_current_a!r}"
+        )
 
     dev_info = _build_powerpulse_dev_info(dev_addr, dev_sn)
     pile_param_set = encode_field_varint(3, max_current_a * 10)
@@ -463,15 +465,22 @@ def build_powerpulse_param_set_mode_payload(
 # the read numbers of the settings report: 1 switch bits, 2 work mode, 4 Solar
 # minimum current (deci-amps), 5 phase specified (0 Auto, 1 one phase, 2 three
 # phases) and 6 Custom current (deci-amps). Field 3 (the maximum current) has
-# its own builder and is not accepted here. The current range is the app's
-# 6-16 A.
+# its own builder and is not accepted here. The two current fields take 6 A up
+# to the wallbox's own ceiling (`POWERPULSE_CONTROLS`), in deci-amps.
 _PILE_PARAM_SET_BOUNDS: dict[int, tuple[int, int]] = {
     1: (0, 255),
     2: (1, 4),
-    4: (60, 160),
     5: (0, 2),
-    6: (60, 160),
 }
+_PILE_PARAM_SET_CURRENT_FIELDS: tuple[int, ...] = (4, 6)
+
+
+def _pile_param_set_bounds(dev_sn: str) -> dict[int, tuple[int, int]]:
+    """Return every writable settings field with its bounds for this wallbox."""
+    current = (POWERPULSE_MIN_CURRENT_A * 10, _powerpulse_max_current_a(dev_sn) * 10)
+    bounds = dict(_PILE_PARAM_SET_BOUNDS)
+    bounds.update(dict.fromkeys(_PILE_PARAM_SET_CURRENT_FIELDS, current))
+    return bounds
 
 
 def build_powerpulse_param_set_settings_payload(
@@ -497,9 +506,11 @@ def build_powerpulse_param_set_settings_payload(
     Args:
         fields: Write field number -> value. Accepted keys and inclusive
             ranges: 1 switch bits (0-255), 2 work mode (1-4), 4 Solar minimum
-            current in deci-amps (60-160), 5 phase specified (0-2) and 6
-            Custom current in deci-amps (60-160). Must not be empty; values
-            must be `int` (not `bool`, not `float`).
+            current in deci-amps, 5 phase specified (0-2) and 6 Custom
+            current in deci-amps; both currents run from 60 to ten times the
+            wallbox's ceiling in `POWERPULSE_CONTROLS` (160 on `C376`/`C374`,
+            320 on `C371`). Must not be empty; values must be `int` (not
+            `bool`, not `float`). An unregistered prefix raises.
         dev_addr: The wallbox's bus address as reported by its own settings
             message (`EDevRunDataSync`, 241/44).
         dev_sn: The wallbox's 16-character serial, from the same report.
@@ -509,19 +520,20 @@ def build_powerpulse_param_set_settings_payload(
     """
     if not isinstance(fields, dict) or not fields:
         raise ValueError("fields must be a non-empty dict of field number -> value")
+    _validate_powerpulse_serial("dev_sn", dev_sn)
+    _validate_powerpulse_serial("powerocean_sn", powerocean_sn)
+    bounds = _pile_param_set_bounds(dev_sn)
     for field_num, value in fields.items():
-        if type(field_num) is not int or field_num not in _PILE_PARAM_SET_BOUNDS:
+        if type(field_num) is not int or field_num not in bounds:
             raise ValueError(
                 f"field {field_num!r} is not writable here, "
-                f"expected one of {sorted(_PILE_PARAM_SET_BOUNDS)}"
+                f"expected one of {sorted(bounds)}"
             )
-        low, high = _PILE_PARAM_SET_BOUNDS[field_num]
+        low, high = bounds[field_num]
         if type(value) is not int or not (low <= value <= high):
             raise ValueError(
                 f"field {field_num} must be an int in {low}..{high}, got {value!r}"
             )
-    _validate_powerpulse_serial("dev_sn", dev_sn)
-    _validate_powerpulse_serial("powerocean_sn", powerocean_sn)
 
     dev_info = _build_powerpulse_dev_info(dev_addr, dev_sn)
     pile_param_set = b"".join(
@@ -677,20 +689,24 @@ def build_powerpulse_standalone_current_ctrl_payload(
     wallbox's own serial in field 25, `cmd_func` 2.
 
     Args:
-        current_a: The new charge current in whole amps, 6-16 inclusive -
-            the same bound source as the sibling route's maximum current
-            (`POWERPULSE2_MAX_CURRENT_RANGE_A`); the floor is not otherwise
-            evidenced in the recording (60 is both the lowest value seen and
-            the device's resting value).
+        current_a: The new charge current in whole amps, from 6 to the
+            wallbox's ceiling in `POWERPULSE_CONTROLS` - the same bound
+            source as the sibling route's maximum current; the floor is not
+            otherwise evidenced in the recording (60 is both the lowest value
+            seen and the device's resting value). An unregistered prefix
+            raises.
         device_sn: The wallbox's own 16-character serial (the coordinator's
             `device_sn`), not the accessory descriptor.
         seq: Sequence number. Default 0 generates from timestamp.
     """
-    if type(current_a) is not int or not (6 <= current_a <= 16):
-        raise ValueError(f"current_a must be an int in 6..16, got {current_a!r}")
     if len(device_sn) != 16 or not device_sn.isascii() or not device_sn.isalnum():
         raise ValueError(
             f"device_sn must be 16 alphanumeric ASCII characters, got {device_sn!r}"
+        )
+    low, high = POWERPULSE_MIN_CURRENT_A, _powerpulse_max_current_a(device_sn)
+    if type(current_a) is not int or not (low <= current_a <= high):
+        raise ValueError(
+            f"current_a must be an int in {low}..{high}, got {current_a!r}"
         )
 
     pdata = encode_field_varint(5, current_a * 10) + encode_field_varint(7, 2)
@@ -719,6 +735,49 @@ def powerglow_max_power_w(hr_sn: str) -> int:
     return _POWERGLOW_MAX_POWER_W_BY_PREFIX.get(
         hr_sn[:4], _POWERGLOW_MAX_POWER_W_DEFAULT
     )
+
+
+class PowerPulseControls(NamedTuple):
+    """What may be written to one PowerPulse 2 variant (#725).
+
+    ``max_current_a`` is the highest current in whole amps any current write
+    may carry. ``own_route`` admits the controls on the wallbox's own topic
+    (2/81, no PowerOcean in the entry). ``settings_controls`` admits the
+    settings switches, the phase setting and the display controls.
+    """
+
+    max_current_a: int
+    own_route: bool
+    settings_controls: bool
+
+
+# The PowerPulse 2 variants that may be written to, keyed by serial prefix. A
+# prefix not listed here stays read-only. `C376`/`C374`: the 6-16 A sweep on
+# #7 and every control on both routes. `C371`: maximum and custom current
+# written and read back up to 32 A, start/stop through a PowerOcean; no app
+# write on its own topic and no confirmed settings or display write (#725).
+# This table is the only copy; callers ask `powerpulse_controls`.
+POWERPULSE_MIN_CURRENT_A = 6
+POWERPULSE_CONTROLS: dict[str, PowerPulseControls] = {
+    "C376": PowerPulseControls(16, True, True),
+    "C374": PowerPulseControls(16, True, True),
+    "C371": PowerPulseControls(32, False, False),
+}
+
+
+def powerpulse_controls(device_sn: str) -> PowerPulseControls | None:
+    """Return the control row for this wallbox serial, or None (read-only)."""
+    return POWERPULSE_CONTROLS.get(device_sn[:4].upper())
+
+
+def _powerpulse_max_current_a(device_sn: str) -> int:
+    """Return the current ceiling for this wallbox; unregistered raises."""
+    row = powerpulse_controls(device_sn)
+    if row is None:
+        raise ValueError(
+            f"PowerPulse prefix {device_sn[:4]!r} has no registered controls"
+        )
+    return row.max_current_a
 
 
 def _powerglow_int(name: str, value: object, minimum: int, maximum: int) -> int:

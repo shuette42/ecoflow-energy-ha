@@ -29,7 +29,6 @@ from ..const import (
     POWERPULSE2_CHARGE_CURRENT_WINDOW_S,
     POWERPULSE2_CHARGE_MODE_OPTIONS,
     POWERPULSE2_CHARGE_MODE_WIRE,
-    POWERPULSE2_MAX_CURRENT_RANGE_A,
     POWERPULSE2_MAX_CURRENT_WINDOW_S,
     POWERPULSE2_PHASE_SETTING_OPTIONS,
     POWERPULSE2_PHASE_SETTING_WIRE,
@@ -39,6 +38,7 @@ from ..const import (
     POWERPULSE2_SETTINGS_MAX_AGE_S,
     POWERPULSE2_SETTINGS_WINDOW_S,
     ocean2_controls,
+    powerpulse_control_allowed,
 )
 from ..ecoflow.const import (
     POWEROCEAN_FEED_SCHEDULE_POWER_MIN_W,
@@ -53,6 +53,7 @@ from ..ecoflow.const import (
     schedule_power_max_w,
     schedule_power_min_w,
 )
+from ..ecoflow.energy_stream import POWERPULSE_MIN_CURRENT_A, powerpulse_controls
 from ..ecoflow.frame_capture import sanitize_frame
 from ..entity import as_known_int
 
@@ -2186,6 +2187,19 @@ class SetCommandsMixin(_Base):
         finally:
             self._clear_pending_write(record)
 
+    def _powerpulse_current_range_a(self) -> tuple[int, int]:
+        """Return the current range a write to this wallbox may carry (#725).
+
+        From 6 A to the ceiling of the wallbox's row in `POWERPULSE_CONTROLS`
+        (16 A on `C376`/`C374`, 32 A on `C371`). A prefix without a row has no
+        control entity; should a write reach here anyway, the range collapses
+        to the floor alone, and the builder refuses the prefix outright.
+        """
+        row = powerpulse_controls(self.device_sn)
+        if row is None:
+            return POWERPULSE_MIN_CURRENT_A, POWERPULSE_MIN_CURRENT_A
+        return POWERPULSE_MIN_CURRENT_A, row.max_current_a
+
     async def async_set_powerpulse_max_current(self, max_current_a: int) -> None:
         """Set this PowerPulse 2's maximum charge current (PLAN-146).
 
@@ -2211,7 +2225,7 @@ class SetCommandsMixin(_Base):
         from ..ecoflow.energy_stream import build_powerpulse_param_set_current_payload
         from .core import PendingDeviceWrite
 
-        low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
+        low, high = self._powerpulse_current_range_a()
 
         async with self._pending_write_lock:
             if self._shutdown:
@@ -2358,7 +2372,7 @@ class SetCommandsMixin(_Base):
         )
         from .core import PendingDeviceWrite
 
-        low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
+        low, high = self._powerpulse_current_range_a()
 
         async with self._pending_write_lock:
             if self._shutdown:
@@ -2925,7 +2939,7 @@ class SetCommandsMixin(_Base):
         `ev_solar_min_current_a` reaching the requested value on the frame
         being applied. Routing, lock and wait: `_async_write_powerpulse_settings`.
         """
-        low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
+        low, high = self._powerpulse_current_range_a()
         if type(current_a) is not int or not (low <= current_a <= high):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -2951,7 +2965,7 @@ class SetCommandsMixin(_Base):
         published. The Solar minimum current has no such check, the wallbox
         keeps it above the maximum (issue #480, 2026-10-05).
         """
-        low, high = POWERPULSE2_MAX_CURRENT_RANGE_A
+        low, high = self._powerpulse_current_range_a()
         if type(current_a) is not int or not (low <= current_a <= high):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -2991,6 +3005,19 @@ class SetCommandsMixin(_Base):
             describe_reported=_describe_amps,
         )
 
+    def _refuse_withheld_powerpulse_control(self, key: str) -> None:
+        """Refuse a settings or display write this variant's row withholds.
+
+        A `C371` gets no settings, phase or display entity (#725,
+        `powerpulse_control_allowed`); this keeps the write itself closed too,
+        before anything is built or published.
+        """
+        if not powerpulse_control_allowed(self.device_sn, key):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="powerpulse_setting_not_supported",
+            )
+
     async def async_set_powerpulse_phase_setting(self, option: str) -> None:
         """Set the phase the wallbox charges on (PLAN-172, issue #482).
 
@@ -2999,6 +3026,7 @@ class SetCommandsMixin(_Base):
         wire like any other (the builder tracks presence). Confirmed on
         `ev_phase_setting` reaching the wire value.
         """
+        self._refuse_withheld_powerpulse_control("ev_phase_setting")
         if option not in POWERPULSE2_PHASE_SETTING_OPTIONS:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -3048,6 +3076,7 @@ class SetCommandsMixin(_Base):
         other bits in the byte are not this write's business. The refusal and
         confirmation texts are keyed `powerpulse_continuous_*` for all three.
         """
+        self._refuse_withheld_powerpulse_control(key)
         action = key.removeprefix("ev_")
 
         def plan() -> _SettingsWrite:
@@ -3114,6 +3143,7 @@ class SetCommandsMixin(_Base):
         reuse the `powerpulse_continuous_*` keys, as the three settings
         switches do.
         """
+        self._refuse_withheld_powerpulse_control(key)
         if key not in POWERPULSE2_DISPLAY_KEYS:
             raise ValueError(f"{key!r} is not a PowerPulse 2 display value")
         index = POWERPULSE2_DISPLAY_KEYS.index(key)

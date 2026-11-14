@@ -4102,6 +4102,9 @@
     "powerpulse_phase_setting_needs_powerocean": {
       "message": "L'impostazione delle fasi può essere cambiata solo tramite un PowerOcean nello stesso account; questa voce non ne ha nessuno."
     },
+    "powerpulse_setting_not_supported": {
+      "message": "Questo modello di wallbox non accetta ancora questa impostazione da Home Assistant; non è stato inviato nulla."
+    },
     "powerpulse_phase_setting_not_confirmed": {
       "message": "La wallbox non ha riportato la nuova impostazione delle fasi entro il tempo consentito. Ultima impostazione riportata: {reported}."
     },

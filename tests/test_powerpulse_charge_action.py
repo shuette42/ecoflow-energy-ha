@@ -15,6 +15,7 @@ import json
 from pathlib import Path
 
 import pytest
+from ecoflow_energy.ecoflow import energy_stream
 from ecoflow_energy.ecoflow.energy_stream import (
     _build_powerocean_set_envelope,
     build_powerpulse_charge_action_payload,
@@ -42,6 +43,26 @@ CHARGE_MODE_WRITES_FIXTURE = FIXTURE_DIR / "c376_charging_mode_writes_20260913.j
 
 DEV_ADDR = 215
 DEV_SN = "X" * 16
+C376_SN = "C376TEST00000007"
+C371_SN = "C371TEST00000001"
+
+
+@pytest.fixture(autouse=True)
+def _masked_serial_is_a_c376(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let the fixtures' masked wallbox serial stand for the C376 it masks.
+
+    Every app frame on record was written to a `C376` and its serial is
+    masked to `X` * 16 (`DEV_SN`). The builders bound each write by the
+    serial's row in `POWERPULSE_CONTROLS`, so the byte-for-byte replays give
+    the mask the `C376` row. The tests that check the rows themselves use
+    `C376_SN` and `C371_SN`, which this fixture does not touch.
+    """
+    monkeypatch.setitem(
+        energy_stream.POWERPULSE_CONTROLS,
+        "XXXX",
+        energy_stream.POWERPULSE_CONTROLS["C376"],
+    )
+
 
 # (seq, action, full frame hex) - the four app frames on record, PLAN-115
 # section 1. `on_off_set`: 1 stop, 2 start.
@@ -794,3 +815,124 @@ def test_settings_builder_accepts_both_ends_of_every_range(
         assert _pile_param_set_fields(_settings_payload({field_num: value})) == {
             field_num: value
         }
+
+
+# --- #725: the current ceiling follows the wallbox's row in POWERPULSE_CONTROLS
+
+
+def _pile_param_set_field(payload: bytes, field_num: int) -> int:
+    """Return one varint field of `EDevPileParamSet` (pdata field 4)."""
+    headers, _ = decode_header_message(payload)
+    pdata = bytes.fromhex(headers[0]["pdata"])
+    (pile,) = [v for f, _w, v in _iter_fields(pdata) if f == 4]
+    values = [v for f, _w, v in _iter_fields(pile) if f == field_num]
+    assert len(values) == 1
+    return _read_varint(values[0], 0)[0]
+
+
+def test_c371_max_current_32_is_written_as_320_deci_amps() -> None:
+    payload = build_powerpulse_param_set_current_payload(
+        32, DEV_ADDR, C371_SN, "Y" * 16
+    )
+    assert _pile_param_set_field(payload, 3) == 320
+
+
+def test_c371_settings_accept_a_custom_current_of_32_a() -> None:
+    payload = build_powerpulse_param_set_settings_payload(
+        {6: 320}, DEV_ADDR, C371_SN, "Y" * 16
+    )
+    assert _pile_param_set_field(payload, 6) == 320
+
+
+def test_c376_keeps_its_16_a_ceiling() -> None:
+    build_powerpulse_param_set_current_payload(16, DEV_ADDR, C376_SN, "Y" * 16)
+    with pytest.raises(ValueError, match=r"6\.\.16"):
+        build_powerpulse_param_set_current_payload(17, DEV_ADDR, C376_SN, "Y" * 16)
+    with pytest.raises(ValueError, match=r"60\.\.160"):
+        build_powerpulse_param_set_settings_payload(
+            {6: 170}, DEV_ADDR, C376_SN, "Y" * 16
+        )
+    with pytest.raises(ValueError, match=r"6\.\.16"):
+        build_powerpulse_standalone_current_ctrl_payload(17, C376_SN)
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda sn: build_powerpulse_param_set_current_payload(
+            10, DEV_ADDR, sn, "Y" * 16
+        ),
+        lambda sn: build_powerpulse_param_set_settings_payload(
+            {5: 0}, DEV_ADDR, sn, "Y" * 16
+        ),
+        lambda sn: build_powerpulse_standalone_current_ctrl_payload(10, sn),
+    ],
+    ids=["max-current", "settings", "standalone-current"],
+)
+def test_an_unregistered_prefix_is_refused_by_every_current_builder(build) -> None:
+    build(C376_SN)  # the same call on a registered prefix goes through
+    with pytest.raises(ValueError, match="no registered controls"):
+        build("C375TEST00000001")
+
+
+C371_WRITES_FIXTURE = FIXTURE_DIR / "c371_param_writes_20261113.json"
+
+
+def _c371_app_write_pile(index: int) -> dict[int, int]:
+    """`EDevPileParamSet` (pdata field 4) of one app write to the C371, by field."""
+    frames = json.loads(C371_WRITES_FIXTURE.read_text())["frames"]
+    (frame,) = [f for f in frames if f["device"] == "J32B" and f["index"] == index]
+    headers, _ = decode_header_message(bytes.fromhex(frame["hex"]))
+    assert (headers[0]["cmd_func"], headers[0]["cmd_id"]) == (241, 102)
+    pdata = bytes.fromhex(headers[0]["pdata"])
+    (pile,) = [v for f, _w, v in _iter_fields(pdata) if f == 4]
+    return {f: _read_varint(v, 0)[0] for f, _w, v in _iter_fields(pile)}
+
+
+def _builder_pile(payload: bytes) -> dict[int, int]:
+    headers, _ = decode_header_message(payload)
+    pdata = bytes.fromhex(headers[0]["pdata"])
+    (pile,) = [v for f, _w, v in _iter_fields(pdata) if f == 4]
+    return {f: _read_varint(v, 0)[0] for f, _w, v in _iter_fields(pile)}
+
+
+@pytest.mark.parametrize(
+    ("index", "build", "omitted"),
+    [
+        # #164: the app's 32 A maximum, `1: 0, 3: 320`.
+        (
+            164,
+            lambda: build_powerpulse_param_set_current_payload(
+                32, DEV_ADDR, C371_SN, "Y" * 16
+            ),
+            {1},
+        ),
+        # #40: the app's 31 A custom current in Custom mode, `1: 17, 2: 3, 6: 310`.
+        (
+            40,
+            lambda: build_powerpulse_param_set_settings_payload(
+                {6: 310}, DEV_ADDR, C371_SN, "Y" * 16
+            ),
+            {1, 2},
+        ),
+    ],
+    ids=["max-32-a", "custom-31-a"],
+)
+def test_c371_builders_match_the_real_app_writes(index, build, omitted) -> None:
+    """Our `EDevPileParamSet` equals the app's on every field we send.
+
+    The app also resends the switch bits (field 1) and, for the custom
+    current, the mode (field 2); our builders write the one setting alone, so
+    those fields are left out of the comparison and nothing else is.
+    """
+    real = _c371_app_write_pile(index)
+    ours = _builder_pile(build())
+    assert ours == {f: v for f, v in real.items() if f not in omitted}
+
+
+def test_the_31_a_maximum_write_does_not_match_a_32_a_build() -> None:
+    real = _c371_app_write_pile(129)  # `1: 0, 3: 310`
+    ours = _builder_pile(
+        build_powerpulse_param_set_current_payload(32, DEV_ADDR, C371_SN, "Y" * 16)
+    )
+    assert ours != {f: v for f, v in real.items() if f != 1}
