@@ -18,8 +18,10 @@ from unittest.mock import patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from pytest_homeassistant_custom_component.common import MockEntityPlatform
 
 from custom_components.ecoflow_energy.button import async_setup_entry as button_setup
+from custom_components.ecoflow_energy.const import DOMAIN
 from custom_components.ecoflow_energy.coordinator import EcoFlowDeviceCoordinator
 from custom_components.ecoflow_energy.ecoflow.parsers.stream_proto import (
     _iter_fields,
@@ -126,14 +128,71 @@ async def test_c376_behind_one_powerocean_keeps_every_control(
     assert set(c376) >= CORE_KEYS | SETTINGS_KEYS
 
 
-@pytest.mark.parametrize(("serial", "ceiling"), [(C371_SN, 32.0), (C376_SN, 16.0)])
-async def test_the_current_numbers_end_at_the_variants_ceiling(
-    hass: HomeAssistant, serial: str, ceiling: float
+def _publish_state(wallbox: EcoFlowDeviceCoordinator) -> None:
+    """Hand the accumulated device data to the entities, as a push does."""
+    wallbox.async_set_updated_data(dict(wallbox._device_data))
+
+
+@pytest.mark.parametrize(
+    ("serial", "maximum", "solar_min"),
+    [(C371_SN, 32.0, 16.0), (C376_SN, 16.0, 16.0)],
+)
+async def test_the_current_numbers_end_where_the_app_ends_them(
+    hass: HomeAssistant, serial: str, maximum: float, solar_min: float
 ) -> None:
-    _, entities = await _wallbox_entities(hass, serial, oceans=1)
-    for key in ("ev_max_current_a", "ev_custom_current_a", "ev_solar_min_current_a"):
+    """Maximum and Custom at the row ceiling, Solar Minimum at 16 A (#725).
+
+    No Maximum Current is reported here, so the Custom current keeps the row
+    ceiling instead of a guessed one.
+    """
+    wallbox, entities = await _wallbox_entities(hass, serial, oceans=1)
+    wallbox._device_data.pop("ev_max_current_a")
+    _publish_state(wallbox)
+    expected = {
+        "ev_max_current_a": maximum,
+        "ev_custom_current_a": maximum,
+        "ev_solar_min_current_a": solar_min,
+    }
+    for key, ceiling in expected.items():
         assert entities[key].native_min_value == 6.0
         assert entities[key].native_max_value == ceiling, key
+
+
+async def test_c371_custom_current_ends_at_the_reported_maximum(
+    hass: HomeAssistant,
+) -> None:
+    """A reported Maximum of 20 A narrows only the Custom current (#725)."""
+    wallbox, entities = await _wallbox_entities(hass, C371_SN, oceans=1)
+    custom = entities["ev_custom_current_a"]
+    platform = MockEntityPlatform(hass, domain="number", platform_name=DOMAIN)
+    await platform.async_add_entities([custom])
+    _publish_state(wallbox)  # settles the value (6 A) under the 16 A maximum
+    await hass.async_block_till_done()
+    settled = hass.states.get(custom.entity_id)
+    assert settled is not None
+    assert settled.attributes["max"] == 16.0
+    wallbox.set_device_value("ev_max_current_a", 20.0)
+    _publish_state(wallbox)
+    await hass.async_block_till_done()
+    assert custom.native_max_value == 20.0
+    # The value did not move, so only the bounds check publishes the new max.
+    state = hass.states.get(custom.entity_id)
+    assert state is not None
+    assert state.attributes["max"] == 20.0
+    assert entities["ev_max_current_a"].native_max_value == 32.0
+    assert entities["ev_solar_min_current_a"].native_max_value == 16.0
+
+
+@pytest.mark.parametrize(("reported", "ceiling"), [(6.0, 6.0), (16.5, 16.0)])
+async def test_c371_custom_current_bound_is_whole_amps_and_never_below_6(
+    hass: HomeAssistant, reported: float, ceiling: float
+) -> None:
+    """A maximum at the floor collapses the range; 16.5 A rounds down."""
+    wallbox, entities = await _wallbox_entities(hass, C371_SN, oceans=1)
+    wallbox.set_device_value("ev_max_current_a", reported)
+    _publish_state(wallbox)
+    custom = entities["ev_custom_current_a"]
+    assert (custom.native_min_value, custom.native_max_value) == (6.0, ceiling)
 
 
 async def test_c371_without_a_powerocean_has_no_route_and_no_controls(
@@ -216,6 +275,41 @@ async def test_c376_max_current_20_is_refused_before_anything_is_published(
         await wallbox.async_set_powerpulse_max_current(20)
     assert err.value.translation_key == "powerpulse_max_current_range"
     assert err.value.translation_placeholders == {"min": "6", "max": "16"}
+    assert charge_action._mqtt(ocean).send_proto_set.call_count == 0
+
+
+async def test_c371_solar_min_current_17_is_refused_before_anything_is_published(
+    hass: HomeAssistant,
+) -> None:
+    ocean, wallbox = _wire_writer(hass, C371_SN)
+    _report_everything(wallbox, C371_SN)
+    with pytest.raises(HomeAssistantError) as err:
+        await wallbox.async_set_powerpulse_solar_min_current(17)
+    assert err.value.translation_key == "powerpulse_solar_min_current_range"
+    assert err.value.translation_placeholders == {"min": "6", "max": "16"}
+    assert charge_action._mqtt(ocean).send_proto_set.call_count == 0
+
+
+async def test_c371_solar_min_current_16_is_published(hass: HomeAssistant) -> None:
+    ocean, wallbox = _wire_writer(hass, C371_SN)
+    _report_everything(wallbox, C371_SN)
+    task = asyncio.create_task(wallbox.async_set_powerpulse_solar_min_current(16))
+    await asyncio.sleep(0.05)
+    assert charge_action._mqtt(ocean).send_proto_set.call_count == 1
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_c371_custom_current_above_the_reported_maximum_is_refused(
+    hass: HomeAssistant,
+) -> None:
+    ocean, wallbox = _wire_writer(hass, C371_SN)
+    _report_everything(wallbox, C371_SN)
+    wallbox.set_device_value("ev_max_current_a", 20.0)
+    with pytest.raises(HomeAssistantError) as err:
+        await wallbox.async_set_powerpulse_custom_current(21)
+    assert err.value.translation_key == "powerpulse_custom_current_above_maximum"
     assert charge_action._mqtt(ocean).send_proto_set.call_count == 0
 
 

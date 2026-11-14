@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from typing import Any
 
@@ -399,6 +400,10 @@ class EcoFlowNumber(
         The PowerGlow heating rod's target power is a seventh: its ceiling
         follows the prefix of the rod's own serial (`heating_rod_sn`), the
         declared range until that serial is reported.
+        The PowerPulse 2 current numbers are an eighth: each ends at its
+        wallbox row's ceiling (16 A Solar Minimum on every variant), and the
+        Custom Charging Current also at the reported Maximum Current, rounded
+        down to whole amps and never below the 6 A floor (#725).
         Every other number keeps the range its definition declares.
         """
         schedule_slot = self._schedule_slot()
@@ -495,8 +500,32 @@ class EcoFlowNumber(
             pulse_row = powerpulse_controls(self.coordinator.device_sn)
             if pulse_row is None:
                 return None
+            key = self._definition.key
+            if key == "ev_solar_min_current_a":
+                # The app stops the Solar Minimum Current at the row's own
+                # ceiling, below a C371's 32 A Maximum (#725).
+                pulse_upper = float(pulse_row.solar_min_current_a)
+            else:
+                pulse_upper = float(pulse_row.max_current_a)
+            if key == "ev_custom_current_a":
+                # The app keeps the Custom current at or below the reported
+                # Maximum Current, and the setter refuses above it. Whole
+                # amps only, so a non-whole maximum rounds down; one at or
+                # below the floor collapses the range to the floor. An
+                # unreported maximum keeps the row ceiling: never guessed.
+                maximum = (self.coordinator.data or {}).get("ev_max_current_a")
+                if (
+                    isinstance(maximum, (int, float))
+                    and not isinstance(maximum, bool)
+                    and math.isfinite(maximum)
+                    and maximum < pulse_upper
+                ):
+                    pulse_upper = max(
+                        float(self._attr_native_min_value),
+                        float(math.floor(maximum)),
+                    )
             return self._attr_native_min_value, min(
-                float(pulse_row.max_current_a), self._attr_native_max_value
+                pulse_upper, self._attr_native_max_value
             )
         return None
 

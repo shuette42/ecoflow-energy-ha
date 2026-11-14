@@ -2200,6 +2200,18 @@ class SetCommandsMixin(_Base):
             return POWERPULSE_MIN_CURRENT_A, POWERPULSE_MIN_CURRENT_A
         return POWERPULSE_MIN_CURRENT_A, row.max_current_a
 
+    def _powerpulse_solar_min_range_a(self) -> tuple[int, int]:
+        """Return the Solar Minimum Current range for this wallbox (#725).
+
+        From 6 A to the row's `solar_min_current_a` (16 A on every variant,
+        also on a `C371` whose Maximum Current reaches 32 A). A prefix without
+        a row collapses to the floor, as in `_powerpulse_current_range_a`.
+        """
+        row = powerpulse_controls(self.device_sn)
+        if row is None:
+            return POWERPULSE_MIN_CURRENT_A, POWERPULSE_MIN_CURRENT_A
+        return POWERPULSE_MIN_CURRENT_A, row.solar_min_current_a
+
     async def async_set_powerpulse_max_current(self, max_current_a: int) -> None:
         """Set this PowerPulse 2's maximum charge current (PLAN-146).
 
@@ -2935,11 +2947,12 @@ class SetCommandsMixin(_Base):
 
         Writes field 4 of `EDevPileParamSet` alone, no mode and no switch
         bits: the 2026-10-04 field-4-only runs show the wallbox taking exactly
-        that. Same range as the maximum current. Confirmed on
+        that. From 6 A to the row's Solar Minimum ceiling (16 A, as the app
+        limits it, #725). Confirmed on
         `ev_solar_min_current_a` reaching the requested value on the frame
         being applied. Routing, lock and wait: `_async_write_powerpulse_settings`.
         """
-        low, high = self._powerpulse_current_range_a()
+        low, high = self._powerpulse_solar_min_range_a()
         if type(current_a) is not int or not (low <= current_a <= high):
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
