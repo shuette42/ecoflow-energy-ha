@@ -740,15 +740,19 @@ def powerglow_max_power_w(hr_sn: str) -> int:
 class PowerPulseControls(NamedTuple):
     """What may be written to one PowerPulse 2 variant (#725).
 
-    ``max_current_a`` is the highest current in whole amps any current write
-    may carry. ``own_route`` admits the controls on the wallbox's own topic
-    (2/81, no PowerOcean in the entry). ``settings_controls`` admits the
-    settings switches, the phase setting and the display controls.
+    ``max_current_a`` is the highest current in whole amps the Maximum and
+    the Custom Charging Current may carry (the Custom one is further held at
+    or below the reported Maximum). ``own_route`` admits the controls on the
+    wallbox's own topic (2/81, no PowerOcean in the entry).
+    ``settings_controls`` admits the settings switches, the phase setting and
+    the display controls. ``solar_min_current_a`` is the highest Solar
+    Minimum Current in whole amps.
     """
 
     max_current_a: int
     own_route: bool
     settings_controls: bool
+    solar_min_current_a: int
 
 
 # The PowerPulse 2 variants that may be written to, keyed by serial prefix. A
@@ -756,12 +760,14 @@ class PowerPulseControls(NamedTuple):
 # #7 and every control on both routes. `C371`: maximum and custom current
 # written and read back up to 32 A, start/stop through a PowerOcean; no app
 # write on its own topic and no confirmed settings or display write (#725).
+# The Solar Minimum Current ends at 16 A on every variant: the app stops it
+# there on a C371 with the Maximum Current at 32 A (#725 app screenshots).
 # This table is the only copy; callers ask `powerpulse_controls`.
 POWERPULSE_MIN_CURRENT_A = 6
 POWERPULSE_CONTROLS: dict[str, PowerPulseControls] = {
-    "C376": PowerPulseControls(16, True, True),
-    "C374": PowerPulseControls(16, True, True),
-    "C371": PowerPulseControls(32, False, False),
+    "C376": PowerPulseControls(16, True, True, 16),
+    "C374": PowerPulseControls(16, True, True, 16),
+    "C371": PowerPulseControls(32, False, False, 16),
 }
 
 
