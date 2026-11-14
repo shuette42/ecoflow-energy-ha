@@ -172,7 +172,7 @@ class TestSwitchDefsRouting:
             f"{prefix}_{index}_enabled"
             for prefix in POWEROCEAN_SCHEDULE_PREFIXES
             for index in range(1, SCHEDULE_MAX_INDEX + 1)
-        }
+        } | {"ev_plug_and_play", "ev_continuous_charging", "ev_battery_discharge_block"}
         assert all(d.accessory and d.enhanced_only for d in defs)
 
 

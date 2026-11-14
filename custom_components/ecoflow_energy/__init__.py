@@ -39,6 +39,7 @@ from .const import (
     ENHANCED_ONLY_DEVICE_TYPES,
     MODE_ENHANCED,
     MODE_LOCAL,
+    POWERPULSE1_SN_PREFIX,
     STREAM_MICRO_EXCLUDED_KEYS,
     get_device_type,
     raw_capture_window_open,
@@ -401,11 +402,6 @@ _POWERPULSE2_RELAYED_SENSOR_KEYS: frozenset[str] = frozenset(
     }
 )
 
-# The PowerPulse 1, which keeps reporting through the PowerOcean. It is not a
-# device type of its own - it is skipped at setup like any unsupported device
-# - so the only thing that names it is its serial prefix.
-_POWERPULSE1_SN_PREFIX = "AC31"
-
 
 def _async_remove_relayed_wallbox_entities(
     hass: HomeAssistant, entry: ConfigEntry
@@ -442,7 +438,7 @@ def _async_remove_relayed_wallbox_entities(
     """
     devices = entry.data.get(CONF_DEVICES, [])
     if any(
-        str(device.get("sn", "")).startswith(_POWERPULSE1_SN_PREFIX)
+        str(device.get("sn", "")).startswith(POWERPULSE1_SN_PREFIX)
         for device in devices
     ):
         _LOGGER.debug(

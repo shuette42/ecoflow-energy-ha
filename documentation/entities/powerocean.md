@@ -45,7 +45,8 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 > five readings describe the **current charging session** and reset when the next
 > one starts, so the session energy restarts at 0 each time. It is a
 > `total_increasing` sensor, so Home Assistant books each restart as a new
-> cycle. There are no wallbox controls.
+> cycle. A PowerPulse 1 also gets four controls, see
+> [Wallbox Controls](#wallbox-controls-powerpulse-1-enhanced-mode).
 >
 > **The PowerPulse 2 is a device of its own** and is not listed here. It
 > reports straight from the box on its own channel and needs no PowerOcean
@@ -82,7 +83,7 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 
 > **PowerOcean Plus** units report more of the same entity set than a standard PowerOcean: per-phase reactive power (var) and apparent power (VA), plus MPPT strings 3 and 4. Those entities are disabled by default, so enable the ones you need after adding a Plus device.
 
-**Totals:** an account entry (Standard or Enhanced Mode) has 301 sensors, 69 binary sensors, 68 numbers, 64 switches and 2 selects. These are the most a system can show: schedule entities exist only for the slots your PowerOcean reports. A Local (Modbus/TCP) entry has 29 sensors (20 of the sensors below plus the 9 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
+**Totals:** an account entry (Standard or Enhanced Mode) has 301 sensors, 69 binary sensors, 68 numbers, 67 switches and 3 selects. These are the most a system can show: schedule entities exist only for the slots your PowerOcean reports. A Local (Modbus/TCP) entry has 29 sensors (20 of the sensors below plus the 9 in the Local-only section), 4 binary sensors, 2 numbers and 1 switch.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow PowerOcean > Entities** (click the filter icon and show disabled entities).
 
@@ -392,6 +393,19 @@ Created once the PowerOcean reports a PowerGlow heating rod, and only with accou
 
 ---
 
+## Wallbox Controls (PowerPulse 1, Enhanced Mode)
+
+Created once the PowerOcean reports the settings of a coupled PowerPulse 1, and only with account sign-in. They are not created for any other wallbox: a PowerPulse 2 has its own controls on its own device. Each change waits up to 20 seconds for the wallbox's next settings report to carry the new value. If that report does not arrive in time, Home Assistant shows an error and keeps the reported value.
+
+| Entity | Type | Description | Default |
+|:---|:---:|:---|:---:|
+| Wallbox Charging Mode | Select | Fast charging or Solar Mode, as in the EcoFlow app | enabled |
+| Wallbox Plug-and-Play | Switch | As in the EcoFlow app | enabled |
+| Wallbox Continuous Charging | Switch | As in the EcoFlow app | enabled |
+| Wallbox Block Battery Discharge | Switch | On means the home battery does not feed the car ("Disable battery discharge" in the app) | enabled |
+
+---
+
 ## Sensors - PowerPulse Wallbox (accessory, Enhanced Mode)
 
 Session readings are created once a coupled wallbox reports a charging session; the schedule sensor appears once it reports its schedule. See the note at the top. These are the PowerPulse 1; the PowerPulse 2 has [its own page](powerpulse-2.md).
@@ -426,6 +440,6 @@ Backup Reserve and Solar Surplus Threshold are sent to the PowerOcean as one pai
 
 - All power sensors show integers (no decimal places) for clean dashboard display
 - Energy sensors show 2 decimal places (0.01 kWh resolution)
-- Enhanced Mode (~3s updates) unlocks every control (68 numbers, 64 switches, 2 selects) and faster data
+- Enhanced Mode (~3s updates) unlocks every control (68 numbers, 67 switches, 3 selects) and faster data
 - Standard Mode (~30s polling) provides the sensors the Developer API reports. Some readings need Enhanced Mode, for example the schedules, the wallbox, the parallel pair and several diagnostics.
 - Local (Modbus/TCP, three-phase only) refreshes every 2 seconds, needs no account, and creates the shared sensors and Local-only entities listed above.

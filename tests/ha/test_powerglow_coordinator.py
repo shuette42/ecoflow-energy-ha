@@ -214,7 +214,7 @@ async def test_second_write_while_one_is_pending_is_refused(
     with pytest.raises(HomeAssistantError) as err:
         await ocean.async_set_powerglow_value("target_temp", 50)
 
-    assert err.value.translation_key == "powerglow_write_in_progress"
+    assert err.value.translation_key == "accessory_write_in_progress"
     assert _mqtt(ocean).send_proto_set.call_count == 1
     _report(ocean, heating_rod_target_power_w=1000.0)
     await first
@@ -519,7 +519,7 @@ async def test_a_publish_that_is_not_delivered_clears_the_record(
     Mutation probe: removing `self._clear_pending_write(record)` from the
     `except BaseException` block of `_async_powerglow_write` (set_commands.py)
     leaves the record set, and the second call is refused as
-    `powerglow_write_in_progress`.
+    `accessory_write_in_progress`.
     """
     ocean = _ocean(hass)
     _mqtt(ocean).send_proto_set.return_value = False

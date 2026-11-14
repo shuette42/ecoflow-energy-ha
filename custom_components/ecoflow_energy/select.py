@@ -62,6 +62,7 @@ from .entity import (
     raise_set_rejected,
     raise_set_unsupported,
     reading_reported,
+    wallbox_control_withheld,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -123,7 +124,10 @@ async def async_setup_entry(
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
                 continue
-            if defn.accessory and not reading_reported(coordinator, defn.state_key):
+            if defn.accessory and (
+                not reading_reported(coordinator, defn.state_key)
+                or wallbox_control_withheld(coordinator, defn.key)
+            ):
                 pending.append(defn)
                 continue
             entities.append(EcoFlowSelect(coordinator, defn))
@@ -154,6 +158,7 @@ def _watch_for_accessory(
             definition
             for definition in pending
             if reading_reported(coordinator, definition.state_key)
+            and not wallbox_control_withheld(coordinator, definition.key)
         ]
         for definition in ready:
             pending.remove(definition)
@@ -280,6 +285,14 @@ class EcoFlowSelect(CoordinatorEntity[EcoFlowDeviceCoordinator], SelectEntity):
                 await self.coordinator.async_set_powerpulse_phase_setting(option)
             else:
                 await self.coordinator.async_set_powerpulse_charge_mode(option)
+            return
+
+        if self._definition.key == "ev_charge_mode":
+            # PowerPulse 1 on a PowerOcean (#731): confirmed on the next
+            # 209/8 report, which is what moves the option.
+            await self.coordinator.async_set_wallbox_setting(
+                self._definition.key, option
+            )
             return
 
         if self._definition.key == "heating_rod_operating_mode":

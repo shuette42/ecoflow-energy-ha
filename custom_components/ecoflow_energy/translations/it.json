@@ -4015,8 +4015,8 @@
     "powerglow_target_temp_range": {
       "message": "La resistenza di riscaldamento accetta una temperatura obiettivo compresa tra {min} e {max} °C."
     },
-    "powerglow_write_in_progress": {
-      "message": "Un comando precedente è ancora in attesa della conferma della resistenza di riscaldamento. Riprova quando sarà stato confermato."
+    "accessory_write_in_progress": {
+      "message": "Un comando precedente è ancora in attesa della conferma del dispositivo. Riprova quando sarà stato confermato."
     },
     "powerpulse_action_in_progress": {
       "message": "Un comando precedente è ancora in attesa della conferma della wallbox. Riprova quando sarà stato confermato."
@@ -4131,6 +4131,18 @@
     },
     "battery_command_failed": {
       "message": "Il dispositivo non ha confermato il comando della batteria. Controlla la connessione e riprova."
+    },
+    "wallbox_not_confirmed": {
+      "message": "La wallbox non ha riportato la nuova impostazione entro il tempo consentito. I suoi controlli mostrano ciò che riporta."
+    },
+    "wallbox_not_delivered": {
+      "message": "Non è stato possibile inviare il comando alla wallbox."
+    },
+    "wallbox_not_reported": {
+      "message": "Il PowerOcean non ha ancora comunicato i dati della wallbox. Attendi la sua prossima comunicazione."
+    },
+    "wallbox_offline": {
+      "message": "La connessione del PowerOcean non è attiva, quindi il comando per la wallbox non può essere inviato."
     }
   }
 }

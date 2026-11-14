@@ -860,6 +860,30 @@ _EV_CHARGE_STATUS_MAP: dict[str, str] = {
 _EV_NO_VEHICLE = "-1"
 
 
+# The wallbox settings the same report carries (#731), each the read-back of
+# one write the app makes (`build_wallbox_param_set_payload`). Integers and
+# booleans, never floats: a switch compares them as they are.
+_EV_SETTING_KEYS: dict[str, str] = {
+    "ev_plug_and_play": "ev_plug_and_play",
+    "work_mode": "ev_charge_mode_raw",
+    "use_grid_first": "ev_battery_discharge_block",
+    "switch_bits": "ev_continuous_charging",
+}
+
+
+def _ev_setting_value(proto_key: str, value: int) -> bool | int:
+    """Type one wallbox setting: the mode stays a number, the rest on/off.
+
+    Continuous charging is bit 0 of the switch bits; no other bit was ever
+    seen set on this wallbox, and none of them is this switch.
+    """
+    if proto_key == "work_mode":
+        return value
+    if proto_key == "switch_bits":
+        return bool(value & 1)
+    return value != 0
+
+
 def remap_ev_charging_keys(raw: dict[str, Any]) -> dict[str, Any]:
     """Remap a PowerPulse charging report (cmd_func 209, cmd_id 8).
 
@@ -871,6 +895,15 @@ def remap_ev_charging_keys(raw: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
 
     for proto_key, value in raw.items():
+        if proto_key == "ev_sn":
+            if isinstance(value, str) and value:
+                result["ev_charger_sn"] = value
+            continue
+        setting_key = _EV_SETTING_KEYS.get(proto_key)
+        if setting_key is not None:
+            if type(value) is int:
+                result[setting_key] = _ev_setting_value(proto_key, value)
+            continue
         sensor_key = EV_CHARGING_TO_SENSOR.get(proto_key)
         if sensor_key is None:
             continue

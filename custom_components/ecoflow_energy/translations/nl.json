@@ -4015,8 +4015,8 @@
     "powerglow_target_temp_range": {
       "message": "Het verwarmingselement accepteert een doeltemperatuur tussen {min} en {max} °C."
     },
-    "powerglow_write_in_progress": {
-      "message": "Een eerdere opdracht wacht nog op bevestiging door het verwarmingselement. Probeer het opnieuw zodra die is bevestigd."
+    "accessory_write_in_progress": {
+      "message": "Een eerdere opdracht wacht nog op bevestiging door het apparaat. Probeer het opnieuw zodra die is bevestigd."
     },
     "powerpulse_action_in_progress": {
       "message": "Een eerdere opdracht wacht nog op bevestiging door de laadpaal. Probeer het opnieuw zodra die is bevestigd."
@@ -4131,6 +4131,18 @@
     },
     "battery_command_failed": {
       "message": "Het apparaat heeft de batterijopdracht niet bevestigd. Controleer de verbinding en probeer het opnieuw."
+    },
+    "wallbox_not_confirmed": {
+      "message": "De laadpaal heeft de nieuwe instelling niet binnen de toegestane tijd gemeld. De bediening toont wat hij wel meldt."
+    },
+    "wallbox_not_delivered": {
+      "message": "De opdracht voor de laadpaal kon niet worden verzonden."
+    },
+    "wallbox_not_reported": {
+      "message": "De PowerOcean heeft de laadpaal nog niet gemeld. Wacht op de volgende melding."
+    },
+    "wallbox_offline": {
+      "message": "De verbinding van de PowerOcean is niet actief, dus de opdracht voor de laadpaal kan niet worden verzonden."
     }
   }
 }

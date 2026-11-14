@@ -4015,8 +4015,8 @@
     "powerglow_target_temp_range": {
       "message": "Grzałka przyjmuje temperaturę docelową od {min} do {max} °C."
     },
-    "powerglow_write_in_progress": {
-      "message": "Wcześniejsze polecenie nadal czeka na potwierdzenie przez grzałkę. Spróbuj ponownie, gdy je potwierdzi."
+    "accessory_write_in_progress": {
+      "message": "Wcześniejsze polecenie nadal czeka na potwierdzenie przez urządzenie. Spróbuj ponownie, gdy je potwierdzi."
     },
     "powerpulse_action_in_progress": {
       "message": "Wcześniejsze polecenie nadal czeka na potwierdzenie przez wallbox. Spróbuj ponownie, gdy je potwierdzi."
@@ -4131,6 +4131,18 @@
     },
     "battery_command_failed": {
       "message": "Urządzenie nie potwierdziło polecenia dla baterii. Sprawdź połączenie i spróbuj ponownie."
+    },
+    "wallbox_not_confirmed": {
+      "message": "Wallbox nie zgłosił nowego ustawienia w wyznaczonym czasie. Jego przełączniki pokazują, co zgłasza."
+    },
+    "wallbox_not_delivered": {
+      "message": "Nie udało się wysłać polecenia do wallboxa."
+    },
+    "wallbox_not_reported": {
+      "message": "PowerOcean nie przesłał jeszcze danych wallboxa. Poczekaj na jego następny raport."
+    },
+    "wallbox_offline": {
+      "message": "Połączenie z PowerOcean nie jest aktywne, więc polecenia dla wallboxa nie można wysłać."
     }
   }
 }

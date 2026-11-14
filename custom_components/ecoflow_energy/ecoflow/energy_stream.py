@@ -821,6 +821,80 @@ def build_powerglow_param_set_payload(
     )
 
 
+# The PowerPulse 1 settings a PowerOcean carries for its wallbox (#731):
+# builder keyword -> field of the write. Each is read back on the next 209/8
+# report (`remap_ev_charging_keys`).
+_WALLBOX_SETTING_FIELDS: dict[str, int] = {
+    "plug_and_play": 4,
+    "work_mode": 5,
+    "battery_discharge_block": 6,
+    "continuous_charging": 7,
+}
+WALLBOX_WORK_MODES: dict[str, int] = {"fast": 1, "solar": 2}
+
+
+def build_wallbox_param_set_payload(
+    ev_sn: str,
+    device_sn: str,
+    *,
+    seq: int = 0,
+    **setting: bool | int,
+) -> bytes:
+    """Build EVChargingParamSet (209/99): write one PowerPulse 1 setting.
+
+    Sent on the PowerOcean's own set topic, the same way the app writes it
+    (#731, ten app writes of one recording). `pdata` is field 1 the wallbox's
+    16-character serial, field 2 a float 0.0 (the app sends it in every
+    write), then exactly one setting: `plug_and_play` (bool), `work_mode`
+    (1 fast, 2 solar), `battery_discharge_block` (bool, on means the home
+    battery does not feed the car) or `continuous_charging` (bool, written as
+    the whole switch value). A zero is sent explicitly: a write that leaves
+    it out carries no setting at all.
+
+    The envelope is not the PowerOcean default: the recorded writes carry no
+    check type, product id 1, version 19 and an Android client, the same
+    header as the scheduled-task writes.
+
+    Raises:
+        ValueError: if not exactly one setting is given, a value has the
+            wrong type or range, or a serial is not 16 alphanumeric ASCII
+            characters.
+    """
+    if len(setting) != 1 or not setting.keys() <= _WALLBOX_SETTING_FIELDS.keys():
+        raise ValueError(
+            f"exactly one of {sorted(_WALLBOX_SETTING_FIELDS)} must be given, "
+            f"got {sorted(setting)}"
+        )
+    _validate_powerpulse_serial("ev_sn", ev_sn)
+    _validate_powerpulse_serial("device_sn", device_sn)
+    ((name, value),) = setting.items()
+    if name == "work_mode":
+        if type(value) is not int or value not in WALLBOX_WORK_MODES.values():
+            raise ValueError(f"work_mode must be 1 or 2, got {value!r}")
+        wire = value
+    else:
+        if type(value) is not bool:
+            raise ValueError(f"{name} must be a bool, got {value!r}")
+        wire = 1 if value else 0
+
+    pdata = (
+        encode_field_bytes(1, ev_sn.encode("ascii"))
+        + encode_field_fixed32(2, 0.0)
+        + encode_field_varint(_WALLBOX_SETTING_FIELDS[name], wire)
+    )
+    return _build_powerocean_set_envelope(
+        pdata,
+        cmd_id=99,
+        seq=seq,
+        device_sn=device_sn,
+        check_type=None,
+        product_id=1,
+        version=19,
+        source="android",
+        cmd_func=209,
+    )
+
+
 def build_work_mode_set_payload(work_mode: int, seq: int = 0) -> bytes:
     """Build SysWorkModeSet (cmd_id=98) for PowerOcean work mode selection.
 
