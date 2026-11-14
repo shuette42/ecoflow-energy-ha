@@ -62,7 +62,7 @@ from .entity import (
     raise_set_rejected,
     raise_set_unsupported,
     reading_reported,
-    wallbox_control_left_to_powerpulse2,
+    wallbox_control_withheld,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -124,11 +124,10 @@ async def async_setup_entry(
         for defn in defs:
             if defn.enhanced_only and not coordinator.enhanced_mode:
                 continue
-            if wallbox_control_left_to_powerpulse2(
-                coordinator, defn.key, coordinators.values()
+            if defn.accessory and (
+                not reading_reported(coordinator, defn.state_key)
+                or wallbox_control_withheld(coordinator, defn.key)
             ):
-                continue
-            if defn.accessory and not reading_reported(coordinator, defn.state_key):
                 pending.append(defn)
                 continue
             entities.append(EcoFlowSelect(coordinator, defn))
@@ -159,6 +158,7 @@ def _watch_for_accessory(
             definition
             for definition in pending
             if reading_reported(coordinator, definition.state_key)
+            and not wallbox_control_withheld(coordinator, definition.key)
         ]
         for definition in ready:
             pending.remove(definition)

@@ -45,6 +45,7 @@ from .ecoflow.const import (  # noqa: E402
 from .ecoflow.energy_stream import (  # noqa: E402
     POWERGLOW_TARGET_TEMP_C_MAX,
     POWERGLOW_TARGET_TEMP_C_MIN,
+    WALLBOX_WORK_MODES,
 )
 from .ecoflow.parsers.delta_pro_ultra_proto import (
     MAX_PACKS as DELTAPROULTRA_MAX_PACKS,  # noqa: E402
@@ -2900,14 +2901,26 @@ POWEROCEAN_SELECTS: list[EcoFlowSelectDef] = [
         "ev_charge_mode",
         "Wallbox Charging Mode",
         "ev_charge_mode_raw",
-        ("fast", "solar"),
+        tuple(WALLBOX_WORK_MODES),
         icon="mdi:ev-station",
         enhanced_only=True,
-        value_map={1: "fast", 2: "solar"},
+        value_map={wire: option for option, wire in WALLBOX_WORK_MODES.items()},
         accessory=True,
-        entity_category="config",
     ),
 ]
+
+
+# --- PowerPulse 1 on a PowerOcean ---
+# The PowerPulse 1 is not a device type of its own: it is skipped at setup like
+# any unsupported device and reports through the PowerOcean, so the only thing
+# that names it is its serial prefix (#731).
+POWERPULSE1_SN_PREFIX = "AC31"
+
+# Its three settings switches on the PowerOcean; the write keyword is the key
+# without `ev_` (#731).
+POWERPULSE1_SWITCH_KEYS: frozenset[str] = frozenset(
+    {"ev_plug_and_play", "ev_continuous_charging", "ev_battery_discharge_block"}
+)
 
 
 # --- Scheduled charge task controls ---
@@ -2924,8 +2937,9 @@ POWEROCEAN_SELECTS: list[EcoFlowSelectDef] = [
 # A PowerPulse 1 (AC31) has no channel of its own: the PowerOcean reports its
 # settings on 209/8 and takes their writes on 209/99 (#731). The keys and
 # names are the PowerPulse 2's, so each control is translated once. Created
-# on the first report that carries the setting, and only on an entry without
-# a PowerPulse 2, whose own controls cover the same settings.
+# once the report carries the setting and names a PowerPulse 1 as the
+# reporting wallbox (`ev_charger_sn` with POWERPULSE1_SN_PREFIX): a PowerPulse
+# 2 reports the same settings there and has its own controls for them.
 POWEROCEAN_SWITCHES: list[EcoFlowSwitchDef] = [
     EcoFlowSwitchDef(
         "ev_plug_and_play",
@@ -2934,7 +2948,6 @@ POWEROCEAN_SWITCHES: list[EcoFlowSwitchDef] = [
         icon="mdi:power-plug",
         enhanced_only=True,
         accessory=True,
-        entity_category="config",
     ),
     EcoFlowSwitchDef(
         "ev_continuous_charging",
@@ -2943,7 +2956,6 @@ POWEROCEAN_SWITCHES: list[EcoFlowSwitchDef] = [
         icon="mdi:ev-plug-type2",
         enhanced_only=True,
         accessory=True,
-        entity_category="config",
     ),
     EcoFlowSwitchDef(
         "ev_battery_discharge_block",
@@ -2952,7 +2964,6 @@ POWEROCEAN_SWITCHES: list[EcoFlowSwitchDef] = [
         icon="mdi:battery-off",
         enhanced_only=True,
         accessory=True,
-        entity_category="config",
     ),
 ]
 

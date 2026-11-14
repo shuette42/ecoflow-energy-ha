@@ -45,7 +45,8 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 > five readings describe the **current charging session** and reset when the next
 > one starts, so the session energy restarts at 0 each time. It is a
 > `total_increasing` sensor, so Home Assistant books each restart as a new
-> cycle. There are no wallbox controls.
+> cycle. A PowerPulse 1 also gets four controls, see
+> [Wallbox Controls](#wallbox-controls-powerpulse-1-enhanced-mode).
 >
 > **The PowerPulse 2 is a device of its own** and is not listed here. It
 > reports straight from the box on its own channel and needs no PowerOcean
@@ -389,10 +390,19 @@ Created once the PowerOcean reports a PowerGlow heating rod, and only with accou
 | Heating Rod Target Power | Number | The heating power the rod is limited to, in watts. The upper end follows the rod: 9000 W on an `HF33`, 6000 W on an `HF32`, 3500 W on other models | enabled |
 | Heating Rod Target Temperature | Number | The water temperature the rod heats to, from 10 to 80 °C | enabled |
 | Heating Rod Mode | Select | Off, Solar or Manual. Switching from Off to Solar or Manual sets the mode first and then switches the rod on | enabled |
-| Wallbox Charging Mode | Select | PowerPulse 1 only: Fast charging or Solar Mode, as in the EcoFlow app | enabled |
-| Wallbox Plug-and-Play | Switch | PowerPulse 1 only | enabled |
-| Wallbox Continuous Charging | Switch | PowerPulse 1 only | enabled |
-| Wallbox Block Battery Discharge | Switch | PowerPulse 1 only. On means the home battery does not feed the car ("Disable battery discharge" in the app) | enabled |
+
+---
+
+## Wallbox Controls (PowerPulse 1, Enhanced Mode)
+
+Created once the PowerOcean reports the settings of a coupled PowerPulse 1, and only with account sign-in. They are not created for any other wallbox: a PowerPulse 2 has its own controls on its own device. Each change waits up to 20 seconds for the wallbox's next settings report to carry the new value. If that report does not arrive in time, Home Assistant shows an error and keeps the reported value.
+
+| Entity | Type | Description | Default |
+|:---|:---:|:---|:---:|
+| Wallbox Charging Mode | Select | Fast charging or Solar Mode, as in the EcoFlow app | enabled |
+| Wallbox Plug-and-Play | Switch | As in the EcoFlow app | enabled |
+| Wallbox Continuous Charging | Switch | As in the EcoFlow app | enabled |
+| Wallbox Block Battery Discharge | Switch | On means the home battery does not feed the car ("Disable battery discharge" in the app) | enabled |
 
 ---
 

@@ -22,6 +22,7 @@ from ..const import (
     POWEROCEAN_SCHEDULE_PREFIXES,
     POWEROCEAN_SOC_DEBOUNCE_S,
     POWEROCEAN_SOC_STATE_KEYS,
+    POWERPULSE1_SWITCH_KEYS,
     POWERPULSE2_CHARGE_ACTION_PRECONDITION,
     POWERPULSE2_CHARGE_ACTION_WINDOW_S,
     POWERPULSE2_CHARGE_CURRENT_WINDOW_S,
@@ -60,13 +61,6 @@ _LOGGER = logging.getLogger(__name__)
 # The accessory platforms read a present key as a reading the device has sent,
 # so a rollback has to be able to put absence back.
 _UNSET = object()
-
-# PowerPulse 1 switch entity key -> its keyword of the wallbox write (#731).
-_WALLBOX_SWITCH_SETTINGS: dict[str, str] = {
-    "ev_plug_and_play": "plug_and_play",
-    "ev_battery_discharge_block": "battery_discharge_block",
-    "ev_continuous_charging": "continuous_charging",
-}
 
 # How long a STREAM AC 5000 task on/off write holds its value against a report
 # that disagrees (#681), the same 5 s as the PowerOcean arming hold. It covers
@@ -3285,7 +3279,9 @@ class SetCommandsMixin(_Base):
             if self._pending_write is not None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
-                    translation_key=f"{kind}_write_in_progress",
+                    # Shared by the heating rod and the wallbox: the earlier
+                    # write may belong to either, so the text names neither.
+                    translation_key="accessory_write_in_progress",
                 )
             try:
                 payload = builder(rod_sn, self.device_sn, **setting)
@@ -3450,9 +3446,9 @@ class SetCommandsMixin(_Base):
                 kind="wallbox",
             )
             return
-        setting = _WALLBOX_SWITCH_SETTINGS.get(key)
-        if setting is None or type(value) is not bool:
+        if key not in POWERPULSE1_SWITCH_KEYS or type(value) is not bool:
             raise ValueError(f"{key!r}={value!r} is not a PowerPulse 1 setting")
+        setting = key.removeprefix("ev_")
         await self._async_powerglow_write(
             setting, key, float(value), {setting: value}, kind="wallbox"
         )

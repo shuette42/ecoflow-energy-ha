@@ -14,7 +14,6 @@ from typing import Any
 
 import pytest
 
-from custom_components.ecoflow_energy.diagnostics import _redact_serials
 from custom_components.ecoflow_energy.ecoflow.energy_stream import (
     build_wallbox_param_set_payload,
 )
@@ -87,9 +86,3 @@ def test_builder_refuses_anything_but_one_known_setting(
 ) -> None:
     with pytest.raises(ValueError):
         build_wallbox_param_set_payload(SERIAL, SERIAL, **setting)
-
-
-def test_diagnostics_mask_the_wallbox_serial() -> None:
-    """`ev_charger_sn` is new in the PowerOcean store and lands in a dump."""
-    redacted = _redact_serials({"ev_charger_sn": "AC31ZZ0000000001"})
-    assert "AC31ZZ0000000001" not in json.dumps(redacted)

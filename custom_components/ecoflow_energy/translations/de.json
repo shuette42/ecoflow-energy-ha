@@ -4015,8 +4015,8 @@
     "powerglow_target_temp_range": {
       "message": "Der Heizstab nimmt eine Zieltemperatur zwischen {min} und {max} °C an."
     },
-    "powerglow_write_in_progress": {
-      "message": "Ein vorheriger Befehl wartet noch auf die Bestätigung durch den Heizstab. Versuche es erneut, sobald er ihn bestätigt hat."
+    "accessory_write_in_progress": {
+      "message": "Ein vorheriger Befehl wartet noch auf die Bestätigung durch das Gerät. Versuche es erneut, sobald es ihn bestätigt hat."
     },
     "powerpulse_action_in_progress": {
       "message": "Ein vorheriger Befehl wartet noch auf die Bestätigung durch die Wallbox. Versuche es erneut, sobald sie ihn bestätigt hat."
@@ -4143,9 +4143,6 @@
     },
     "wallbox_offline": {
       "message": "Die Verbindung zur PowerOcean ist nicht aktiv, daher kann der Wallbox-Befehl nicht gesendet werden."
-    },
-    "wallbox_write_in_progress": {
-      "message": "Ein vorheriger Befehl wartet noch auf die Bestätigung durch die Wallbox. Versuche es erneut, sobald sie ihn bestätigt hat."
     }
   }
 }

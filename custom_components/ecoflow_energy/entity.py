@@ -7,32 +7,30 @@ from typing import TYPE_CHECKING, Any, NoReturn
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_POWERPULSE2, DOMAIN
+from .const import DEVICE_TYPE_POWEROCEAN, DOMAIN, POWERPULSE1_SN_PREFIX
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
-
     from .coordinator import EcoFlowDeviceCoordinator
 
 
-def wallbox_control_left_to_powerpulse2(
-    coordinator: Any, key: str, coordinators: Iterable[Any]
-) -> bool:
-    """Return whether a PowerOcean's wallbox control belongs to a PowerPulse 2.
+def wallbox_control_withheld(coordinator: Any, key: str) -> bool:
+    """Return whether a PowerOcean's wallbox control may not be created (yet).
 
     A PowerOcean coupled to a PowerPulse 2 reports the same 209/8 settings
     as one coupled to a PowerPulse 1 (#553 recording: plug-and-play, mode,
-    battery discharge, switch bits). The PowerPulse 2 has its own controls
-    for them, so on an entry that holds one the PowerOcean creates none.
+    battery discharge, switch bits), and the PowerPulse 2 has its own
+    controls for them. So the reporting wallbox decides: the same report
+    carries its serial (`ev_charger_sn`), and only a PowerPulse 1 serial
+    lets the control exist. Until a serial is reported the control waits;
+    another wallbox, or a serial that is not a string, keeps it withheld.
+    Whatever else the entry holds does not matter (#731).
     """
-    return (
-        getattr(coordinator, "device_type", None) == DEVICE_TYPE_POWEROCEAN
-        and key.startswith("ev_")
-        and any(
-            getattr(other, "device_type", None) == DEVICE_TYPE_POWERPULSE2
-            for other in coordinators
-        )
-    )
+    if getattr(coordinator, "device_type", None) != DEVICE_TYPE_POWEROCEAN:
+        return False
+    if not key.startswith("ev_"):
+        return False
+    serial = coordinator.device_data.get("ev_charger_sn")
+    return not (isinstance(serial, str) and serial.startswith(POWERPULSE1_SN_PREFIX))
 
 
 def raise_set_failed(entity_id: str) -> NoReturn:
