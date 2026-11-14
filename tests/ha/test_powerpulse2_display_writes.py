@@ -62,6 +62,11 @@ _FIXTURE_PATH = (
 )
 
 
+# The writes here address the recordings' masked wallbox serial, which
+# stands for the C376 it masks (#725, `masked_wallbox_is_c376`).
+pytestmark = pytest.mark.usefixtures("masked_wallbox_is_c376")
+
+
 @pytest.fixture(autouse=True)
 def _short_fresh_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     """A write that finds the settings report missing or stale waits

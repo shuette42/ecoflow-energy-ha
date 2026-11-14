@@ -4102,6 +4102,9 @@
     "powerpulse_phase_setting_needs_powerocean": {
       "message": "Le réglage des phases ne peut être modifié que via un PowerOcean du même compte ; cette entrée n'en contient aucun."
     },
+    "powerpulse_setting_not_supported": {
+      "message": "Ce modèle de borne n'accepte pas encore ce réglage depuis Home Assistant ; rien n'a été envoyé."
+    },
     "powerpulse_phase_setting_not_confirmed": {
       "message": "La wallbox n'a pas signalé le nouveau réglage des phases dans le délai imparti. Dernier réglage signalé : {reported}."
     },

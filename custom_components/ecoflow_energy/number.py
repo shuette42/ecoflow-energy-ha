@@ -41,6 +41,7 @@ from .const import (
     EcoFlowNumberDef,
     filter_defs_for_serial,
     ocean2_controls,
+    powerpulse_control_allowed,
     supports_ocean2_reserve,
     supports_powerpulse_controls,
     supports_stream_ac5000_controls,
@@ -71,6 +72,7 @@ from .ecoflow.delta3_commands import (
 )
 from .ecoflow.energy_stream import (
     powerglow_max_power_w,
+    powerpulse_controls,
     stream_backup_reserve_floor,
 )
 from .ecoflow.parsers.delta3_proto import port_priority_keys
@@ -130,6 +132,14 @@ async def async_setup_entry(
             coordinator.device_sn,
         )
         if coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
+            # A variant's row may withhold the settings and display controls
+            # its writes are not confirmed for (#725, `POWERPULSE_CONTROLS`).
+            defs = [
+                defn
+                for defn in defs
+                if powerpulse_control_allowed(coordinator.device_sn, defn.key)
+            ]
+        if coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
             # Each PowerPulse 2 number exists on exactly one write route
             # (PLAN-140/146), named by its own definition - a def without a
             # route restriction (none exist today) passes through unfiltered.
@@ -187,6 +197,12 @@ def _watch_for_accessory(
 
     config_entry.async_on_unload(coordinator.async_add_listener(_check_for_accessory))
 
+
+# The PowerPulse 2 current numbers whose ceiling follows the wallbox's row in
+# `POWERPULSE_CONTROLS` (#725): every PowerPulse 2 number in amps.
+_POWERPULSE_CURRENT_KEYS: frozenset[str] = frozenset(
+    defn.key for defn in POWERPULSE2_NUMBERS if defn.unit == "A"
+)
 
 _NUMBER_CATEGORY_MAP = {
     "diagnostic": EntityCategory.DIAGNOSTIC,
@@ -468,6 +484,20 @@ class EcoFlowNumber(
             if not isinstance(rod_sn, str) or len(rod_sn) != 16:
                 return None
             return self._attr_native_min_value, float(powerglow_max_power_w(rod_sn))
+        if (
+            self.coordinator.device_type == DEVICE_TYPE_POWERPULSE2
+            and self._definition.key in _POWERPULSE_CURRENT_KEYS
+        ):
+            # The declared range is the widest of all variants; each wallbox
+            # runs to its own row's ceiling (#725), never past the declared one.
+            # Named apart from `row` in the Ocean 2 branch above, for the
+            # reason given at `ceiling_upper`: one name, two inferred types.
+            pulse_row = powerpulse_controls(self.coordinator.device_sn)
+            if pulse_row is None:
+                return None
+            return self._attr_native_min_value, min(
+                float(pulse_row.max_current_a), self._attr_native_max_value
+            )
         return None
 
     def _is_powerglow_target_power(self) -> bool:

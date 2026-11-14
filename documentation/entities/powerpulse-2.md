@@ -2,7 +2,7 @@
 
 Full list of entities for the EcoFlow PowerPulse 2 wallbox (`C376`, `C374` and `C371` series).
 
-**`C371`: read-only.** It gets the same sensors and binary sensor. Charging power and session energy were checked against the app over one overnight charge. The buttons, numbers, selects and switches below work on the `C376` and `C374` only, until a write to a `C371` is confirmed.
+**`C371`: fewer controls.** It gets the same sensors and binary sensor. Charging power and session energy were checked against the app over one overnight charge. With exactly one PowerOcean in the entry it also has Wallbox Maximum Current, Wallbox Custom Charging Current and Wallbox Solar Minimum Current (each from 6 to 32 A, where the `C376` and `C374` go from 6 to 16 A), the Wallbox Charging Mode select and the Wallbox Start Charging and Wallbox Stop Charging buttons. The switches, the Wallbox Phase Setting select and the screen and LED controls below work on the `C376` and `C374` only, until they are checked on a `C371`. A `C371` with no PowerOcean in the entry stays read-only.
 
 **Totals:** 21 sensors, 1 binary sensor, 2 buttons (with no PowerOcean or exactly one in the same integration entry, none with two or more), 2 selects and 5 switches (with exactly one PowerOcean in the entry), and six numbers: Wallbox Maximum Current, Wallbox Solar Minimum Current, Wallbox Custom Charging Current, Wallbox Screen Brightness and Wallbox LED Indicator Brightness with exactly one PowerOcean in the entry, Wallbox Charging Current Setpoint with none
 

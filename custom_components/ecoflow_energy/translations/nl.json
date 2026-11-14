@@ -4102,6 +4102,9 @@
     "powerpulse_phase_setting_needs_powerocean": {
       "message": "De fase-instelling kan alleen worden ingesteld via een PowerOcean op hetzelfde account; dit item heeft er geen."
     },
+    "powerpulse_setting_not_supported": {
+      "message": "Dit wallboxmodel accepteert deze instelling nog niet vanuit Home Assistant; er is niets verzonden."
+    },
     "powerpulse_phase_setting_not_confirmed": {
       "message": "De laadpaal heeft de nieuwe fase-instelling niet binnen de toegestane tijd gemeld. Laatst gemelde instelling: {reported}."
     },

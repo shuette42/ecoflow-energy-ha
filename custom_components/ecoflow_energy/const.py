@@ -38,6 +38,7 @@ from .ecoflow.const import (  # noqa: E402
     POWEROCEAN_SCHEDULE_POWER_MIN_W,
     POWEROCEAN_SCHEDULE_POWER_STEP_W,
     POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS,
+    POWERPULSE2_DISPLAY_KEYS,
     device_log_tag,  # noqa: F401
     get_device_name,  # noqa: F401
     get_device_type,  # noqa: F401
@@ -45,7 +46,10 @@ from .ecoflow.const import (  # noqa: E402
 from .ecoflow.energy_stream import (  # noqa: E402
     POWERGLOW_TARGET_TEMP_C_MAX,
     POWERGLOW_TARGET_TEMP_C_MIN,
+    POWERPULSE_CONTROLS,
+    POWERPULSE_MIN_CURRENT_A,
     WALLBOX_WORK_MODES,
+    powerpulse_controls,
 )
 from .ecoflow.parsers.delta_pro_ultra_proto import (
     MAX_PACKS as DELTAPROULTRA_MAX_PACKS,  # noqa: E402
@@ -248,9 +252,14 @@ POWERPULSE2_CHARGE_CURRENT_WINDOW_S: float = 20.0
 # 5.1 s over the recorded writes, so 20 s leaves the same generous Home
 # Assistant service-call allowance as the PowerPulse windows above.
 POWERGLOW_WRITE_WINDOW_S: float = 20.0
-# PLAN-146: the maximum current range, the owner's sweep on #7 covered end to
-# end (2026-09-10).
-POWERPULSE2_MAX_CURRENT_RANGE_A: tuple[int, int] = (6, 16)
+# PLAN-146: the declared current range of the wallbox numbers, the widest of
+# all registered variants (#725). Each variant's own ceiling is its row in
+# `POWERPULSE_CONTROLS` (16 A from the owner's sweep on #7, 32 A on a `C371`);
+# the numbers and the writes narrow to that row, never to this range.
+POWERPULSE2_MAX_CURRENT_RANGE_A: tuple[int, int] = (
+    POWERPULSE_MIN_CURRENT_A,
+    max(row.max_current_a for row in POWERPULSE_CONTROLS.values()),
+)
 # PLAN-188: the display brightness numbers step from one allowed value to the next.
 POWERPULSE2_DISPLAY_BRIGHTNESS_STEP_PCT: int = (
     POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS[1] - POWERPULSE2_DISPLAY_BRIGHTNESS_STEPS[0]
@@ -6217,14 +6226,26 @@ STREAM_AC5000_CONTROL_PREFIXES: frozenset[str] = frozenset({"ES21", "ES22"})
 STREAM_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31"})
 
 
-# Only these PowerPulse variants retain the existing control paths. New
-# prefixes start read-only until their writes are explicitly supported.
-POWERPULSE_CONTROL_PREFIXES: frozenset[str] = frozenset({"C376", "C374"})
-
-
+# Which PowerPulse variants may expose controls, with their current ceiling,
+# route and settings scope, is the one table `POWERPULSE_CONTROLS` in
+# ecoflow/energy_stream.py. New prefixes start read-only until a row admits them.
 def supports_powerpulse_controls(device_sn: str) -> bool:
     """Return whether this PowerPulse variant may expose controls."""
-    return device_sn[:4].upper() in POWERPULSE_CONTROL_PREFIXES
+    return powerpulse_controls(device_sn) is not None
+
+
+def powerpulse_control_allowed(device_sn: str, key: str) -> bool:
+    """Return whether this PowerPulse 2 variant may expose the control `key`.
+
+    A variant without a row exposes nothing. A row with `settings_controls`
+    False withholds the settings switches, the phase setting and the display
+    controls (`POWERPULSE2_SETTINGS_CONTROL_KEYS`), whose writes are not
+    confirmed on it (#725).
+    """
+    row = powerpulse_controls(device_sn)
+    if row is None:
+        return False
+    return row.settings_controls or key not in POWERPULSE2_SETTINGS_CONTROL_KEYS
 
 
 def supports_stream_ac5000_controls(device_sn: str) -> bool:
@@ -10690,6 +10711,16 @@ POWERPULSE2_SWITCHES: list[EcoFlowSwitchDef] = [
         accessory=True,
     ),
 ]
+
+# The PowerPulse 2 controls a row with `settings_controls` False withholds
+# (#725): every wallbox switch (the settings bits and the display switches),
+# the display brightness numbers and the phase setting. Derived from the
+# definitions, so a new switch or display key is covered without a second list.
+POWERPULSE2_SETTINGS_CONTROL_KEYS: frozenset[str] = frozenset(
+    {defn.key for defn in POWERPULSE2_SWITCHES}
+    | set(POWERPULSE2_DISPLAY_KEYS)
+    | {"ev_phase_setting"}
+)
 
 
 # =====================================================================

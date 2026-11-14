@@ -62,6 +62,11 @@ _BOTH = pytest.mark.parametrize(
 )
 
 
+# The writes here address the recordings' masked wallbox serial, which
+# stands for the C376 it masks (#725, `masked_wallbox_is_c376`).
+pytestmark = pytest.mark.usefixtures("masked_wallbox_is_c376")
+
+
 async def _until(condition: Callable[[], bool], timeout: float = 2.0) -> None:
     """Wait until `condition` holds, at most `timeout` seconds. A publish crosses
     the executor, so a fixed sleep before reading the send count is a guess."""

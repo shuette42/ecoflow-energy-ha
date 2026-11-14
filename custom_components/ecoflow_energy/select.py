@@ -49,6 +49,7 @@ from .const import (
     WAVE3_SELECTS,
     EcoFlowSelectDef,
     filter_defs_for_serial,
+    powerpulse_control_allowed,
     supports_powerpulse_controls,
     supports_stream_ac5000_controls,
 )
@@ -111,6 +112,14 @@ async def async_setup_entry(
             _get_select_defs(coordinator.device_type, coordinator.device_sn),
             coordinator.device_sn,
         )
+        if coordinator.device_type == DEVICE_TYPE_POWERPULSE2:
+            # A variant's row may withhold the settings and display controls
+            # its writes are not confirmed for (#725, `POWERPULSE_CONTROLS`).
+            defs = [
+                defn
+                for defn in defs
+                if powerpulse_control_allowed(coordinator.device_sn, defn.key)
+            ]
         if (
             coordinator.device_type == DEVICE_TYPE_POWERPULSE2
             and coordinator.charge_action_route() != "sibling"
