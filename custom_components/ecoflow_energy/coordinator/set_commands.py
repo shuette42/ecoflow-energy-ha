@@ -22,6 +22,7 @@ from ..const import (
     POWEROCEAN_SCHEDULE_PREFIXES,
     POWEROCEAN_SOC_DEBOUNCE_S,
     POWEROCEAN_SOC_STATE_KEYS,
+    POWERPULSE1_SN_PREFIX,
     POWERPULSE1_SWITCH_KEYS,
     POWERPULSE2_CHARGE_ACTION_PRECONDITION,
     POWERPULSE2_CHARGE_ACTION_WINDOW_S,
@@ -3434,6 +3435,15 @@ class SetCommandsMixin(_Base):
         """
         from ..ecoflow.energy_stream import WALLBOX_WORK_MODES
 
+        def _require_powerpulse1(serial: str) -> None:
+            # A control stays once created, and `ev_charger_sn` also has the
+            # PowerPulse 2 as a writer: the stored serial decides every write.
+            if not serial.startswith(POWERPULSE1_SN_PREFIX):
+                raise HomeAssistantError(
+                    translation_domain=DOMAIN,
+                    translation_key="wallbox_not_reported",
+                )
+
         if key == "ev_charge_mode":
             if value not in WALLBOX_WORK_MODES:
                 raise ValueError(f"{value!r} is not a PowerPulse 1 charging mode")
@@ -3443,6 +3453,7 @@ class SetCommandsMixin(_Base):
                 "ev_charge_mode_raw",
                 float(mode),
                 {"work_mode": mode},
+                _require_powerpulse1,
                 kind="wallbox",
             )
             return
@@ -3450,7 +3461,12 @@ class SetCommandsMixin(_Base):
             raise ValueError(f"{key!r}={value!r} is not a PowerPulse 1 setting")
         setting = key.removeprefix("ev_")
         await self._async_powerglow_write(
-            setting, key, float(value), {setting: value}, kind="wallbox"
+            setting,
+            key,
+            float(value),
+            {setting: value},
+            _require_powerpulse1,
+            kind="wallbox",
         )
 
     async def async_send_delta3_set(self, command: dict[str, Any]) -> bool:

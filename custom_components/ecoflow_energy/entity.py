@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING, Any, NoReturn
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DEVICE_TYPE_POWEROCEAN, DOMAIN, POWERPULSE1_SN_PREFIX
+from .const import (
+    DEVICE_TYPE_POWEROCEAN,
+    DOMAIN,
+    POWERPULSE1_SN_PREFIX,
+    POWERPULSE1_SWITCH_KEYS,
+)
 
 if TYPE_CHECKING:
     from .coordinator import EcoFlowDeviceCoordinator
@@ -27,7 +32,7 @@ def wallbox_control_withheld(coordinator: Any, key: str) -> bool:
     """
     if getattr(coordinator, "device_type", None) != DEVICE_TYPE_POWEROCEAN:
         return False
-    if not key.startswith("ev_"):
+    if key not in POWERPULSE1_SWITCH_KEYS and key != "ev_charge_mode":
         return False
     serial = coordinator.device_data.get("ev_charger_sn")
     return not (isinstance(serial, str) and serial.startswith(POWERPULSE1_SN_PREFIX))

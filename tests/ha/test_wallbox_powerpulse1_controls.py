@@ -57,6 +57,7 @@ SETTINGS = (
 # in where the prefix decides, one with the PowerPulse 2 prefix for any other.
 PP1_SN = "AC31" + "0" * 12
 PP2_SN = "C376" + "0" * 12
+OTHER_PP1_SN = "AC31" + "1" * 12
 FOUR = {
     "ev_plug_and_play",
     "ev_charge_mode",
@@ -76,6 +77,13 @@ def _parse(ocean: EcoFlowDeviceCoordinator, label: str) -> dict[str, Any]:
     topic = f"/app/user123/{ocean.device_sn}/thing/property"
     parsed = ocean._parse_message(topic, bytes.fromhex(FRAMES[label]["hex"]))
     assert parsed is not None
+    return parsed
+
+
+def _pp1(ocean: EcoFlowDeviceCoordinator, label: str) -> dict[str, Any]:
+    """A real frame with the masked serial replaced by a PowerPulse 1 dummy."""
+    parsed = _parse(ocean, label)
+    parsed["ev_charger_sn"] = PP1_SN
     return parsed
 
 
@@ -131,17 +139,20 @@ async def test_write_sends_the_app_pdata_and_returns_on_the_report(
     hass: HomeAssistant, entity_key: str, value: Any, write: str, report: str
 ) -> None:
     ocean = _ocean(hass)
-    ocean._apply_data(_parse(ocean, "get_all_reply_start"))
+    ocean._apply_data(_pp1(ocean, "get_all_reply_start"))
 
     task = asyncio.create_task(ocean.async_set_wallbox_setting(entity_key, value))
     await asyncio.sleep(0.05)
     sent = _mqtt(ocean).send_proto_set.call_args.args[0]
     (header,), _ = decode_header_message(sent)
     (app,), _ = decode_header_message(bytes.fromhex(FRAMES[write]["hex"]))
-    assert header["pdata"] == app["pdata"]
+    # The write addresses the reported serial; the app frame carries the mask.
+    pp1_hex, mask_hex = PP1_SN.encode().hex(), ("X" * 16).encode().hex()
+    assert header["pdata"].count(pp1_hex) == 1
+    assert header["pdata"].replace(pp1_hex, mask_hex) == app["pdata"]
     assert not task.done()
 
-    ocean._apply_data(_parse(ocean, report))
+    ocean._apply_data(_pp1(ocean, report))
     await task
     assert ocean._pending_write is None
 
@@ -149,7 +160,7 @@ async def test_write_sends_the_app_pdata_and_returns_on_the_report(
 async def test_write_without_report_is_not_confirmed(hass: HomeAssistant) -> None:
     """The ack proves nothing: without a 209/8 the write fails."""
     ocean = _ocean(hass)
-    ocean._apply_data(_parse(ocean, "get_all_reply_start"))
+    ocean._apply_data(_pp1(ocean, "get_all_reply_start"))
     with (
         patch(WINDOW, 0.05),
         pytest.raises(HomeAssistantError) as err,
@@ -170,6 +181,27 @@ async def test_write_without_a_reported_wallbox_is_refused(
 
 
 @pytest.mark.parametrize(
+    ("key", "value"), [("ev_plug_and_play", True), ("ev_charge_mode", "fast")]
+)
+async def test_write_is_refused_once_another_wallbox_reports(
+    hass: HomeAssistant, key: str, value: Any
+) -> None:
+    """A control stays once created, but `ev_charger_sn` also takes a
+    PowerPulse 2's serial: the write checks the stored serial, not the entity.
+
+    Mutation probe: dropping the prefix check in `_require_powerpulse1` sends
+    the PowerPulse 1 command to the PowerPulse 2.
+    """
+    ocean = _ocean(hass)
+    ocean._apply_data(_pp1(ocean, "get_all_reply_start"))
+    ocean.set_device_value("ev_charger_sn", PP2_SN)
+    with pytest.raises(HomeAssistantError) as err:
+        await ocean.async_set_wallbox_setting(key, value)
+    assert err.value.translation_key == "wallbox_not_reported"
+    assert _mqtt(ocean).send_proto_set.call_count == 0
+
+
+@pytest.mark.parametrize(
     ("change", "report"),
     [
         # Another setting moved, plug-and-play still off.
@@ -182,15 +214,15 @@ async def test_a_report_without_the_new_value_leaves_the_write_pending(
     hass: HomeAssistant, change: str, report: str
 ) -> None:
     ocean = _ocean(hass)
-    ocean._apply_data(_parse(ocean, "get_all_reply_start"))
+    ocean._apply_data(_pp1(ocean, "get_all_reply_start"))
     with patch(WINDOW, 0.3):
         task = asyncio.create_task(
             ocean.async_set_wallbox_setting("ev_plug_and_play", True)
         )
         await asyncio.sleep(0.05)
-        parsed = _parse(ocean, report)
+        parsed = _pp1(ocean, report)
         if change == "serial":
-            parsed["ev_charger_sn"] = PP1_SN
+            parsed["ev_charger_sn"] = OTHER_PP1_SN
         ocean._apply_data(parsed)
         await asyncio.sleep(0.05)
         assert not task.done()
@@ -208,9 +240,10 @@ def _ev_entities(found: list[Any], ocean: EcoFlowDeviceCoordinator) -> dict[str,
 
 
 async def _wallbox_entities(
-    hass: HomeAssistant, ocean: EcoFlowDeviceCoordinator, serial: str
+    hass: HomeAssistant, ocean: EcoFlowDeviceCoordinator, serial: Any
 ) -> tuple[set[str], dict[str, Any]]:
-    """Set the platforms up, then deliver the settings report with `serial`.
+    """Set the platforms up, then deliver the settings report with `serial`
+    (`None`: the report carries the settings without a serial).
 
     Returns the wallbox controls present before the report and after it.
     """
@@ -221,7 +254,10 @@ async def _wallbox_entities(
     await hass.async_block_till_done()
     before = set(_ev_entities(found, ocean))
     parsed = _parse(ocean, "get_all_reply_start")
-    parsed["ev_charger_sn"] = serial
+    if serial is None:
+        del parsed["ev_charger_sn"]
+    else:
+        parsed["ev_charger_sn"] = serial
     ocean._apply_data(parsed)
     ocean.async_set_updated_data(dict(ocean.device_data))
     await hass.async_block_till_done()
@@ -246,6 +282,53 @@ async def test_no_controls_while_the_reported_wallbox_is_not_a_powerpulse1(
     """
     _, after = await _wallbox_entities(hass, _ocean(hass), serial)
     assert after == {}
+
+
+@pytest.mark.parametrize("serial", [None, 12345])
+async def test_no_controls_while_the_report_names_no_wallbox_serial(
+    hass: HomeAssistant, serial: Any
+) -> None:
+    """Settings arrive without a usable serial (a report with the settings
+    but no `ev_charger_sn`, or one that is not a string): no control.
+
+    Mutation probe: letting a missing or non-string serial through in
+    `wallbox_control_withheld` creates the four controls.
+    """
+    _, after = await _wallbox_entities(hass, _ocean(hass), serial)
+    assert after == {}
+
+
+async def _controls_at_setup(
+    hass: HomeAssistant, ocean: EcoFlowDeviceCoordinator, serial: str
+) -> dict[str, Any]:
+    """Deliver the settings report with `serial`, then set the platforms up."""
+    parsed = _parse(ocean, "get_all_reply_start")
+    parsed["ev_charger_sn"] = serial
+    ocean._apply_data(parsed)
+    entry = hass.config_entries.async_entries(DOMAIN)[-1]
+    found: list[Any] = []
+    await switch_setup(hass, entry, add_entities_collector(found))
+    await select_setup(hass, entry, add_entities_collector(found))
+    await hass.async_block_till_done()
+    return _ev_entities(found, ocean)
+
+
+async def test_setup_creates_the_controls_for_a_reported_powerpulse1(
+    hass: HomeAssistant,
+) -> None:
+    assert set(await _controls_at_setup(hass, _ocean(hass), PP1_SN)) == FOUR
+
+
+async def test_setup_withholds_the_controls_for_a_reported_powerpulse2(
+    hass: HomeAssistant,
+) -> None:
+    """The settings are already in the store when the platforms set up.
+
+    Mutation probe: dropping the `wallbox_control_withheld` term from the
+    setup loop of `switch.py` or `select.py` creates that platform's
+    controls here.
+    """
+    assert await _controls_at_setup(hass, _ocean(hass), PP2_SN) == {}
 
 
 async def test_controls_follow_the_wallbox_not_the_entry(
