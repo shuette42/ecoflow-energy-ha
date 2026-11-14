@@ -3312,14 +3312,14 @@ class SetCommandsMixin(_Base):
                     translation_domain=DOMAIN,
                     translation_key=f"{kind}_offline",
                 )
-            rod_sn = self._device_data.get(serial_key)
-            if not isinstance(rod_sn, str) or len(rod_sn) != 16:
+            sn = self._device_data.get(serial_key)
+            if not isinstance(sn, str) or len(sn) != 16:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
                     translation_key=f"{kind}_not_reported",
                 )
             if validate is not None:
-                validate(rod_sn)
+                validate(sn)
             if self._pending_write is not None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
@@ -3328,7 +3328,7 @@ class SetCommandsMixin(_Base):
                     translation_key="accessory_write_in_progress",
                 )
             try:
-                payload = builder(rod_sn, self.device_sn, **setting)
+                payload = builder(sn, self.device_sn, **setting)
             except ValueError:
                 # The values are already checked; a ValueError here can only
                 # be a malformed serial, the same failure mode as a rod serial
@@ -3344,7 +3344,7 @@ class SetCommandsMixin(_Base):
                 future=future,
                 state_key=state_key,
                 expected_value=expected_value,
-                require=(serial_key, rod_sn),
+                require=(serial_key, sn),
             )
             # The record lives exactly as long as this call and is cleared on
             # every exit in the `finally` below.
