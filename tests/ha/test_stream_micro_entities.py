@@ -10,6 +10,8 @@ that owner.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -39,6 +41,9 @@ from custom_components.ecoflow_energy.ecoflow.const import (
     get_device_name,
     get_device_type,
 )
+from custom_components.ecoflow_energy.ecoflow.parsers.stream_proto import (
+    parse_stream_proto_message,
+)
 from custom_components.ecoflow_energy.number import async_setup_entry as number_setup
 from custom_components.ecoflow_energy.sensor import async_setup_entry as sensor_setup
 
@@ -49,6 +54,17 @@ BK01_DEVICE: dict[str, Any] = {
     "device_type": DEVICE_TYPE_STREAM,
     "online": 1,
 }
+
+N011_DEVICE: dict[str, Any] = {
+    "sn": "N011TEST00000001",
+    "name": "",
+    "product_name": "",
+    "device_type": DEVICE_TYPE_STREAM,
+    "online": 1,
+}
+N011_CAPTURE = (
+    Path(__file__).parent.parent / "fixtures" / "stream" / "n011_us_20261113.json"
+)
 
 BK31_DEVICE: dict[str, Any] = {
     "sn": "BK31TEST00000001",
@@ -77,12 +93,21 @@ def _entry(device: dict[str, Any]) -> MockConfigEntry:
 
 
 async def _setup_keys(
-    hass: HomeAssistant, device: dict[str, Any], platform_setup
+    hass: HomeAssistant,
+    device: dict[str, Any],
+    platform_setup,
+    frame: dict[str, Any] | None = None,
 ) -> set[str]:
-    """Run one platform's setup and return the entity keys it created."""
+    """Run one platform's setup and return the entity keys it created.
+
+    ``frame`` is parsed telemetry applied before setup, so accessory entities
+    that wait for a nonzero reading can be created.
+    """
     entry = _entry(device)
     entry.add_to_hass(hass)
     coordinator = EcoFlowDeviceCoordinator(hass, entry, device)
+    if frame is not None:
+        coordinator._apply_data(dict(frame))
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {device["sn"]: coordinator}
 
     created: list[Any] = []
@@ -122,6 +147,43 @@ class TestStreamMicroSiblingBk02:
 
     def test_bk02_display_name(self) -> None:
         assert get_device_name("", "BK02TESTAAAAAAAA") == "Stream Micro"
+
+
+class TestStreamMicroUsN011:
+    """N011 is the US STREAM Microinverter (120 V / 60 Hz, #726): the same
+    parser and entity set as BK01/BK02, minus the PV2 readings its shared MPPT
+    never fills (it reports on the PV3 fields)."""
+
+    PV2_KEYS = frozenset({"pv2_w", "pv2_current_a", "pv2_voltage_v", "pv2_energy_kwh"})
+
+    def test_n011_is_a_stream_device(self) -> None:
+        assert get_device_type("", "N011TEST00000001") == DEVICE_TYPE_STREAM
+
+    def test_n011_display_name(self) -> None:
+        assert get_device_name("", "N011TESTAAAAAAAA") == "Stream Micro"
+
+    def test_n011_keeps_the_micro_set_and_drops_the_pv2_keys(self) -> None:
+        excluded = excluded_keys_for_serial("N011TEST00000001")
+
+        assert excluded >= STREAM_MICRO_EXCLUDED_KEYS
+        assert excluded >= self.PV2_KEYS
+
+    async def test_entity_set_from_the_first_upload(self, hass: HomeAssistant) -> None:
+        """Through the platform's own filter path, fed with a real frame: the
+        PV3/PV4 accessories exist, nothing for the unused PV2 does."""
+        frame = parse_stream_proto_message(
+            bytes.fromhex(json.loads(N011_CAPTURE.read_text())["frames"][0]["hex"])
+        )
+        assert frame is not None
+
+        keys = await _setup_keys(hass, N011_DEVICE, sensor_setup, frame)
+
+        assert {"pv1_w", "pv3_w", "pv4_w"} <= keys
+        assert not keys & self.PV2_KEYS
+
+    def test_bk01_and_bk02_still_show_pv2(self) -> None:
+        for serial in ("BK01TEST00000001", "BK02TEST00000001"):
+            assert not self.PV2_KEYS & excluded_keys_for_serial(serial)
 
 
 class TestPrefixFilterHelper:

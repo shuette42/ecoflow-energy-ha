@@ -644,6 +644,46 @@ class TestStreamPv34VoltageCurrentReplay:
         assert _STREAM_FIELD_MAP[(254, 21)][field] == (key, _TYPE_FLOAT)
 
 
+N011_CAPTURE = Path(__file__).parent / "fixtures" / "stream" / "n011_us_20261113.json"
+
+
+class TestStreamMicroUsCaptureReplay:
+    """The five full uploads of a real N011 (STREAM Microinverter US, #726)
+    through the production entry point. The shared MPPT reports its middle
+    panel pair (app tile PV2+PV3) on the PV3 fields, PV2 stays 0."""
+
+    @staticmethod
+    def _frames() -> list[dict]:
+        return json.loads(N011_CAPTURE.read_text())["frames"]
+
+    def test_fixture_holds_the_five_full_uploads(self) -> None:
+        frames = self._frames()
+        assert len(frames) == 5
+        assert {frame["size"] for frame in frames} == {245}
+
+    def test_first_upload_matches_the_app_tiles(self) -> None:
+        result = parse_stream_proto_message(bytes.fromhex(self._frames()[0]["hex"]))
+
+        assert result is not None
+        assert result["pv1_w"] == pytest.approx(15.103, rel=1e-3)
+        assert result["pv3_w"] == pytest.approx(18.293, rel=1e-3)
+        assert result["pv4_w"] == pytest.approx(15.103, rel=1e-3)
+        assert result["grid_connection_power_w"] == pytest.approx(47.7, rel=1e-3)
+        assert result["ac_voltage_v"] == pytest.approx(120.0, rel=1e-4)
+        assert result["ac_frequency_hz"] == pytest.approx(60.0, rel=1e-4)
+        assert result["grid_connection_state"] == "feed_grid"
+
+    def test_every_upload_reports_on_pv3_and_none_on_pv2(self) -> None:
+        for frame in self._frames():
+            result = parse_stream_proto_message(bytes.fromhex(frame["hex"]))
+            assert result is not None
+            assert result["pv3_w"] > 10
+            assert result["pv4_w"] > 10
+            assert result["pv2_w"] == 0
+            assert result["pv2_current_a"] == 0
+            assert 119 < result["ac_voltage_v"] < 121
+
+
 BK01_CAPTURE = (
     Path(__file__).parent / "fixtures" / "stream" / "bk01_capture_masked.json"
 )

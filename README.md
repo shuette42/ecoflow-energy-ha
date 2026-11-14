@@ -51,6 +51,7 @@
 | **Stream Pro** | `BK12` | Enhanced (Standard untested) | not counted yet | none | not counted yet | ~3 s |
 | **Stream Micro** | `BK01` | Enhanced only | 25 | none | 2 optional | ~3 s |
 | **Stream Micro** | `BK02` | Standard | 25 | none | 2 optional | MQTT bursts |
+| **Stream Micro (US)** | `N011` | Enhanced (Standard untested) | 21 | none | 1 optional | ~3 s |
 | **PowerStream** | `HW51` | Standard only | 25 | none, read-only | 2 + 2 optional | ~30 s |
 | **STREAM AC 5000** | `ES22` | Enhanced only | 65 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 3 optional | ~2 s |
 | **STREAM 5000** | `ES21` | Enhanced only | 65 + 2 binary | 2 switches · 7 numbers · 1 select | 4 + 3 optional | ~2 s |
@@ -162,6 +163,8 @@ The Stream Micro feeds solar directly into the grid and has no battery and no AC
 
 **Modes.** The `BK01` is not exposed through the EcoFlow Developer API at all, so it needs the EcoFlow account sign-in (Enhanced Mode only). The `BK02` is listed under the same product name in the EcoFlow app and runs in Standard Mode. It sends its data in bursts over MQTT, and the regular poll fails for it.
 
+**US model.** The STREAM Microinverter (US) (`N011`, 120 V / 60 Hz) has three solar inputs for four panel connectors. Its second and third connector share one input, which the integration shows as PV 3 Power, so it has no PV 2 entities. PV 3 and PV 4 are created once they report a reading and are disabled by default, like on the other Stream units. It is read-only and has been seen in Enhanced Mode only.
+
 </details>
 
 <details>
@@ -244,7 +247,7 @@ The local connection came last. [@jensfr1](https://github.com/jensfr1) showed ho
 
 Thank you to everyone who reports, tests, records data and contributes code. If you want to take part, open an issue or a pull request.
 
-**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK02`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Pro (`BK12`) is identified the same way in Enhanced Mode, where it has been seen. Standard Mode is untested for it. The Stream Micro `BK01` is not exposed through the Developer API at all and therefore needs Enhanced Mode.
+**Enhanced Mode** connects with your EcoFlow email and password. No Developer API keys needed. Faster updates, but this is an unofficial, community-driven protocol based on observed behaviour that may change without notice. Stream-family devices report an empty product name, so they are identified by their serial prefix (`BK01`, `BK02`, `N011`, `BK11`, `BK31`, `BK41`, `BK51`, `BK61`) and appear under the correct model name in Home Assistant in both modes. The Stream Pro (`BK12`) is identified the same way in Enhanced Mode, where it has been seen. Standard Mode is untested for it. The Stream Micro `BK01` is not exposed through the Developer API at all and therefore needs Enhanced Mode.
 
 **Upgrading to v1.17.0?** The charge and discharge limits carry one name now, on every device that has them: **Max Charge SoC** and **Min Discharge SoC**. Depending on the device they used to read Charge Limit, Discharge Limit, Max. Ladezustand or Ladegrenze, which meant one value answered to four names across the integration. Only the displayed label changed. Entity ids, history, statistics and automations are untouched, so nothing needs migrating. The one place worth a look is a dashboard card whose title you typed by hand, or a template that matches on the friendly name.
 

@@ -6123,6 +6123,11 @@ DELTA3_PORT_PRIORITY_KEYS: frozenset[str] = frozenset(
 _SN_PREFIX_EXCLUDED_KEYS: dict[str, frozenset[str]] = {
     "BK01": STREAM_MICRO_EXCLUDED_KEYS,
     "BK02": STREAM_MICRO_EXCLUDED_KEYS,
+    # The US unit shares one MPPT between connectors PV2 and PV3 and reports on
+    # the PV3 fields; PV2 is 0 in every recorded frame (#726). The PV2 energy
+    # counter is integrated from pv2_w, so it would sit at zero for good.
+    "N011": STREAM_MICRO_EXCLUDED_KEYS
+    | frozenset({"pv2_w", "pv2_current_a", "pv2_voltage_v", "pv2_energy_kwh"}),
     "P321": DELTA3_PORT_PRIORITY_KEYS,
     "P231": DELTA3_PORT_PRIORITY_KEYS,
     "D3N1": DELTA3_PORT_PRIORITY_KEYS,
