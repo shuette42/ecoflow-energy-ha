@@ -307,8 +307,10 @@ _SN_PREFIX_MAP = {
     # it shares the Stream parser but gets a reduced entity set (see
     # STREAM_MICRO_EXCLUDED_KEYS). BK02 is the same product in the app's
     # device list (#674); it pushes in Standard Mode, so it is not Enhanced-only.
+    # N011 is the US variant (120 V / 60 Hz, #726).
     "BK01": DEVICE_TYPE_STREAM,
     "BK02": DEVICE_TYPE_STREAM,
+    "N011": DEVICE_TYPE_STREAM,
     "BK11": DEVICE_TYPE_STREAM,
     "BK12": DEVICE_TYPE_STREAM,
     "BK31": DEVICE_TYPE_STREAM,
@@ -443,6 +445,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     "R611": "RIVER 2 Max",
     "BK01": "Stream Micro",
     "BK02": "Stream Micro",
+    "N011": "Stream Micro",
     "BK11": "Stream Ultra",
     "BK12": "Stream Pro",
     "BK31": "Stream AC Pro",

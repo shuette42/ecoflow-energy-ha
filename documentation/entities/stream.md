@@ -172,6 +172,8 @@ The Stream Micro is a grid-tie solar inverter: two solar strings, one single-pha
 
 **Modes.** The `BK01` is not exposed through the EcoFlow Developer API, so it needs the EcoFlow account sign-in (Enhanced Mode). The `BK02` is listed under the same product name in the EcoFlow app and also reports in Standard Mode. A `BK02` has been seen sending only the power of its two solar strings and the PV voltage, and the two energy sensors are integrated from that power. The other sensors in the table stayed empty on that unit.
 
+**US model (`N011`).** The STREAM Microinverter (US) runs at 120 V and 60 Hz and has four panel connectors on three solar inputs: connectors PV2 and PV3 share one input, which the unit reports on its PV 3 fields. The EcoFlow app shows it as "PV2+PV3" and as PV 1 and PV 4 beside it. An `N011` therefore gets 21 sensor definitions instead of 25: PV 2 Power, PV 2 Voltage, PV 2 Current and PV 2 Energy are not created, because the unit reports 0 W on that input in every recording. The middle pair of panels arrives as PV 3 Power. PV 3 and PV 4 are disabled by default and appear once they report a reading. It has been seen in Enhanced Mode only, and Standard Mode is untested. No recording tells PV 1 and PV 4 apart yet, because both showed the same power each time.
+
 ## Sensors - Stream Micro (`BK01`, `BK02`)
 
 | Entity | Unit | Category | Default | Description |
