@@ -2894,6 +2894,19 @@ POWEROCEAN_SELECTS: list[EcoFlowSelectDef] = [
         accessory=True,
         entity_category="config",
     ),
+    # PowerPulse 1 charging mode (#731): the app offers fast and solar, the
+    # report carries 1 and 2. Same gate as the wallbox switches.
+    EcoFlowSelectDef(
+        "ev_charge_mode",
+        "Wallbox Charging Mode",
+        "ev_charge_mode_raw",
+        ("fast", "solar"),
+        icon="mdi:ev-station",
+        enhanced_only=True,
+        value_map={1: "fast", 2: "solar"},
+        accessory=True,
+        entity_category="config",
+    ),
 ]
 
 
@@ -2908,7 +2921,40 @@ POWEROCEAN_SELECTS: list[EcoFlowSelectDef] = [
 # recurrence rather than echoing the device's own, and deleting one cannot be
 # undone from here while creating is out, so a slot is made in the app first
 # and these two change what it does from then on.
-POWEROCEAN_SWITCHES: list[EcoFlowSwitchDef] = []
+# A PowerPulse 1 (AC31) has no channel of its own: the PowerOcean reports its
+# settings on 209/8 and takes their writes on 209/99 (#731). The keys and
+# names are the PowerPulse 2's, so each control is translated once. Created
+# on the first report that carries the setting, and only on an entry without
+# a PowerPulse 2, whose own controls cover the same settings.
+POWEROCEAN_SWITCHES: list[EcoFlowSwitchDef] = [
+    EcoFlowSwitchDef(
+        "ev_plug_and_play",
+        "Wallbox Plug-and-Play",
+        "ev_plug_and_play",
+        icon="mdi:power-plug",
+        enhanced_only=True,
+        accessory=True,
+        entity_category="config",
+    ),
+    EcoFlowSwitchDef(
+        "ev_continuous_charging",
+        "Wallbox Continuous Charging",
+        "ev_continuous_charging",
+        icon="mdi:ev-plug-type2",
+        enhanced_only=True,
+        accessory=True,
+        entity_category="config",
+    ),
+    EcoFlowSwitchDef(
+        "ev_battery_discharge_block",
+        "Wallbox Block Battery Discharge",
+        "ev_battery_discharge_block",
+        icon="mdi:battery-off",
+        enhanced_only=True,
+        accessory=True,
+        entity_category="config",
+    ),
+]
 
 for _schedule_index in range(1, SCHEDULE_MAX_INDEX + 1):
     POWEROCEAN_SWITCHES.append(

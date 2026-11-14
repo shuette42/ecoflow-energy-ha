@@ -4131,6 +4131,21 @@
     },
     "battery_command_failed": {
       "message": "Das Gerät hat den Batteriebefehl nicht bestätigt. Prüfe die Verbindung und versuche es erneut."
+    },
+    "wallbox_not_confirmed": {
+      "message": "Die Wallbox hat die neue Einstellung nicht innerhalb der erlaubten Zeit gemeldet. Ihre Schalter zeigen, was sie meldet."
+    },
+    "wallbox_not_delivered": {
+      "message": "Der Wallbox-Befehl konnte nicht gesendet werden."
+    },
+    "wallbox_not_reported": {
+      "message": "Die PowerOcean hat die Wallbox noch nicht gemeldet. Warte auf ihren nächsten Bericht."
+    },
+    "wallbox_offline": {
+      "message": "Die Verbindung zur PowerOcean ist nicht aktiv, daher kann der Wallbox-Befehl nicht gesendet werden."
+    },
+    "wallbox_write_in_progress": {
+      "message": "Ein vorheriger Befehl wartet noch auf die Bestätigung durch die Wallbox. Versuche es erneut, sobald sie ihn bestätigt hat."
     }
   }
 }

@@ -4131,6 +4131,21 @@
     },
     "battery_command_failed": {
       "message": "L'appareil n'a pas confirmé la commande de la batterie. Vérifiez la connexion et réessayez."
+    },
+    "wallbox_not_confirmed": {
+      "message": "La borne de recharge n'a pas signalé le nouveau réglage dans le délai imparti. Ses commandes montrent ce qu'elle signale."
+    },
+    "wallbox_not_delivered": {
+      "message": "La commande de la borne de recharge n'a pas pu être envoyée."
+    },
+    "wallbox_not_reported": {
+      "message": "Le PowerOcean n'a pas encore signalé la borne de recharge. Attendez son prochain rapport."
+    },
+    "wallbox_offline": {
+      "message": "La connexion du PowerOcean n'est pas active, la commande de la borne de recharge ne peut donc pas être envoyée."
+    },
+    "wallbox_write_in_progress": {
+      "message": "Une commande précédente attend encore la confirmation de la borne de recharge. Réessayez dès qu'elle l'a confirmée."
     }
   }
 }

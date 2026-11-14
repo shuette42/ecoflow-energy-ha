@@ -7,10 +7,32 @@ from typing import TYPE_CHECKING, Any, NoReturn
 from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import DOMAIN
+from .const import DEVICE_TYPE_POWEROCEAN, DEVICE_TYPE_POWERPULSE2, DOMAIN
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from .coordinator import EcoFlowDeviceCoordinator
+
+
+def wallbox_control_left_to_powerpulse2(
+    coordinator: Any, key: str, coordinators: Iterable[Any]
+) -> bool:
+    """Return whether a PowerOcean's wallbox control belongs to a PowerPulse 2.
+
+    A PowerOcean coupled to a PowerPulse 2 reports the same 209/8 settings
+    as one coupled to a PowerPulse 1 (#553 recording: plug-and-play, mode,
+    battery discharge, switch bits). The PowerPulse 2 has its own controls
+    for them, so on an entry that holds one the PowerOcean creates none.
+    """
+    return (
+        getattr(coordinator, "device_type", None) == DEVICE_TYPE_POWEROCEAN
+        and key.startswith("ev_")
+        and any(
+            getattr(other, "device_type", None) == DEVICE_TYPE_POWERPULSE2
+            for other in coordinators
+        )
+    )
 
 
 def raise_set_failed(entity_id: str) -> NoReturn:

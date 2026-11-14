@@ -61,6 +61,13 @@ _LOGGER = logging.getLogger(__name__)
 # so a rollback has to be able to put absence back.
 _UNSET = object()
 
+# PowerPulse 1 switch entity key -> its keyword of the wallbox write (#731).
+_WALLBOX_SWITCH_SETTINGS: dict[str, str] = {
+    "ev_plug_and_play": "plug_and_play",
+    "ev_battery_discharge_block": "battery_discharge_block",
+    "ev_continuous_charging": "continuous_charging",
+}
+
 # How long a STREAM AC 5000 task on/off write holds its value against a report
 # that disagrees (#681), the same 5 s as the PowerOcean arming hold. It covers
 # only the stale report that follows a write: +0.13 s in the #681 recording
@@ -3211,8 +3218,15 @@ class SetCommandsMixin(_Base):
         expected_value: float | str,
         setting: dict[str, Any],
         validate: Callable[[str], None] | None = None,
+        *,
+        kind: Literal["powerglow", "wallbox"] = "powerglow",
     ) -> None:
-        """Send one PowerGlow setting and wait for the rod to report it (PLAN-190).
+        """Send one accessory setting and wait for its report (PLAN-190, #731).
+
+        `kind` names the accessory the PowerOcean carries: `powerglow` (the
+        heating rod, `212/99` confirmed on `212/8`) or `wallbox` (a PowerPulse
+        1, `209/99` confirmed on `209/8`). It picks the builder, the serial
+        key and the prefix of every error and event; the body is shared.
 
         The shared body of every PowerGlow write: one `HeatingRodParamSet`
         carrying exactly one setting (`setting` is the keyword for
@@ -3232,14 +3246,23 @@ class SetCommandsMixin(_Base):
         `self._pending_write_lock`; the confirmation wait happens outside it so
         a second write is refused promptly instead of queueing behind it.
         """
-        from ..ecoflow.energy_stream import build_powerglow_param_set_payload
+        from ..ecoflow.energy_stream import (
+            build_powerglow_param_set_payload,
+            build_wallbox_param_set_payload,
+        )
         from .core import PendingDeviceWrite
+
+        builder: Callable[..., bytes]
+        if kind == "wallbox":
+            builder, serial_key = build_wallbox_param_set_payload, "ev_charger_sn"
+        else:
+            builder, serial_key = build_powerglow_param_set_payload, "heating_rod_sn"
 
         async with self._pending_write_lock:
             if self._shutdown:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
-                    translation_key="powerglow_not_delivered",
+                    translation_key=f"{kind}_not_delivered",
                 )
             mqtt_client = self._mqtt_client
             if (
@@ -3249,32 +3272,30 @@ class SetCommandsMixin(_Base):
             ):
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
-                    translation_key="powerglow_offline",
+                    translation_key=f"{kind}_offline",
                 )
-            rod_sn = self._device_data.get("heating_rod_sn")
+            rod_sn = self._device_data.get(serial_key)
             if not isinstance(rod_sn, str) or len(rod_sn) != 16:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
-                    translation_key="powerglow_not_reported",
+                    translation_key=f"{kind}_not_reported",
                 )
             if validate is not None:
                 validate(rod_sn)
             if self._pending_write is not None:
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
-                    translation_key="powerglow_write_in_progress",
+                    translation_key=f"{kind}_write_in_progress",
                 )
             try:
-                payload = build_powerglow_param_set_payload(
-                    rod_sn, self.device_sn, **setting
-                )
+                payload = builder(rod_sn, self.device_sn, **setting)
             except ValueError:
                 # The values are already checked; a ValueError here can only
                 # be a malformed serial, the same failure mode as a rod serial
                 # that has not been reported.
                 raise HomeAssistantError(
                     translation_domain=DOMAIN,
-                    translation_key="powerglow_not_reported",
+                    translation_key=f"{kind}_not_reported",
                 ) from None
             future: asyncio.Future[str | float] = self.hass.loop.create_future()
             record = PendingDeviceWrite(
@@ -3283,20 +3304,20 @@ class SetCommandsMixin(_Base):
                 future=future,
                 state_key=state_key,
                 expected_value=expected_value,
-                require=("heating_rod_sn", rod_sn),
+                require=(serial_key, rod_sn),
             )
             # The record lives exactly as long as this call and is cleared on
             # every exit in the `finally` below.
             self._pending_write = record
             try:
                 delivered = await self.async_send_proto_set_command(
-                    payload, f"powerglow_{action}"
+                    payload, f"{kind}_{action}"
                 )
                 if not delivered:
-                    self._log_event(f"powerglow_{action}_not_delivered", "")
+                    self._log_event(f"{kind}_{action}_not_delivered", "")
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
-                        translation_key="powerglow_not_delivered",
+                        translation_key=f"{kind}_not_delivered",
                     )
             except BaseException:
                 self._clear_pending_write(record)
@@ -3306,13 +3327,13 @@ class SetCommandsMixin(_Base):
             confirmed_value = await asyncio.wait_for(future, POWERGLOW_WRITE_WINDOW_S)
         except TimeoutError:
             last_reported = self._device_data.get(state_key)
-            self._log_event(f"powerglow_{action}_unconfirmed", str(last_reported))
+            self._log_event(f"{kind}_{action}_unconfirmed", str(last_reported))
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
-                translation_key="powerglow_not_confirmed",
+                translation_key=f"{kind}_not_confirmed",
             ) from None
         else:
-            self._log_event(f"powerglow_{action}", str(confirmed_value))
+            self._log_event(f"{kind}_{action}", str(confirmed_value))
         finally:
             self._clear_pending_write(record)
 
@@ -3405,6 +3426,36 @@ class SetCommandsMixin(_Base):
             await self._async_powerglow_write(
                 "run_state", "heating_rod_operating_mode", option, {"run_on": True}
             )
+
+    async def async_set_wallbox_setting(self, key: str, value: bool | str) -> None:
+        """Write one PowerPulse 1 setting through this PowerOcean (#731).
+
+        `key` is the entity key: `ev_charge_mode` with the option `fast` or
+        `solar`, or one of the three switches with on/off. Confirmed on the
+        next `209/8` report from the same wallbox; the ack is not waited for
+        (the first recorded write got none, its report still arrived). Lock,
+        record and wait: `_async_powerglow_write`.
+        """
+        from ..ecoflow.energy_stream import WALLBOX_WORK_MODES
+
+        if key == "ev_charge_mode":
+            if value not in WALLBOX_WORK_MODES:
+                raise ValueError(f"{value!r} is not a PowerPulse 1 charging mode")
+            mode = WALLBOX_WORK_MODES[str(value)]
+            await self._async_powerglow_write(
+                "work_mode",
+                "ev_charge_mode_raw",
+                float(mode),
+                {"work_mode": mode},
+                kind="wallbox",
+            )
+            return
+        setting = _WALLBOX_SWITCH_SETTINGS.get(key)
+        if setting is None or type(value) is not bool:
+            raise ValueError(f"{key!r}={value!r} is not a PowerPulse 1 setting")
+        await self._async_powerglow_write(
+            setting, key, float(value), {setting: value}, kind="wallbox"
+        )
 
     async def async_send_delta3_set(self, command: dict[str, Any]) -> bool:
         """Apply a Delta 3 setting on whichever channel this entry is using.

@@ -85,6 +85,7 @@ from .entity import (
     raise_set_rejected,
     raise_set_unsupported,
     reading_reported,
+    wallbox_control_left_to_powerpulse2,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -139,6 +140,10 @@ async def async_setup_entry(
             if defn.enhanced_only and not coordinator.enhanced_mode:
                 continue
             if defn.standard_only and coordinator.enhanced_mode:
+                continue
+            if wallbox_control_left_to_powerpulse2(
+                coordinator, defn.key, coordinators.values()
+            ):
                 continue
             if defn.accessory and not reading_reported(coordinator, defn.state_key):
                 pending.append(defn)
@@ -406,6 +411,18 @@ class EcoFlowSwitch(
                 return
             await self.coordinator.async_set_powerpulse_switch_bit(
                 mask, turn_on, self._definition.key
+            )
+            return
+
+        if (
+            self.coordinator.device_type == DEVICE_TYPE_POWEROCEAN
+            and self._definition.key.startswith("ev_")
+        ):
+            # PowerPulse 1 setting (#731). No optimistic state: the
+            # coordinator returns once the PowerOcean's 209/8 report carries
+            # the new value, and that report moves the switch.
+            await self.coordinator.async_set_wallbox_setting(
+                self._definition.key, turn_on
             )
             return
 
