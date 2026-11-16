@@ -1644,6 +1644,7 @@
         "name": "Betriebsmodus",
         "state": {
           "self_powered": "Eigenverbrauch",
+          "ai_mode": "KI-Modus",
           "intelligent_plus": "Intelligenter Modus+",
           "custom": "Benutzerdefiniert"
         }

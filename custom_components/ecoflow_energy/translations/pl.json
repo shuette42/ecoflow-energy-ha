@@ -1644,6 +1644,7 @@
         "name": "Tryb pracy",
         "state": {
           "self_powered": "Zasilanie własne",
+          "ai_mode": "Tryb AI",
           "intelligent_plus": "Tryb inteligentny+",
           "custom": "Niestandardowy"
         }

@@ -6,7 +6,7 @@ Full list of all entities created for Stream devices.
 
 **The Stream Micro (`BK01`, `BK02`) does not.** It is a grid-tie inverter with two solar strings and no battery, and it gets a reduced set. See [Stream Micro (BK01, BK02)](#stream-micro-bk01-bk02) at the end of this page.
 
-**Totals:** 65 sensors, 2 binary sensors, no numbers. Stream AC Pro (`BK31`) adds 2 switches and 4 numbers. Stream Ultra (`BK11`) adds 2 switches in Enhanced Mode. Stream Ultra X (`BK61`) adds 1 switch in Standard Mode. Eight of the 65 are *accessory* entities (PV 3 and PV 4, power, voltage, current and energy) and exist only on a unit that reports those strings.
+**Totals:** 67 sensors, 2 binary sensors, no numbers. Stream AC Pro (`BK31`) adds 2 switches and 4 numbers. Stream Ultra (`BK11`) adds 2 switches in Enhanced Mode. Stream Ultra X (`BK61`) adds 1 switch in Standard Mode. Ten of the 67 are *accessory* entities: PV 3 and PV 4 (power, voltage, current and energy), which exist only on a unit that reports those strings, and Work Mode and Scheduled Tasks, which exist only on a unit that reports them in Enhanced Mode.
 
 > Entities marked with *disabled* are available but hidden by default. Enable them in **Settings > Devices > EcoFlow Stream > Entities** (click the filter icon and show disabled entities).
 
@@ -85,6 +85,13 @@ Full list of all entities created for Stream devices.
 | Entity | Unit | Category | Default | Description |
 |:---|:---:|:---:|:---:|:---|
 | WiFi Signal | dBm | diagnostic | disabled | Signal strength of the device's WiFi module (negative, closer to zero is better) |
+
+## Sensors - Work Mode and Tasks
+
+| Entity | Unit | Category | Default | Description |
+|:---|:---:|:---:|:---:|:---|
+| Work Mode | - | diagnostic | *accessory*, enabled | `self_powered`, `custom` or `ai_mode`, as the unit reports it. Read-only. **Enhanced Mode only.** |
+| Scheduled Tasks | - | - | *accessory*, enabled | Number of tasks that are switched on. The `tasks` attribute lists every task with its number, kind (charge or discharge), on or off state, start and end time and power; a charge task also carries its source and SoC target. The repeat is not shown. Read-only. **Enhanced Mode only.** |
 
 ## Sensors - Battery Diagnostics
 
