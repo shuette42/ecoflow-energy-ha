@@ -9,11 +9,6 @@ sensor. A base DELTA 3 (`P231`) adds the USB output switch in Enhanced Mode.
 
 > Entities marked with *diagnostic* appear in the diagnostics section of the device page.
 
-The `P322` DELTA 3 was confirmed on one owner's unit in Enhanced Mode. Its
-diagnostics capture carries the existing status, CMS and BMS messages. It uses
-the shared parser and does not expose port priority controls. Standard Mode
-and control writes on this prefix have not been verified.
-
 > **Other Delta 3 models:** only the Delta 3 Max Plus has been checked against real hardware end to end. A base DELTA 3 (`P231`) was confirmed to push the same three frames and to decode through the same field map, but a smaller unit has fewer ports, so port entities it does not have stay empty. The DELTA 3 Plus (`P351`) was added from an owner's capture: it sends the same three frames and the readings check each other, with the pack voltage matching the cell voltages behind it and the charge left matching the reported percentage. The DELTA 3 Max (`D3N1`) is recognized on the strength of the product family it belongs to rather than a capture, so a confirmation from an owner is welcome. Neither gets the port priority controls, because the EcoFlow app offers that menu only on serials starting `D3M` or `D51`. Raw quota diagnostics are available to help extend the mapping. The RIVER 3 (`R655`) sends the same frames as well. It is read-only, with 33 sensors, an AC Output binary sensor in place of the AC Output switch, and no controls. The sensors include Solar Input 1 and Solar Energy, though only a RIVER 3 has been seen with a solar panel so far. The RIVER 3 Plus (`R631`) was added from an owner's diagnostics download, not by analogy. It sends the same frames, and the readings match what the owner saw: the AC input passed through to a refrigerator, a phone on USB-C and the battery at 64 %. It gets exactly the RIVER 3 set.
 
 ---
