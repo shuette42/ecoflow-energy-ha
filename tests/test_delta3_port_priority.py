@@ -260,7 +260,12 @@ class TestVariantGating:
 
     @pytest.mark.parametrize(
         "serial",
-        ["P231TEST00000001", "P321TEST00000001", "D3N1TEST00000001"],
+        [
+            "P231TEST00000001",
+            "P321TEST00000001",
+            "P322TEST00000001",
+            "D3N1TEST00000001",
+        ],
     )
     def test_other_delta3_variants_do_not(self, serial: str) -> None:
         """The DELTA 3 Max is here because the app gates the menu on a
