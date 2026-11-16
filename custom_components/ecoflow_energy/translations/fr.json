@@ -1644,6 +1644,7 @@
         "name": "Mode de fonctionnement",
         "state": {
           "self_powered": "Auto-alimenté",
+          "ai_mode": "Mode IA",
           "intelligent_plus": "Mode intelligent+",
           "custom": "Personnalisé"
         }

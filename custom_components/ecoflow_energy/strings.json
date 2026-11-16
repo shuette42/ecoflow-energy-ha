@@ -1644,6 +1644,7 @@
         "name": "Work Mode",
         "state": {
           "self_powered": "Self-powered",
+          "ai_mode": "AI Mode",
           "intelligent_plus": "Intelligent Mode+",
           "custom": "Custom"
         }

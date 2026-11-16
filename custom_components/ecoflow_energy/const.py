@@ -4999,6 +4999,30 @@ STREAM_SENSORS: list[EcoFlowSensorDef] = [
         disabled_by_default=True,
         options=["standby", "discharging", "charging"],
     ),
+    # Work mode as the unit reports it (field 393 of the status frame), read
+    # only. Created once the unit has reported it.
+    EcoFlowSensorDef(
+        "work_mode",
+        "Work Mode",
+        None,
+        "enum",
+        None,
+        "mdi:cog-outline",
+        "diagnostic",
+        enhanced_only=True,
+        accessory=True,
+        options=["self_powered", "custom", "ai_mode"],
+    ),
+    # Every schedule task of the unit as read back from it: the state counts
+    # the enabled ones, the `tasks` attribute lists each one. Read only.
+    EcoFlowSensorDef(
+        "scheduled_tasks",
+        "Scheduled Tasks",
+        icon="mdi:calendar-clock",
+        enhanced_only=True,
+        accessory=True,
+        suggested_display_precision=0,
+    ),
 ]
 
 
@@ -5971,6 +5995,9 @@ STREAMAC5000_SELECTS: list[EcoFlowSelectDef] = [
 # next release without breaking anything.
 STREAM_MICRO_EXCLUDED_KEYS: frozenset[str] = frozenset(
     {
+        # The work mode and the task list are not read from a Stream Micro.
+        "work_mode",
+        "scheduled_tasks",
         # Battery block: the periodic full telemetry upload carries none of the
         # battery fields the protocol defines in that same message.
         "soc_pct",

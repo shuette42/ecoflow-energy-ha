@@ -482,7 +482,9 @@ class TestBKSeriesSetIsUntouched:
         # series. 60 since Battery Cycles, the BK series' own BMS heartbeat.
         # 65 since the unit's own pack power moved to Unit Battery Power,
         # its two direction readings and two energy counters (#710).
-        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 65
+        # 67 since the work mode and the task list joined it (read only,
+        # accessory entities: they exist once a unit reports them).
+        assert len(_get_sensor_defs(DEVICE_TYPE_STREAM)) == 67
 
     def test_bk01_still_gets_the_micro_reduced_set(self) -> None:
         defs = _get_sensor_defs(DEVICE_TYPE_STREAM)

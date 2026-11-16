@@ -67,6 +67,10 @@ HIGHER_STRING_KEYS = {
 # statement about which strings are optional rather than a count.
 LOWER_STRING_KEYS = {"pv1_w", "pv2_w", "pv1_energy_kwh", "pv2_energy_kwh"}
 
+# Readings of the status frame that only some models report, so they are
+# accessory entities as well (work mode and task list).
+TASK_KEYS = {"work_mode", "scheduled_tasks"}
+
 # What a Stream on account sign-in has after a push: the lower strings and the
 # readings around them, and nothing for the two above.
 TWO_STRING_REPORT: dict[str, Any] = {
@@ -149,7 +153,7 @@ class TestDefinitions:
     def test_no_other_stream_sensor_is_gated(self) -> None:
         gated = {sensor.key for sensor in STREAM_SENSORS if sensor.accessory}
 
-        assert gated == HIGHER_STRING_KEYS
+        assert gated == HIGHER_STRING_KEYS | TASK_KEYS
 
     def test_the_higher_strings_wait_for_a_nonzero_reading(self) -> None:
         """A unit with no such input sends 0.0 for both fields (a Stream AC

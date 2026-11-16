@@ -56,6 +56,20 @@ Current field notes from dump analysis:
   live value never flaps to the slider target on a SET acknowledgement.
   `32/50 field 15` stayed at `100` throughout the dedicated LED capture
   and does not track brightness changes.
+- `254/21 field 393` (work mode) and `254/21 field 584` (task list) are read
+  only and arrive as `work_mode` and `scheduled_tasks`. Field 393 is a message
+  with exactly one sub-field set to 1, and the sub-field number is the mode:
+  1 self-powered, 2 custom, 4 AI mode. Field 584 holds one entry (sub-field 1)
+  per task. A task with a field 11 container is a charge task; its sub-field 1
+  is 1 for grid and solar and absent for solar only, and each sub-field 3 is a
+  device entry (serial, SoC target, power). A task without field 11 is a
+  discharge task, and its power is the plain varint in field 12. Field 3 is the
+  task number, field 4 equals 1 for a task that is switched on, and field 10 is
+  the packed window, `((end_slot << 16) | start_slot) * 30` with 30-minute
+  slots. The repeat (fields 8 and 9) is not decoded. A frame that carries
+  neither field publishes neither key, so a partial report never clears the
+  last list. A list in which any task does not decode is published as None,
+  never as a partial list.
 """
 
 from __future__ import annotations
@@ -69,6 +83,16 @@ from ..proto.decoder import decode_header_message
 _TYPE_INT = "int"
 _TYPE_FLOAT = "float"
 _FLOAT_ZERO_EPS = 1e-6
+
+# Work mode and task list of the 254/21 status frame (read only).
+_FIELD_WORK_MODE = 393
+_FIELD_TASK_LIST = 584
+WORK_MODE_KEY = "work_mode"
+TASK_LIST_KEY = "scheduled_tasks"
+# Sub-field number of field 393 -> mode. Anything else decodes to None.
+_WORK_MODES = {1: "self_powered", 2: "custom", 4: "ai_mode"}
+_SLOT_MINUTES = 30
+_LAST_SLOT = 48  # 24:00
 
 # The unit's own state of charge offered as a stand-in for `soc_pct` when a
 # message carries no system figure. Private: the coordinator promotes it on
@@ -351,6 +375,128 @@ def _decode_mapped_fields(
     return result
 
 
+def _varint_value(raw: bytes) -> int:
+    """Return the varint in ``raw`` (a field value as ``_iter_fields`` gives it)."""
+    value, _ = _read_varint(memoryview(raw), 0)
+    return value
+
+
+def _slot_to_time(slot: int) -> str:
+    return f"{slot // 2:02d}:{_SLOT_MINUTES * (slot % 2):02d}"
+
+
+def _decode_work_mode(raw: bytes) -> str | None:
+    """Return the mode named by field 393, or None when it is not one we know.
+
+    The container carries one sub-field set to 1. Zero or several set flags
+    are not a mode the device was seen to report, so they are unknown too, and
+    so is a container that does not decode: it must not cost the frame its
+    other readings.
+    """
+    try:
+        flagged = [
+            number
+            for number, wire_type, value in _iter_fields(raw)
+            if wire_type == 0 and _varint_value(value) == 1
+        ]
+    except (IndexError, ValueError):
+        return None
+    if len(flagged) != 1:
+        return None
+    return _WORK_MODES.get(flagged[0])
+
+
+def _decode_task(raw: bytes) -> dict[str, Any] | None:
+    """Decode one entry of field 584, or None when it does not decode."""
+    flags: dict[int, int] = {}
+    window: int | None = None
+    is_charge = False
+    grid = False
+    device: dict[int, int] | None = None
+
+    for number, wire_type, value in _iter_fields(raw):
+        if wire_type == 0:
+            flags[number] = _varint_value(value)
+        elif wire_type == 2 and number == 10:
+            window = _varint_value(value)
+        elif wire_type == 2 and number == 11:
+            is_charge = True
+            for inner, inner_wire, inner_value in _iter_fields(value):
+                if inner == 1 and inner_wire == 0:
+                    grid = _varint_value(inner_value) == 1
+                elif inner == 3 and inner_wire == 2 and device is None:
+                    device = {
+                        key: _varint_value(val)
+                        for key, key_wire, val in _iter_fields(inner_value)
+                        if key_wire == 0
+                    }
+
+    slot = flags.get(3)
+    if slot is None or window is None or window % _SLOT_MINUTES:
+        return None
+    slots = window // _SLOT_MINUTES
+    start_slot, end_slot = slots & 0xFFFF, slots >> 16
+    if start_slot > _LAST_SLOT or end_slot > _LAST_SLOT:
+        return None
+
+    entry: dict[str, Any] = {
+        "slot": slot,
+        "kind": "charge" if is_charge else "discharge",
+        "enabled": flags.get(4) == 1,
+        "start": _slot_to_time(start_slot),
+        "end": _slot_to_time(end_slot),
+    }
+    if is_charge:
+        target = device or {}
+        entry["source"] = "grid_and_solar" if grid else "solar_only"
+        entry["power_w"] = target.get(3) or None
+        entry["soc_target"] = target.get(2)
+    else:
+        entry["power_w"] = flags.get(12) or None
+    return entry
+
+
+def _decode_task_list(raw: bytes) -> list[dict[str, Any]] | None:
+    """Decode the entries of one field 584, None if any entry does not decode."""
+    tasks: list[dict[str, Any]] = []
+    try:
+        for number, wire_type, value in _iter_fields(raw):
+            if number != 1 or wire_type != 2:
+                continue
+            task = _decode_task(value)
+            if task is None:
+                return None
+            tasks.append(task)
+    except (IndexError, ValueError):
+        return None
+    return tasks
+
+
+def _decode_status_extras(pdata: bytes) -> dict[str, Any]:
+    """Return the work mode and the task list of a 254/21 payload, if present.
+
+    A key is only returned when its field is in the payload, so a partial
+    report leaves the last published value alone.
+    """
+    extras: dict[str, Any] = {}
+    tasks: list[dict[str, Any]] | None = []
+    saw_list = False
+
+    for field_num, wire_type, raw in _iter_fields(pdata):
+        if wire_type != 2:
+            continue
+        if field_num == _FIELD_WORK_MODE:
+            extras[WORK_MODE_KEY] = _decode_work_mode(raw)
+        elif field_num == _FIELD_TASK_LIST:
+            saw_list = True
+            part = _decode_task_list(raw)
+            tasks = None if part is None or tasks is None else tasks + part
+
+    if saw_list:
+        extras[TASK_LIST_KEY] = tasks
+    return extras
+
+
 def _finalize_stream_state(parsed: dict[str, Any]) -> dict[str, Any]:
     """Normalize mirrored fields and derive convenience sensor values."""
     result = dict(parsed)
@@ -522,6 +668,8 @@ def parse_stream_proto_message(payload: bytes) -> dict[str, Any] | None:
             for pdata in _pdata_candidates(header):
                 try:
                     decoded = _decode_mapped_fields(pdata, field_map)
+                    if cmd_key == (254, 21):
+                        decoded.update(_decode_status_extras(pdata))
                 except (IndexError, ValueError):
                     # Only a payload that is not valid protobuf falls through
                     # to the next candidate. A clean decode ends the attempt,

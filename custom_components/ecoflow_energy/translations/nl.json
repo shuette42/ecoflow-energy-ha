@@ -1644,6 +1644,7 @@
         "name": "Werkmodus",
         "state": {
           "self_powered": "Zelfvoorzienend",
+          "ai_mode": "AI-modus",
           "intelligent_plus": "Intelligente modus+",
           "custom": "Aangepast"
         }
