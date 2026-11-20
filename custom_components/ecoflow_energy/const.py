@@ -6272,7 +6272,13 @@ def supports_stream_controls(device_sn: str) -> bool:
 # record (app frame and device acknowledgement identical to the BK31 write,
 # read-back field 980 following within two seconds, #677) but none of the
 # SoC limits, LED brightness or Backup Reserve floor that set also claims.
-STREAM_OUTLET_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31", "BK11"})
+# The BK61 (Stream Ultra X) joined on its own recordings (#753, promise on
+# #677): the app's outlet 2 write with the device acknowledgement under the
+# same sequence and field 982 following, the outlet 1 write from an iOS app
+# with its acknowledgement, and an outlet 1 acknowledgement followed by field
+# 980. The BK61 keeps its Feed-in switch (Standard Mode) beside the two outlets
+# (Enhanced Mode).
+STREAM_OUTLET_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31", "BK11", "BK61"})
 
 
 def supports_stream_outlet_switches(device_sn: str) -> bool:

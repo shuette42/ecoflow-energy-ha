@@ -1,4 +1,5 @@
-"""Stream Ultra (BK11) AC outlet switches in Home Assistant, issue #677.
+"""Stream Ultra (BK11) and Ultra X (BK61) AC outlet switches in Home Assistant,
+issues #677 and #753.
 
 The BK11 gets the two AC outlet switches the BK31 has, and nothing else of the
 BK31 write set: no SoC limits, LED brightness or Backup Reserve. The switch
@@ -120,7 +121,20 @@ class TestSwitchSetup:
     async def test_bk31_enhanced_keeps_both(self, hass: HomeAssistant) -> None:
         assert await _created_switch_keys(hass, "BK31", True) >= OUTLET_KEYS
 
-    @pytest.mark.parametrize("prefix", ["BK41", "BK51", "BK61"])
+    async def test_bk61_enhanced_creates_both_outlet_switches_and_no_feed_in(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Enhanced Mode: the outlets (#753); Feed-in is Standard Mode only."""
+        keys = await _created_switch_keys(hass, "BK61", True)
+        assert keys == OUTLET_KEYS
+
+    async def test_bk61_standard_keeps_feed_in_and_gets_no_outlets(
+        self, hass: HomeAssistant
+    ) -> None:
+        keys = await _created_switch_keys(hass, "BK61", False)
+        assert keys == {"feed_in_control_switch"}
+
+    @pytest.mark.parametrize("prefix", ["BK41", "BK51"])
     async def test_other_streams_enhanced_do_not(
         self, hass: HomeAssistant, prefix: str
     ) -> None:
@@ -138,6 +152,14 @@ class TestBk31OnlyControlsStayOff:
     def test_bk11_switches_are_the_outlets_only(self) -> None:
         defs = _get_switch_defs(DEVICE_TYPE_STREAM, _sn("BK11"))
         assert {d.key for d in defs} == OUTLET_KEYS
+
+    def test_bk61_gets_no_stream_numbers(self) -> None:
+        assert _get_number_defs(DEVICE_TYPE_STREAM, _sn("BK61")) == []
+
+    def test_bk61_switch_lists_combine_outlets_and_feed_in(self) -> None:
+        """Both lists reach the platform; the mode filter picks per entry."""
+        defs = _get_switch_defs(DEVICE_TYPE_STREAM, _sn("BK61"))
+        assert {d.key for d in defs} == OUTLET_KEYS | {"feed_in_control_switch"}
 
 
 class TestReadBack:
@@ -170,3 +192,45 @@ class TestReadBack:
             seen.append(switch.is_on)
 
         assert seen == [True, False]
+
+
+BK61_FIXTURE = (
+    Path(__file__).parent.parent / "fixtures" / "stream" / "bk61_outlet_toggle_753.json"
+)
+
+
+class TestBk61ReadBack:
+    async def test_both_outlets_follow_the_recorded_pushes_through_ingest(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Real Ultra X pushes take the MQTT path to the switches (#753)."""
+        frames = {
+            f["label"]: bytes.fromhex(f["hex"])
+            for f in json.loads(BK61_FIXTURE.read_text())["frames"]
+        }
+        coordinator, _ = _coordinator(hass, "BK61", True)
+        switches = {}
+        for key in ("ac_outlet_1_switch", "ac_outlet_2_switch"):
+            defn = next(d for d in STREAM_SWITCHES if d.key == key)
+            switch = EcoFlowSwitch(coordinator, defn)
+            switch.async_write_ha_state = MagicMock()  # type: ignore[misc]
+            switches[key] = switch
+        topic = f"/app/device/property/{coordinator.device_sn}"
+
+        seen: list[tuple[bool | None, bool | None]] = []
+        for label in ("readback_outlet_1_on", "readback_outlet_2_on"):
+            with patch.object(hass.loop, "call_soon_threadsafe") as post:
+                coordinator._on_mqtt_message(topic, frames[label])
+            post.assert_called_once()
+            callback, *args = post.call_args.args
+            callback(*args)
+            seen.append(
+                (
+                    switches["ac_outlet_1_switch"].is_on,
+                    switches["ac_outlet_2_switch"].is_on,
+                )
+            )
+
+        # the full push (outlet 1 on, outlet 2 off), then the outlet 2 push
+        # alone (on), which leaves outlet 1 as it was.
+        assert seen == [(True, False), (True, True)]

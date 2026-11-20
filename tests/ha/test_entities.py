@@ -38,6 +38,7 @@ from custom_components.ecoflow_energy.const import (
     STREAM_SWITCHES,
     STREAMAC5000_BINARY_SENSORS,
     STREAMAC5000_SENSORS,
+    STREAMFEEDIN_SWITCHES,
     EcoFlowBinarySensorDef,
     EcoFlowNumberDef,
     EcoFlowSensorDef,
@@ -160,6 +161,10 @@ class TestSwitchDefsRouting:
             _get_switch_defs(DEVICE_TYPE_STREAM, "BK11TEST00000001") is STREAM_SWITCHES
         )
         assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK12TEST00000001") == []
+        # The Ultra X has the outlets too (#753), beside its Feed-in switch.
+        assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK61TEST00000001") == (
+            STREAM_SWITCHES + STREAMFEEDIN_SWITCHES
+        )
 
     def test_powerocean_switches_are_the_schedule_slots(self):
         """The only PowerOcean switches are the one per scheduled task on
