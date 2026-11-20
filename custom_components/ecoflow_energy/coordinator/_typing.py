@@ -100,6 +100,7 @@ class CoordinatorState(DataUpdateCoordinator[dict[str, Any]]):
     _last_smartplug_get_all_ts: float
     _unit_batt_unsigned: bool
     _last_unit_batt_get_all_ts: float
+    _last_shp2_battery_refresh_ts: float
     _last_mqtt_event_ts: float
     _last_flush_ts: float
     _last_applied_keys: frozenset[str]
