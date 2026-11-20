@@ -1316,6 +1316,8 @@ Three structural numbers decide the shape. 535 frames carry more than one header
 
 *Addendum 2026-09-09 (ADR-025), corrected 2026-09-10:* the six passes became seven. The anchored-string pass runs second in `_plain_passes`, right after the named secrets and before every free-running pass (ADR-025 amendment), so every string beside a serial is masked under the XOR mask by the same route; the last pass is still the length-delimited one, and nothing else in this decision moves.
 
+*Addendum 2026-11-20 (ADR-035):* the MAC-address pass joins the list in `_plain_passes`, after the named secrets and before the anchored pass, so a MAC inside an XOR-masked region is masked by the same route.
+
 ---
 
 ### Addendum 2026-09-11: a masked region survives a second pass unchanged
@@ -1945,3 +1947,30 @@ Home Assistant 2026.9 added a shared Modbus connection to its `modbus` integrati
 4. Confirm a mode by battery power. Rejected: the setpoint is a limit the device may undershoot, and a full battery or the Backup Reserve would read as a failed command.
 
 **Consequences:** The core library writes the two registers with function code 16 and refuses every other value. The poll decodes bits 7-10 of `0x0211` and reads `0x023A`. The Local entry gains the select platform. The entity page states that the Backup Reserve still applies, that a change passes through Automatic, and what was measured.
+
+## ADR-035: A MAC address in a recorded frame is masked by its shape, to all `X`, separators included; a longer colon-separated run goes whole; frames only, the text path is not widened
+
+**Status:** Accepted. Amends ADR-016 (the pass list) and ADR-023 (the MAC pass joins the list).
+**Date:** 2026-11-20
+
+**Context:** The diagnostics capture keeps raw frames in a memory buffer and masks them at capture time (`sanitize_frame`); the download skips them (`diagnostics._PRE_SANITIZED_KEYS`). A Stream get_reply carries the MAC address of its network interface as a 17-character colon-separated ASCII string, the whole value of field 1643 of the 254/22 header (not 254/21). Measured with the integration's own header decoder and field walker over 19 local diagnostics downloads (BK11, BK31, BK61): 423 hits in 423 frames, every regex hit was exactly that parsed field, 0 anywhere else. Tracked fixtures: 0 hits. No existing pass touched it: the colons and the lower-case or digit-only octets are outside the serial alphabet, it is not a UUID, and no serial sits beside it for the anchored pass. The text path (`diagnostics._redact_serials`) had 0 MAC hits.
+
+**Decision:**
+1. A shape pass, `_MAC_RUN`: two hex digits, one separator (`:` or `-`, the same one throughout), five more such pairs, and any number of further pairs. One separator throughout keeps a recording window such as `18:41:43-18:48:40` readable.
+2. The whole run is masked to `X`, separators included. With the separators kept, `XX:XX:...` under an XOR key such as 0x0a reads `RR0RR0...` on the wire, a 17-character `[A-Z0-9]` run that `_SERIAL_RUN` rewrites, and `_wire_masked_region` then sees a span that is neither all mask bytes nor a masked serial, so a second pass would corrupt a field the first one had masked (the PowerPulse 2 class of failure in ADR-023). All `X` is what `_mask_serial_run` and `_MASKED_SERIAL_SPAN` already treat as masked. A test re-keys a real frame under every key from 1 to 255 and checks that a second pass changes nothing.
+3. A longer run, such as an eight-octet EUI-64, is masked whole. A pattern that stopped at six octets would leave the rest standing, the partial mask the `_JOINED_HEX_RUN` comment already warns against.
+4. The pass runs directly before the anchored pass in `_plain_passes`, after the named secrets, so it also runs inside an XOR-declared region (ADR-023 decision 6). It has to sit ahead of the anchored pass: the 17 `X` it writes fullmatch `_SERIAL_RUN` and so anchor their message. Run after the anchored pass, the first `sanitize_frame` left a neighbouring string of 8 or more characters in clear and a second one masked it, so the result was not idempotent. Hex digits and separators never carry a length or a tag byte, so masking them first does not blind the field walk. A synthetic message (a varint, a 14-character name, a MAC field) pins the order: one pass masks the name, a second pass changes nothing.
+5. Frames only. `diagnostics._redact_serials` is not widened: it had no MAC hit, and a shape pass on free text would match times and dates written with that shape (ADR-016 decision 6).
+
+**Measured:** the local corpus sweep of ADR-016 over the tracked fixtures, the local captures and the local diagnostics downloads. Before the change it had no MAC count and every other number below was the baseline. After: MAC-shaped hits in the raw frames 0 / 24 / 644 in the three corpora and 0 / 0 / 0 on the masked output; length mismatches 0, non-string header fields changed 0, readings changed 0 for every parser; gate failures raw/masked and under the mask unchanged. The only other number that moved is the anchored-message count of the tracked fixtures (1915 to 1918), because the three fixture frames that carry the field now hold 17 `X` where they held `XX:XX:XX:XX:XX:XX`, which the anchored pass counts as a serial-shaped neighbour. No false positive over the local corpora.
+
+**Trade-offs:**
+- (+) The address never reaches a public attachment, at any device type, under any XOR key
+- (+) Length preserved, so the field layout and every reading survive
+- (-) Six two-digit groups under one separator in some other field would be masked too. None exists on file; a date and time written as six hyphen-joined two-digit groups would match, and no frame on file carries one
+- (-) Frames recorded before the update are not re-masked: they live in memory only and are gone with the restart that installs it
+
+**Alternatives considered:**
+1. Keep the separators and mask only the octets. Rejected: not idempotent under XOR keys such as 0x0a (decision 2).
+2. Mask only the field 1643 of 254/22 by position. Rejected: another command or another device family can carry the same string, and a position rule needs the parser's field map on the capture path.
+3. Widen `_redact_serials` to the same shape. Rejected: 0 hits on the text path and a false-positive risk on times and dates.

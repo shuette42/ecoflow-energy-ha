@@ -162,6 +162,38 @@ _UUID_RUN = re.compile(
 # choice, which is why the two are not independent.
 _JOINED_HEX_RUN = re.compile(rb"[0-9a-f]{12,}(?=-[A-Z0-9]{15,})")
 
+# A Stream reports the MAC address of its network interface as a 17-character
+# ASCII string of six colon-separated hex octets, the whole value of one field
+# of a get_reply header. No pass above sees it: the colons and the lower-case
+# or digit-only octets are outside `_SERIAL_RUN`'s alphabet, it is not a UUID,
+# and it has no serial beside it for `_mask_anchored_strings` to anchor on.
+#
+# The shape is the boundary, as it is for `_UUID_RUN`: six two-digit hex octets
+# under one separator, `:` or `-`, never a mix (a recording window such as
+# `18:41:43-18:48:40` has to stay readable). The trailing group takes a longer
+# run, such as an eight-octet EUI-64, whole. A pattern that stopped at six
+# octets would mask the first 17 characters and leave the rest standing, which
+# is the partial mask the `_JOINED_HEX_RUN` comment warns against.
+#
+# The whole run goes to `X`, separators included, and not only the octets. Kept
+# separators leave `XX:XX:XX:XX:XX:XX`, and under an XOR key such as 0x0a that
+# reads `RR0RR0RR0...` on the wire: a 17-character `[A-Z0-9]` run that
+# `_SERIAL_RUN` rewrites when the region is sanitized a second time, so the
+# second pass would corrupt a field the first one had masked (the failure class
+# `_wire_masked_region` describes for the PowerPulse 2). An all-`X` run is what
+# `_mask_serial_run` and `_MASKED_SERIAL_SPAN` already treat as masked.
+#
+# Found in a Stream get_reply, field 1643 of header 254/22 (not 254/21), in
+# diagnostics downloads: 423 frames out of 423 hits, 19 downloads, BK11, BK31
+# and BK61, and every regex hit was exactly that field. No hit in any tracked
+# fixture, and no false positive over the local capture corpora. Frames only:
+# the text path (`diagnostics._redact_serials`) had no MAC hit and is not
+# widened (ADR-035).
+_MAC_RUN = re.compile(
+    rb"[0-9A-Fa-f]{2}([:-])(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}"
+    rb"(?:\1[0-9A-Fa-f]{2})*"
+)
+
 # A device also reports the owner's time zone, as an IANA name like
 # `Europe/Budapest`. It is not an identifier and the pass above cannot see
 # it: lower case and a slash are outside that alphabet, by design, because
@@ -613,25 +645,30 @@ def _mask_serial_run(match: re.Match[bytes]) -> bytes:
 def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
     """Every mask this module applies, over bytes that are already plain.
 
-    Named identifiers are masked first, then any string that shares a
-    protobuf message with a serial, then anything else shaped like a
-    serial, then anything written as a UUID, then a lower-case hex run a
-    hyphen joins to a serial-shaped run, then the city half of any time zone
-    the device reports, then anything a device presents as a whole
-    length-delimited field of identifier-shaped characters, and last every
-    span `_coordinate_spans` found. The second pass
-    catches what no shape can: a neighbour's name and short id, by their
-    position beside its serial - and it runs before the free-running passes
-    because those can mask the tag byte after a serial and blind a walk
-    that reads fields. The third matters because a frame also carries the
-    serial of every battery pack and of any attached accessory, and the
-    caller cannot name what it has not discovered yet. The fourth and fifth
-    catch identifiers too short, or too oddly shaped, for the third to risk
-    matching: a UUID by its own hyphenated shape, and a hex run by the
-    serial it is joined to - which is how a 12-character one reached a
-    public issue attachment before anyone noticed. Masking preserves
-    length, so byte offsets survive every pass and a field-layout analysis
-    still works.
+    Named identifiers are masked first, then anything written as a MAC
+    address, then any string that shares a protobuf message with a serial,
+    then anything else shaped like a serial, then anything written as a UUID,
+    then a lower-case hex run a hyphen joins to a serial-shaped run, then the
+    city half of any time zone the device reports, then anything a device
+    presents as a whole length-delimited field of identifier-shaped
+    characters, and last every span `_coordinate_spans` found. The MAC pass
+    sits ahead of the anchored one because the `X` run it writes is itself
+    serial-shaped and anchors its message: run after the anchored pass, it
+    left a neighbouring string for a second `sanitize_frame` to mask. Hex
+    digits and separators never carry a length or a tag byte, so masking them
+    early does not blind the field walk. The anchored pass catches what no
+    shape can: a neighbour's name and short id, by their position beside its
+    serial - and it runs before the free-running passes that follow because
+    those can mask the tag byte after a serial and blind a walk that reads
+    fields. The serial pass matters because a frame also carries the serial
+    of every battery pack and of any attached accessory, and the caller
+    cannot name what it has not discovered yet. The UUID, the joined hex run
+    and the MAC address catch identifiers too short, or too oddly shaped, for
+    the serial pass to risk matching: a UUID by its own hyphenated shape, a
+    MAC address by its separated octets, and a hex run by the serial it is
+    joined to - which is how a 12-character one reached a public issue
+    attachment before anyone noticed. Masking preserves length, so byte
+    offsets survive every pass and a field-layout analysis still works.
 
     The coordinate spans are found on the incoming bytes, before any pass
     runs, and every pass sees them as lower-case filler until the last one
@@ -656,6 +693,10 @@ def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
             raw = variant.encode("ascii", "ignore")
             if raw and raw in sanitized:
                 sanitized = sanitized.replace(raw, _MASK_BYTE * len(raw))
+    # Before the anchored pass: the 17 `X` it writes fullmatch `_SERIAL_RUN`, so
+    # they anchor their message, and a pass that ran after would leave a
+    # neighbour for the second `sanitize_frame` to mask.
+    sanitized = _MAC_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
     sanitized = _mask_anchored_strings(sanitized)
     sanitized = _SERIAL_RUN.sub(_mask_serial_run, sanitized)
     sanitized = _UUID_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
@@ -672,8 +713,9 @@ def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
 # a single-header frame with no `pdata`, the whole field-2 payload) with the
 # low byte of that header's own `seq`. None of the passes above can see a
 # string once this mask sits on top of it - it is neither the shape of a
-# serial, a UUID, a hex run, a time zone, nor a delimited identifier, because
-# XOR with a non-zero key does not preserve the alphabet a byte started in.
+# serial, a UUID, a MAC address, a hex run, a time zone, nor a delimited
+# identifier, because XOR with a non-zero key does not preserve the alphabet a
+# byte started in.
 _ENC_TYPE_XOR = 1
 _HDR_FIELD_PDATA = 1
 _HDR_FIELD_ENC_TYPE = 6
