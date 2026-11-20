@@ -1,9 +1,11 @@
 """Tests for the shared raw-frame capture helpers."""
 
+import json
 import re
 import signal
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -20,6 +22,7 @@ from ecoflow_energy.ecoflow.frame_capture import (
     _ANCHOR_DEPTH,
     _COORDINATE_PAIR,
     _KEYS_SEEN_MAX,
+    _MAC_RUN,
     _SERIAL_RUN,
     WRITE_CLASS_RESERVE,
     TypedFrameBuffer,
@@ -38,6 +41,11 @@ from ecoflow_energy.ecoflow.frame_capture import (
     is_proto_frame,
     sanitize_frame,
 )
+from ecoflow_energy.ecoflow.parsers.stream_proto import (
+    _iter_fields,
+    parse_stream_proto_message,
+)
+from ecoflow_energy.ecoflow.proto.decoder import decode_header_message
 from ecoflow_energy.ecoflow.proto_encoding import (
     encode_field_bytes,
     encode_field_varint,
@@ -3198,3 +3206,162 @@ class TestDiagnosticWindowBudget:
         assert {f"property:proto/224.{i}" for i in range(20, 28)} <= dropped
         assert "set:proto/209.101" in dropped
         assert "set_reply:proto/209.101" in dropped
+
+
+_PV34_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "stream" / "bk_pv34_voltage_current.json"
+)
+# The three get_reply frames of that fixture carry field 1643 of header 254/22.
+_MAC_FIELD = 1643
+_MAC_FRAMES = (0, 2, 3)
+
+
+def _pv34_frames() -> list[bytes]:
+    frames = json.loads(_PV34_FIXTURE.read_text())["frames"]
+    return [bytes.fromhex(f["hex"]) for f in frames]
+
+
+def _mac_value_span(frame: bytes) -> tuple[int, int]:
+    """Where field 1643 of header 254/22 sits in `frame`, found by the parser."""
+    headers, _ = decode_header_message(frame)
+    for header in headers:
+        if (header["cmd_func"], header["cmd_id"]) != (254, 22):
+            continue
+        for number, wire_type, raw in _iter_fields(bytes.fromhex(header["pdata"])):
+            if number == _MAC_FIELD and wire_type == 2:
+                assert frame.count(raw) == 1
+                start = frame.index(raw)
+                return start, start + len(raw)
+    raise AssertionError("no field 1643 in header 254/22")
+
+
+def _synthetic_macs() -> dict[str, bytes]:
+    """Addresses built from parts at run time, so no literal sits in the tree."""
+    return {
+        "colon_lower": ":".join(["02"] + ["00"] * 4 + ["01"]).encode(),
+        "dash_upper": "-".join(f"{n:02X}" for n in (10, 27, 44, 61, 78, 95)).encode(),
+    }
+
+
+def _with_mac(frame: bytes, mac: bytes) -> bytes:
+    start, end = _mac_value_span(frame)
+    assert len(mac) == end - start
+    return frame[:start] + mac + frame[end:]
+
+
+class TestMacAddressMasking:
+    """A Stream get_reply carries its MAC address as an ASCII string (ADR-035)."""
+
+    @pytest.mark.parametrize("index", _MAC_FRAMES)
+    @pytest.mark.parametrize("variant", sorted(_synthetic_macs()))
+    def test_a_real_frame_with_a_mac_comes_out_as_the_committed_fixture(
+        self, index: int, variant: str
+    ) -> None:
+        committed = _pv34_frames()[index]
+        mac = _synthetic_macs()[variant]
+        spliced = _with_mac(committed, mac)
+        assert spliced != committed
+
+        out = sanitize_frame(spliced, [])
+
+        assert out == committed
+        assert len(out) == len(spliced)
+        assert mac not in out
+        readings = parse_stream_proto_message(committed)
+        assert readings is not None
+        assert parse_stream_proto_message(out) == readings
+        assert parse_stream_proto_message(spliced) == readings
+
+    @pytest.mark.parametrize("index", range(6))
+    def test_a_committed_fixture_frame_passes_through_unchanged(
+        self, index: int
+    ) -> None:
+        frame = _pv34_frames()[index]
+        assert sanitize_frame(frame, []) == frame
+
+    @pytest.mark.parametrize("index", (0, 3))
+    @pytest.mark.parametrize("variant", sorted(_synthetic_macs()))
+    def test_a_mac_under_the_xor_mask_is_masked_and_stays_masked(
+        self, index: int, variant: str
+    ) -> None:
+        """Every key 1..255: no MAC shape under the key, and a second pass is a no-op.
+
+        With the separators kept (`XX:XX:...`) the unmasked bytes under key 0x0a
+        read `RR0RR0...`, a serial-shaped run the second pass rewrites. All `X`
+        is what keeps the pass idempotent.
+        """
+        committed = _pv34_frames()[index]
+        headers, _ = decode_header_message(committed)
+        pdata_plain = next(
+            bytes.fromhex(h["pdata"])
+            for h in headers
+            if (h["cmd_func"], h["cmd_id"]) == (254, 22)
+        )
+        start, end = _mac_value_span(committed)
+        mac = _synthetic_macs()[variant]
+        value_at = pdata_plain.index(committed[start:end])
+        spliced_plain = (
+            pdata_plain[:value_at] + mac + pdata_plain[value_at + len(mac) :]
+        )
+
+        for key in range(1, 256):
+            clean = _enc_header(254, 22, pdata_plain=pdata_plain, seq=key)
+            frame = _enc_header(254, 22, pdata_plain=spliced_plain, seq=key)
+            once = sanitize_frame(frame, [])
+            twice = sanitize_frame(once, [])
+            assert len(once) == len(frame)
+            assert twice == once, f"key {key:#x}: second pass changed the frame"
+            assert once == sanitize_frame(clean, []), f"key {key:#x}"
+            unmasked = _unmask_pdata(_decode_first_header(once))
+            assert mac not in unmasked
+            assert _MAC_RUN.search(unmasked) is None
+
+    def test_a_mac_beside_a_neighbour_string_is_idempotent_and_masks_the_neighbour(
+        self,
+    ) -> None:
+        """The MAC pass runs before the anchored pass, so one pass is the final one.
+
+        The 17 `X` the MAC pass writes fullmatch `_SERIAL_RUN`, so they anchor
+        their message. Run after the anchored pass, the first pass left the
+        14-character neighbour in clear and the second one masked it.
+        """
+        mac = _synthetic_macs()["colon_lower"]
+        name = b"neighbourname1"
+        assert len(mac) == 17 and len(name) == 14
+        message = (
+            b"\x08\x01"
+            + b"\x12"
+            + bytes([len(name)])
+            + name
+            + b"\x1a"
+            + bytes([len(mac)])
+            + mac
+        )
+
+        once = _plain_passes(message, [])
+        twice = _plain_passes(once, [])
+
+        assert len(once) == len(message)
+        assert once == (
+            b"\x08\x01\x12"
+            + bytes([len(name)])
+            + b"X" * len(name)
+            + b"\x1a"
+            + bytes([len(mac)])
+            + b"X" * len(mac)
+        )
+        assert twice == once
+
+    def test_a_longer_run_is_masked_whole(self) -> None:
+        eui64 = ":".join(["02"] + ["00"] * 6 + ["01"]).encode()
+        assert len(eui64) == 23
+        out = _plain_passes(b"\x00\x01" + eui64 + b"\x02", [])
+        assert out == b"\x00\x01" + b"X" * 23 + b"\x02"
+
+    @pytest.mark.parametrize(
+        "text",
+        [b"12:30:54", b"2026-11-20", b"18:41:43-18:48:40", b"10:20:30:40:50"],
+    )
+    def test_a_time_a_date_and_a_mixed_window_stay_readable(self, text: bytes) -> None:
+        framed = b"\x00" + text + b"\x00"
+        assert _plain_passes(framed, []) == framed
