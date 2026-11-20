@@ -154,7 +154,6 @@ def test_cleanup_removes_the_old_reserve_number_outside_the_gate(
         "bk11_outlet_2": _register(
             hass, entry, "switch", "BK11TESTDUMMY01_ac_outlet_2_switch"
         ),
-        # Same for the Ultra X outlets (#753).
         "bk61_outlet_1": _register(
             hass, entry, "switch", "BK61TESTDUMMY01_ac_outlet_1_switch"
         ),

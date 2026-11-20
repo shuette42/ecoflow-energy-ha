@@ -200,30 +200,65 @@ BK61_FIXTURE = (
 
 
 class TestBk61ReadBack:
-    async def test_both_outlets_follow_the_recorded_pushes_through_ingest(
-        self, hass: HomeAssistant
-    ) -> None:
-        """Real Ultra X pushes take the MQTT path to the switches (#753)."""
-        frames = {
+    @staticmethod
+    def _frames() -> dict[str, bytes]:
+        return {
             f["label"]: bytes.fromhex(f["hex"])
             for f in json.loads(BK61_FIXTURE.read_text())["frames"]
         }
-        coordinator, _ = _coordinator(hass, "BK61", True)
+
+    @staticmethod
+    def _switches(coordinator: Any) -> dict[str, EcoFlowSwitch]:
         switches = {}
         for key in ("ac_outlet_1_switch", "ac_outlet_2_switch"):
             defn = next(d for d in STREAM_SWITCHES if d.key == key)
             switch = EcoFlowSwitch(coordinator, defn)
             switch.async_write_ha_state = MagicMock()  # type: ignore[misc]
             switches[key] = switch
+        return switches
+
+    @staticmethod
+    def _ingest(hass: HomeAssistant, coordinator: Any, frame: bytes) -> None:
         topic = f"/app/device/property/{coordinator.device_sn}"
+        with patch.object(hass.loop, "call_soon_threadsafe") as post:
+            coordinator._on_mqtt_message(topic, frame)
+        post.assert_called_once()
+        callback, *args = post.call_args.args
+        callback(*args)
+
+    async def test_outlet_1_follows_the_app_write_on_one_unit_in_both_directions(
+        self, hass: HomeAssistant
+    ) -> None:
+        """KEV-github's unit on 2026-11-20: the push after the app's outlet 1
+        on write, then the full push after the off write (#753)."""
+        frames = self._frames()
+        coordinator, _ = _coordinator(hass, "BK61", True)
+        outlet_1 = self._switches(coordinator)["ac_outlet_1_switch"]
+
+        seen = []
+        for label in (
+            "kev_1120_readback_outlet_1_on",
+            "kev_1120_readback_outlet_1_off",
+        ):
+            self._ingest(hass, coordinator, frames[label])
+            seen.append(outlet_1.is_on)
+
+        assert seen == [True, False]
+
+    async def test_outlet_2_push_leaves_outlet_1_as_it_was(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Two recordings of two units, not one recorded sequence: StudioCuda's
+        full push (outlet 1 on, outlet 2 off), then the other unit's outlet 2
+        push (on) that carries no outlet 1 field. The step shows only that a
+        push without the field keeps the other outlet's state."""
+        frames = self._frames()
+        coordinator, _ = _coordinator(hass, "BK61", True)
+        switches = self._switches(coordinator)
 
         seen: list[tuple[bool | None, bool | None]] = []
         for label in ("readback_outlet_1_on", "readback_outlet_2_on"):
-            with patch.object(hass.loop, "call_soon_threadsafe") as post:
-                coordinator._on_mqtt_message(topic, frames[label])
-            post.assert_called_once()
-            callback, *args = post.call_args.args
-            callback(*args)
+            self._ingest(hass, coordinator, frames[label])
             seen.append(
                 (
                     switches["ac_outlet_1_switch"].is_on,
@@ -231,6 +266,4 @@ class TestBk61ReadBack:
                 )
             )
 
-        # the full push (outlet 1 on, outlet 2 off), then the outlet 2 push
-        # alone (on), which leaves outlet 1 as it was.
         assert seen == [(True, False), (True, True)]

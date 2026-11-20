@@ -149,8 +149,10 @@ def _bk61(label: str) -> bytes:
 
 
 class TestBk61AgainstTheRecordings:
-    """Real frames of two Ultra X units: outlet 2 from the Android app, outlet 1
-    from an iOS app and as an acknowledgement, with the read-back pushes."""
+    """Real frames of three Ultra X units: StudioCuda's two (outlet 2 from the
+    Android app, an outlet 1 acknowledgement with its push) and KEV-github's one
+    (outlet 1 from an iOS app on 2026-11-06, and on 2026-11-20 with the unit's
+    read-back after each write)."""
 
     @pytest.mark.parametrize(
         ("label", "turn_on", "seq"),
@@ -211,6 +213,22 @@ class TestBk61AgainstTheRecordings:
         assert result is not None
         assert result[key] == expected
 
+    @pytest.mark.parametrize(
+        ("label", "expected"),
+        [
+            ("kev_1120_readback_outlet_1_on", 1),
+            ("kev_1120_readback_outlet_1_off", 0),
+        ],
+    )
+    def test_outlet_1_readback_follows_the_app_write_in_both_directions(
+        self, label: str, expected: int
+    ) -> None:
+        """One unit (KEV-github's 4869, 2026-11-20): the push after the app's
+        field 380 write reads 980 as 1 after the on write and 0 after the off."""
+        result = parse_stream_proto_message(_bk61(label))
+        assert result is not None
+        assert result["ac_outlet_1_enabled"] == expected
+
     def test_outlet_1_push_reports_outlet_2_off(self) -> None:
         """The full push after the outlet 1 write still reads 982 as 0."""
         result = parse_stream_proto_message(_bk61("readback_outlet_1_on"))
@@ -228,6 +246,8 @@ class TestBk61AgainstTheRecordings:
             ("device_ack_outlet_1_on", OUTLET_1_ON),
             ("device_ack_outlet_1_on_ios", OUTLET_1_ON),
             ("device_ack_outlet_1_off_ios", OUTLET_1_OFF),
+            ("kev_1120_device_ack_outlet_1_on", OUTLET_1_ON),
+            ("kev_1120_device_ack_outlet_1_off", OUTLET_1_OFF),
             ("device_ack_outlet_2_on", OUTLET_2_ON),
             ("device_ack_outlet_2_off", OUTLET_2_OFF),
         ):
