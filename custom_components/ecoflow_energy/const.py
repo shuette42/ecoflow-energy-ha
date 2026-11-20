@@ -553,6 +553,11 @@ SMARTPLUG_GET_ALL_KEEPALIVE_S = (
 # `get_reply` carries the signed `f50.1.4`, and without a request of our own
 # the next one came when somebody opened the EcoFlow app - hours later.
 STREAM_AC5000_UNSIGNED_GET_ALL_S = 60.0
+# Smart Home Panel 2 battery block (#754). SOC, remaining energy and the
+# storage-channel SOC arrive only in a full get_reply, and property pushes are
+# deltas. Power pushes keep the stale re-send from firing, so the battery
+# values froze until the app was opened. Ask for a full state this often.
+SHP2_BATTERY_REFRESH_S = 300.0
 CREDENTIAL_REFRESH_CHECK_S = (
     43200.0  # Check every 12h whether credentials need proactive refresh
 )

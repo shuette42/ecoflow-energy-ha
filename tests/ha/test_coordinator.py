@@ -26,6 +26,7 @@ from custom_components.ecoflow_energy.const import (
     DEVICE_TYPE_DELTA,
     DEVICE_TYPE_DELTA3,
     DEVICE_TYPE_POWEROCEAN,
+    DEVICE_TYPE_SMART_HOME_PANEL_2,
     DEVICE_TYPE_UNKNOWN,
     DOMAIN,
     HARD_UNAVAILABLE_S,
@@ -37,6 +38,7 @@ from custom_components.ecoflow_energy.const import (
     RAW_FRAME_LOG_PER_KEY_MAX,
     RAW_FRAME_MAX_BYTES,
     RAW_FRAME_PER_KEY_MAX,
+    SHP2_BATTERY_REFRESH_S,
     SMARTPLUG_GET_ALL_KEEPALIVE_S,
     SMARTPLUG_SOFT_UNAVAILABLE_S,
     SMARTPLUG_STALE_THRESHOLD_S,
@@ -5152,6 +5154,100 @@ class TestQuotasPoll:
         assert coordinator._quotas_unsub is not None
         coordinator._quotas_unsub.cancel()
         coordinator._quotas_unsub = None
+
+
+class TestShp2BatteryRefresh:
+    """Smart Home Panel 2 asks for a full state on the quotas poll (#754)."""
+
+    @staticmethod
+    def _poll(
+        hass: HomeAssistant,
+        device: dict[str, Any],
+        last_ts: float,
+        now: float,
+    ) -> tuple[EcoFlowDeviceCoordinator, MagicMock, MagicMock]:
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="EcoFlow Energy",
+            data={
+                CONF_AUTH_METHOD: AUTH_METHOD_APP,
+                CONF_MODE: MODE_ENHANCED,
+                CONF_EMAIL: "test@example.com",
+                CONF_PASSWORD: "test_password",
+                CONF_USER_ID: "user123",
+                CONF_DEVICES: [device],
+            },
+            unique_id="test@example.com",
+        )
+        entry.add_to_hass(hass)
+        coordinator = EcoFlowDeviceCoordinator(hass, entry, device)
+        mqtt = MagicMock()
+        mqtt.is_connected.return_value = True
+        coordinator._mqtt_client = mqtt
+        coordinator._last_shp2_battery_refresh_ts = last_ts
+        with (
+            patch(
+                "custom_components.ecoflow_energy.coordinator.time.monotonic",
+                return_value=now,
+            ),
+            patch.object(hass, "async_add_executor_job") as mock_exec,
+        ):
+            coordinator._send_quotas_poll()
+        assert coordinator._quotas_unsub is not None
+        coordinator._quotas_unsub.cancel()
+        coordinator._quotas_unsub = None
+        return coordinator, mqtt, mock_exec
+
+    @staticmethod
+    def _shp2_device() -> dict[str, Any]:
+        return {
+            "sn": "SHP2TEST00000001",
+            "name": "Smart Home Panel 2",
+            "product_name": "Smart Home Panel 2",
+            "device_type": DEVICE_TYPE_SMART_HOME_PANEL_2,
+            "online": 1,
+        }
+
+    async def test_poll_after_interval_requests_the_full_state(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The battery block only comes in a get_reply, so the poll asks."""
+        coordinator, mqtt, mock_exec = self._poll(
+            hass, self._shp2_device(), 1000.0, 1000.0 + SHP2_BATTERY_REFRESH_S
+        )
+        mock_exec.assert_has_calls(
+            [call(mqtt.send_latest_quotas), call(mqtt.resend_initial_requests)],
+            any_order=False,
+        )
+        assert (
+            coordinator._last_shp2_battery_refresh_ts == 1000.0 + SHP2_BATTERY_REFRESH_S
+        )
+
+    async def test_poll_within_interval_does_not_request_again(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt, mock_exec = self._poll(
+            hass, self._shp2_device(), 1000.0, 1000.0 + SHP2_BATTERY_REFRESH_S - 1.0
+        )
+        mock_exec.assert_called_once_with(mqtt.send_latest_quotas)
+        assert coordinator._last_shp2_battery_refresh_ts == 1000.0
+
+    async def test_first_poll_arms_the_clock_without_doubling_the_connect_request(
+        self, hass: HomeAssistant
+    ) -> None:
+        """The post-connect request already fetched the full state."""
+        coordinator, mqtt, mock_exec = self._poll(hass, self._shp2_device(), 0.0, 500.0)
+        mock_exec.assert_called_once_with(mqtt.send_latest_quotas)
+        assert coordinator._last_shp2_battery_refresh_ts == 500.0
+
+    async def test_other_device_types_never_request_the_full_state(
+        self, hass: HomeAssistant
+    ) -> None:
+        coordinator, mqtt, mock_exec = self._poll(
+            hass, MOCK_DELTA_DEVICE, 1000.0, 1000.0 + 10 * SHP2_BATTERY_REFRESH_S
+        )
+        mock_exec.assert_called_once_with(mqtt.send_latest_quotas)
+        assert coordinator._last_shp2_battery_refresh_ts == 1000.0
 
 
 # ===========================================================================

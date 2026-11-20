@@ -7,11 +7,13 @@ import time
 from typing import TYPE_CHECKING
 
 from ..const import (
+    DEVICE_TYPE_SMART_HOME_PANEL_2,
     DEVICE_TYPE_SMARTPLUG,
     DEVICE_TYPE_STREAM_AC5000,
     ENERGY_STREAM_KEEPALIVE_S,
     PING_KEEPALIVE_S,
     QUOTAS_KEEPALIVE_S,
+    SHP2_BATTERY_REFRESH_S,
     SMARTPLUG_GET_ALL_KEEPALIVE_S,
     STREAM_AC5000_UNSIGNED_GET_ALL_S,
 )
@@ -106,6 +108,25 @@ class KeepaliveMixin(_Base):
                     self._last_unit_batt_get_all_ts = now
                     self.hass.async_add_executor_job(
                         self._mqtt_client.send_get_all,
+                    )
+            # Smart Home Panel 2 (#754): the battery block (SOC, remaining
+            # energy, storage-channel SOC) only comes in a full get_reply and
+            # power pushes keep the stale re-send from firing. The connect
+            # request already fetched it, so the first poll only starts the
+            # clock; after that ask at most once per SHP2_BATTERY_REFRESH_S.
+            elif self.device_type == DEVICE_TYPE_SMART_HOME_PANEL_2:
+                now = time.monotonic()
+                if self._last_shp2_battery_refresh_ts <= 0.0:
+                    self._last_shp2_battery_refresh_ts = now
+                elif (
+                    now - self._last_shp2_battery_refresh_ts
+                ) >= SHP2_BATTERY_REFRESH_S:
+                    self._last_shp2_battery_refresh_ts = now
+                    _LOGGER.debug(
+                        "Requesting a full state for the panel battery values"
+                    )
+                    self.hass.async_add_executor_job(
+                        self._mqtt_client.resend_initial_requests,
                     )
         if not self._shutdown:
             self._quotas_unsub = self.hass.loop.call_later(

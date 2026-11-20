@@ -292,6 +292,7 @@ class EcoFlowDeviceCoordinator(
         # with a throttled get-all.
         self._unit_batt_unsigned: bool = False
         self._last_unit_batt_get_all_ts: float = 0.0
+        self._last_shp2_battery_refresh_ts: float = 0.0
         # Surplus auto-sync state (PowerOcean Enhanced Mode):
         # the EcoFlow app sets the slider via cmd_id=112 wire field 4 only,
         # which leaves the EMS-side `sys_bat_backup_ratio` unchanged. The

@@ -22,6 +22,10 @@ All notable changes to this project will be documented in this file.
 - The diagnostics download of a Stream in Standard Mode now also shows the values of a fixed list of battery, cell, grid and feed-in keys that the device pushes, as the last, lowest and highest value seen, the number of pushes and whether the same push carried the state of health, kept apart per `num` value of the push. The block also says whether its list of key names reached its limit of 128, so a key missing from the list can be told apart from one that was cut off. Only the listed keys are shown, and a string longer than 32 characters is left out. Nothing is mapped to a sensor yet, because the unit, the scale and the meaning of `num` for these keys are not known until one download shows them. Thanks to @dariogobbi for the list of key names. (Ref #702)
 - While the 24-hour diagnostic recording is on, it keeps up to 32 message types and 16 write message types per device instead of 20 and 8, so a long settings session in the vendor app is no longer cut short. Thanks to @rhaschke for the timed recording of the PowerPulse in the app that showed where it ran out. (Ref #731)
 
+### Fixed
+
+- Smart Home Panel 2 (`HD31`): the battery level, remaining energy and the level of each storage channel no longer freeze in Enhanced Mode while grid, home and circuit power stay live. The panel sends these values only in its full state report, and its regular power reports kept the integration from ever asking for one again after connecting. It now asks the panel for its full state every 5 minutes. Thanks to @mhill556 for the diagnosis from the debug log and for testing the fix on a live installation. (Ref #754)
+
 ## [1.27.1] - 2026-11-11
 
 ### Changed
