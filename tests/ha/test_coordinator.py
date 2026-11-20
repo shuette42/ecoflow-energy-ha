@@ -5216,9 +5216,12 @@ class TestShp2BatteryRefresh:
             hass, self._shp2_device(), 1000.0, 1000.0 + SHP2_BATTERY_REFRESH_S
         )
         mock_exec.assert_has_calls(
-            [call(mqtt.send_latest_quotas), call(mqtt.resend_initial_requests)],
+            [call(mqtt.send_latest_quotas), call(mqtt.send_get_all)],
             any_order=False,
         )
+        # The poll already sent latestQuotas; a second full re-send would
+        # double it every refresh interval.
+        mqtt.resend_initial_requests.assert_not_called()
         assert (
             coordinator._last_shp2_battery_refresh_ts == 1000.0 + SHP2_BATTERY_REFRESH_S
         )

@@ -24,7 +24,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- Smart Home Panel 2 (`HD31`): the battery level, remaining energy and the level of each storage channel no longer freeze in Enhanced Mode while grid, home and circuit power stay live. The panel sends these values only in its full state report, and its regular power reports kept the integration from ever asking for one again after connecting. It now asks the panel for its full state every 5 minutes. Thanks to @mhill556 for the diagnosis from the debug log and for testing the fix on a live installation. (Ref #754)
+- Smart Home Panel 2 (`HD31`): the battery level, remaining energy and the level of each storage channel no longer freeze in Enhanced Mode while grid, home and circuit power stay live. The panel sends these values only in its full state report, and its regular power reports kept the integration from asking for one again as long as the connection stayed up. It now asks the panel for its full state every 5 minutes. Thanks to @mhill556 for the diagnosis from the debug log and for testing the same approach on a live installation. (Ref #754)
 
 ## [1.27.1] - 2026-11-11
 

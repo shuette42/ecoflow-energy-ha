@@ -126,7 +126,7 @@ class KeepaliveMixin(_Base):
                         "Requesting a full state for the panel battery values"
                     )
                     self.hass.async_add_executor_job(
-                        self._mqtt_client.resend_initial_requests,
+                        self._mqtt_client.send_get_all,
                     )
         if not self._shutdown:
             self._quotas_unsub = self.hass.loop.call_later(
