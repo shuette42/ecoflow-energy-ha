@@ -1,7 +1,7 @@
 # Delta 3 Max Plus - Entity Reference
 
 Full list of all entities created for Delta 3 devices. The entity set is shared
-across the generation: Delta 3 Max Plus (`D3M1`, `P321`), DELTA 3 Max (`D3N1`), DELTA 3 Plus (`P351`) and base DELTA 3 (`P231`). The RIVER 3 (`R655`) and RIVER 3 Plus (`R631`) send the same frames but are read-only: 33 sensors, 1 binary sensor, no controls.
+across the generation: Delta 3 Max Plus (`D3M1`, `P321`), DELTA 3 Max (`D3N1`), DELTA 3 Plus (`P351`) and base DELTA 3 (`P231`, `P322`). The RIVER 3 (`R655`) and RIVER 3 Plus (`R631`) send the same frames but are read-only: 33 sensors, 1 binary sensor, no controls.
 
 **Totals:** 47 sensors, 7 switches, 4 numbers, 5 selects. Units whose serial
 starts with `D3M` add the port priority set: 3 switches, 3 numbers and 1 binary

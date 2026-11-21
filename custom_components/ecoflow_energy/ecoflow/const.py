@@ -263,6 +263,9 @@ _SN_PREFIX_MAP = {
     # `_SN_PREFIX_EXCLUDED_KEYS`. (#216)
     "D3N1": DEVICE_TYPE_DELTA3,
     "P321": DEVICE_TYPE_DELTA3,
+    # Owner capture in Enhanced Mode carries the existing Delta 3 messages:
+    # status (254/21), CMS heartbeat (32/2), and BMS heartbeat (32/50).
+    "P322": DEVICE_TYPE_DELTA3,
     # DELTA 3 Plus. Reported as unsupported by an owner whose capture then
     # showed the existing Delta 3 parser reading his unit completely: the
     # three message types this generation uses are all there, and the values
@@ -438,6 +441,7 @@ _SN_PREFIX_DISPLAY_NAMES: dict[str, str] = {
     # A base DELTA 3 reports an empty product name through the app API, same
     # as the BK series below (#182).
     "P231": "DELTA 3",
+    "P322": "DELTA 3",
     # Same empty product name from the app API as the base model above.
     "P351": "DELTA 3 Plus",
     # RIVER 3 family, each on its own recording (#296).
