@@ -160,7 +160,10 @@ class TestSwitchDefsRouting:
         assert (
             _get_switch_defs(DEVICE_TYPE_STREAM, "BK11TEST00000001") is STREAM_SWITCHES
         )
-        assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK12TEST00000001") == []
+        # The Stream Pro has the outlets (#761), no Feed-in switch.
+        assert (
+            _get_switch_defs(DEVICE_TYPE_STREAM, "BK12TEST00000001") is STREAM_SWITCHES
+        )
         # The Ultra X has the outlets too (#753), beside its Feed-in switch.
         assert _get_switch_defs(DEVICE_TYPE_STREAM, "BK61TEST00000001") == (
             STREAM_SWITCHES + STREAMFEEDIN_SWITCHES

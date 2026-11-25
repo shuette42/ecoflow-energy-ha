@@ -6278,7 +6278,18 @@ def supports_stream_controls(device_sn: str) -> bool:
 # with its acknowledgement, and an outlet 1 acknowledgement followed by field
 # 980. The BK61 keeps its Feed-in switch (Standard Mode) beside the two outlets
 # (Enhanced Mode).
-STREAM_OUTLET_CONTROL_PREFIXES: frozenset[str] = frozenset({"BK31", "BK11", "BK61"})
+# The BK12 (Stream Pro) joined on a recording (#761): the app's outlet 2 on
+# write with the device acknowledgement under the same sequence and field 982
+# following 0.2 s after the write, the outlet 1 off write with its ack, and an
+# outlet 1 on acknowledgement followed by field 980 two seconds later (the
+# write itself is on record as the app's repeat), and an acknowledgement of
+# outlet 2 off. The two off states are not in the recording (it kept 14 of 45
+# status reports) and rest on the owner's Logbook: the read-only outlet states
+# went Off within about two seconds of each acknowledgement. The integration's
+# own write has not been tried on a BK12.
+STREAM_OUTLET_CONTROL_PREFIXES: frozenset[str] = frozenset(
+    {"BK31", "BK11", "BK61", "BK12"}
+)
 
 
 def supports_stream_outlet_switches(device_sn: str) -> bool:

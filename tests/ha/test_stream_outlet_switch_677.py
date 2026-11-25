@@ -134,6 +134,15 @@ class TestSwitchSetup:
         keys = await _created_switch_keys(hass, "BK61", False)
         assert keys == {"feed_in_control_switch"}
 
+    async def test_bk12_enhanced_creates_both_outlet_switches_and_nothing_else(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A Stream Pro (#761): the outlets in Enhanced Mode, no Feed-in."""
+        assert await _created_switch_keys(hass, "BK12", True) == OUTLET_KEYS
+
+    async def test_bk12_standard_creates_no_switch(self, hass: HomeAssistant) -> None:
+        assert await _created_switch_keys(hass, "BK12", False) == set()
+
     @pytest.mark.parametrize("prefix", ["BK41", "BK51"])
     async def test_other_streams_enhanced_do_not(
         self, hass: HomeAssistant, prefix: str
@@ -151,6 +160,13 @@ class TestBk31OnlyControlsStayOff:
 
     def test_bk11_switches_are_the_outlets_only(self) -> None:
         defs = _get_switch_defs(DEVICE_TYPE_STREAM, _sn("BK11"))
+        assert {d.key for d in defs} == OUTLET_KEYS
+
+    def test_bk12_gets_no_stream_numbers(self) -> None:
+        assert _get_number_defs(DEVICE_TYPE_STREAM, _sn("BK12")) == []
+
+    def test_bk12_switches_are_the_outlets_only(self) -> None:
+        defs = _get_switch_defs(DEVICE_TYPE_STREAM, _sn("BK12"))
         assert {d.key for d in defs} == OUTLET_KEYS
 
     def test_bk61_gets_no_stream_numbers(self) -> None:
@@ -267,3 +283,45 @@ class TestBk61ReadBack:
             )
 
         assert seen == [(True, False), (True, True)]
+
+
+BK12_FIXTURE = (
+    Path(__file__).parent.parent / "fixtures" / "stream" / "bk12_outlet_toggle_761.json"
+)
+
+
+class TestBk12ReadBack:
+    async def test_each_push_switches_its_own_outlet_through_ingest(
+        self, hass: HomeAssistant
+    ) -> None:
+        """A Stream Pro (#761): the push after the outlet 2 on acknowledgement
+        turns outlet 2 on and leaves outlet 1 alone, the later push after the
+        outlet 1 on acknowledgement turns outlet 1 on and keeps outlet 2."""
+        frames = {
+            f["label"]: bytes.fromhex(f["hex"])
+            for f in json.loads(BK12_FIXTURE.read_text())["frames"]
+        }
+        coordinator, _ = _coordinator(hass, "BK12", True)
+        switches = {}
+        for key in ("ac_outlet_1_switch", "ac_outlet_2_switch"):
+            defn = next(d for d in STREAM_SWITCHES if d.key == key)
+            switch = EcoFlowSwitch(coordinator, defn)
+            switch.async_write_ha_state = MagicMock()  # type: ignore[misc]
+            switches[key] = switch
+        topic = f"/app/device/property/{coordinator.device_sn}"
+
+        seen: list[tuple[bool | None, bool | None]] = []
+        for label in ("push_outlet_2_on", "push_outlet_1_on"):
+            with patch.object(hass.loop, "call_soon_threadsafe") as post:
+                coordinator._on_mqtt_message(topic, frames[label])
+            post.assert_called_once()
+            callback, *args = post.call_args.args
+            callback(*args)
+            seen.append(
+                (
+                    switches["ac_outlet_1_switch"].is_on,
+                    switches["ac_outlet_2_switch"].is_on,
+                )
+            )
+
+        assert seen == [(None, True), (True, True)]

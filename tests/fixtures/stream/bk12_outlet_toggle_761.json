@@ -1,0 +1,75 @@
+{
+ "source": "issue #761 diagnostics of one Stream Pro (BK12) unit, recorded by unze on 2026-11-23 while the Android app switched AC outlet 2 on and off and AC outlet 1 off and on. Kept: the app writes the recording holds, every device acknowledgement of an outlet write, and the two reports that carry an outlet state (field 982 = 1 after outlet 2 on, field 980 = 1 after outlet 1 on). The recording holds no app write for outlet 2 off and no report of an off state; the outlet 1 on write is the app's repeat under the sequence of the first acknowledgement. The integration masked the serial bytes as X. frame_index is the position in the BK12 device's recorded frames.",
+ "frames": [
+  {
+   "label": "app_outlet_2_on",
+   "frame_index": 16,
+   "ts_iso": "2026-11-23T20:49:11.193602+00:00",
+   "topic": "set",
+   "hex": "0a330a0930c7cd92d806e81701102018022001280140fe0148115009580170c68d8b357838800103880101ba0107416e64726f6964"
+  },
+  {
+   "label": "device_ack_outlet_2_on",
+   "frame_index": 17,
+   "ts_iso": "2026-11-23T20:49:11.310427+00:00",
+   "topic": "set_reply",
+   "hex": "0a2b0a0808fd021001e81701100218202001280140fe01481250085801600170c68d8b35788270800103880101"
+  },
+  {
+   "label": "push_outlet_2_on",
+   "frame_index": 18,
+   "ts_iso": "2026-11-23T20:49:11.397944+00:00",
+   "topic": "property",
+   "hex": "0a560a3d9d2000000144a5208abff043b520b0030a428a3119080110031a0c585858585858585858585858203628c803300bb03d01853e76c0e3c3e53e8abff043100218202001280140fe014815503d5801800103880101"
+  },
+  {
+   "label": "device_ack_outlet_2_off",
+   "frame_index": 19,
+   "ts_iso": "2026-11-23T20:49:13.244736+00:00",
+   "topic": "set_reply",
+   "hex": "0a2b0a0808fd021001e81700100218202001280140fe01481250085801600170a7c2d43d788270800103880101"
+  },
+  {
+   "label": "app_outlet_1_off",
+   "frame_index": 20,
+   "ts_iso": "2026-11-23T20:49:15.551906+00:00",
+   "topic": "set",
+   "hex": "0a330a0930cbcd92d806e01700102018022001280140fe014811500958017088c8f7497838800103880101ba0107416e64726f6964"
+  },
+  {
+   "label": "device_ack_outlet_1_off",
+   "frame_index": 21,
+   "ts_iso": "2026-11-23T20:49:15.697591+00:00",
+   "topic": "set_reply",
+   "hex": "0a2b0a0808fc021001e01700100218202001280140fe0148125008580160017088c8f749788270800103880101"
+  },
+  {
+   "label": "device_ack_outlet_1_on",
+   "frame_index": 22,
+   "ts_iso": "2026-11-23T20:49:17.543024+00:00",
+   "topic": "set_reply",
+   "hex": "0a2b0a0808fc021001e01701100218202001280140fe01481250085801600170e9a2de52788270800103880101"
+  },
+  {
+   "label": "push_outlet_1_on",
+   "frame_index": 23,
+   "ts_iso": "2026-11-23T20:49:19.589245+00:00",
+   "topic": "property",
+   "hex": "0a560a3d9d200080d943a520c14cbb43b520f89971428a3119080110031a0c585858585858585858585858203628f702300ba03d01853e3f33bfc3e53ec14cbb43100218202001280140fe014815503d5801800103880101"
+  },
+  {
+   "label": "app_outlet_1_on_repeat",
+   "frame_index": 24,
+   "ts_iso": "2026-11-23T20:49:20.495271+00:00",
+   "topic": "set",
+   "hex": "0a330a0930cdcd92d806e01701102018022001280140fe0148115009580170e9a2de527838800103880101ba0107416e64726f6964"
+  },
+  {
+   "label": "device_ack_outlet_1_on_repeat",
+   "frame_index": 25,
+   "ts_iso": "2026-11-23T20:49:20.648280+00:00",
+   "topic": "set_reply",
+   "hex": "0a2b0a0808fc021001e01701100218202001280140fe01481250085801600170e9a2de52788270800103880101"
+  }
+ ]
+}

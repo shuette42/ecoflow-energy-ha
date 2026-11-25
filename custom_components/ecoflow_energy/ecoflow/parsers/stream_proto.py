@@ -151,7 +151,8 @@ _STREAM_FIELD_MAP: dict[tuple[int, int], dict[int, tuple[str, str]]] = {
         # #677, switches outlet 1 alone (write field 380) and 980 follows it
         # both ways within two seconds while 982 stays put. 982 as outlet 2
         # rests on the same message and on an owner's report of 982 following
-        # the right socket of a BK11 (#659); no recording switches it yet.
+        # the right socket of a BK11 (#659); recordings of a BK61 (#753) and a
+        # BK12 (#761) show 982 following the outlet 2 write.
         # The Standard Mode quota of a BK31 and a BK61 carries the same two
         # fields as `relay2Onoff` / `relay3Onoff` (#659), but no BK31
         # telemetry frame exists in this repo. Fields 380/381 used to feed the same two
