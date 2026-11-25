@@ -2887,10 +2887,10 @@
         "name": "Relais"
       },
       "ac_outlet_1_enabled": {
-        "name": "Prise AC 1"
+        "name": "État de la prise AC 1"
       },
       "ac_outlet_2_enabled": {
-        "name": "Prise AC 2"
+        "name": "État de la prise AC 2"
       },
       "afci_fault_ch1": {
         "name": "Défaut AFCI chaîne 1"

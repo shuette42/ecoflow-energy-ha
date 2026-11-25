@@ -2887,10 +2887,10 @@
         "name": "Relais"
       },
       "ac_outlet_1_enabled": {
-        "name": "AC-Ausgang 1"
+        "name": "AC-Ausgang 1 Status"
       },
       "ac_outlet_2_enabled": {
-        "name": "AC-Ausgang 2"
+        "name": "AC-Ausgang 2 Status"
       },
       "afci_fault_ch1": {
         "name": "AFCI-Fehler Strang 1"

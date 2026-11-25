@@ -4226,10 +4226,10 @@ SMARTPLUG_SWITCHES: list[EcoFlowSwitchDef] = [
 
 STREAM_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
     EcoFlowBinarySensorDef(
-        "ac_outlet_1_enabled", "AC Outlet 1", "power", "mdi:power-socket-eu"
+        "ac_outlet_1_enabled", "AC Outlet 1 State", "power", "mdi:power-socket-eu"
     ),
     EcoFlowBinarySensorDef(
-        "ac_outlet_2_enabled", "AC Outlet 2", "power", "mdi:power-socket-eu"
+        "ac_outlet_2_enabled", "AC Outlet 2 State", "power", "mdi:power-socket-eu"
     ),
 ]
 

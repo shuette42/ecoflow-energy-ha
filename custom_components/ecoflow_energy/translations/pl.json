@@ -2887,10 +2887,10 @@
         "name": "Przekaźnik"
       },
       "ac_outlet_1_enabled": {
-        "name": "Gniazdo AC 1"
+        "name": "Stan gniazda AC 1"
       },
       "ac_outlet_2_enabled": {
-        "name": "Gniazdo AC 2"
+        "name": "Stan gniazda AC 2"
       },
       "afci_fault_ch1": {
         "name": "Usterka AFCI łańcucha 1"
