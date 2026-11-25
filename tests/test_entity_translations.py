@@ -292,3 +292,20 @@ def test_vehicle_energy_names_match_across_files() -> None:
 )
 def test_vehicle_translation_discovery_shapes(source):
     assert _vehicle_sensor_keys(source) == {"new_key"}
+
+
+@pytest.mark.parametrize("outlet", (1, 2))
+@pytest.mark.parametrize("lang", ("strings", *LANGS))
+def test_stream_outlet_state_sensor_is_not_named_like_its_switch(
+    lang: str, outlet: int
+) -> None:
+    """The STREAM outlet state sensor and its switch carry different names.
+
+    Both live on the same device; with equal names the entity list shows two
+    "AC Outlet 1" rows. Applies to `strings.json` and every translation file.
+    """
+    path = STRINGS_PATH if lang == "strings" else TRANSLATIONS_DIR / f"{lang}.json"
+    entity = json.loads(path.read_text(encoding="utf-8"))["entity"]
+    sensor_name = entity["binary_sensor"][f"ac_outlet_{outlet}_enabled"]["name"]
+    switch_name = entity["switch"][f"ac_outlet_{outlet}_switch"]["name"]
+    assert sensor_name != switch_name, lang

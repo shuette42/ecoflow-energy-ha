@@ -2887,10 +2887,10 @@
         "name": "Relay"
       },
       "ac_outlet_1_enabled": {
-        "name": "AC Outlet 1"
+        "name": "AC Outlet 1 State"
       },
       "ac_outlet_2_enabled": {
-        "name": "AC Outlet 2"
+        "name": "AC Outlet 2 State"
       },
       "afci_fault_ch1": {
         "name": "AFCI Fault String 1"

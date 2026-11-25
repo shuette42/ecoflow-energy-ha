@@ -2887,10 +2887,10 @@
         "name": "Relè"
       },
       "ac_outlet_1_enabled": {
-        "name": "Presa AC 1"
+        "name": "Stato presa AC 1"
       },
       "ac_outlet_2_enabled": {
-        "name": "Presa AC 2"
+        "name": "Stato presa AC 2"
       },
       "afci_fault_ch1": {
         "name": "Guasto AFCI stringa 1"

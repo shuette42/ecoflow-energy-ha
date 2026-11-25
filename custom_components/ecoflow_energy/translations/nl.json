@@ -2887,10 +2887,10 @@
         "name": "Relais"
       },
       "ac_outlet_1_enabled": {
-        "name": "AC-stopcontact 1"
+        "name": "AC-stopcontact 1 status"
       },
       "ac_outlet_2_enabled": {
-        "name": "AC-stopcontact 2"
+        "name": "AC-stopcontact 2 status"
       },
       "afci_fault_ch1": {
         "name": "AFCI-storing string 1"
