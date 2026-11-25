@@ -88,8 +88,8 @@ async def test_bk12_gets_the_bk11_sensor_set_and_no_control(
     """A Stream Pro shares the Stream sensor set of its sibling, BK11 (#668).
 
     No capture shows which of these fill on a BK12; the test pins only that
-    the two share one sensor registration. The BK11's AC outlet switches
-    (#677) are not part of it: no write is on record for a BK12.
+    the two share one sensor registration. The AC outlet switches (#677, #761)
+    are a separate registration and not part of it.
     """
     bk12 = await _keys(hass, _device("BK12"), sensor_setup)
     bk11 = await _keys(hass, _device("BK11"), sensor_setup)
@@ -156,6 +156,9 @@ def test_cleanup_removes_the_old_reserve_number_outside_the_gate(
         ),
         "bk61_outlet_1": _register(
             hass, entry, "switch", "BK61TESTDUMMY01_ac_outlet_1_switch"
+        ),
+        "bk12_outlet_1": _register(
+            hass, entry, "switch", "BK12TESTDUMMY01_ac_outlet_1_switch"
         ),
     }
 

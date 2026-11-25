@@ -1,4 +1,6 @@
-"""Stream Ultra (BK11) and Ultra X (BK61) AC outlet switches, issues #677, #753.
+"""Stream Ultra (BK11), Ultra X (BK61) and Pro (BK12) AC outlet switches.
+
+Issues #677, #753 and #761.
 
 The fixture holds real frames of one BK11 from the integration's diagnostics:
 the app switching AC outlet 1 on and off, the device's acknowledgement of each
@@ -56,14 +58,19 @@ class TestOutletGate:
         assert supports_stream_outlet_switches("BK61TEST00000001")
         assert supports_stream_outlet_switches("bk61test00000001")
 
-    @pytest.mark.parametrize("prefix", ["BK01", "BK12", "BK41", "BK51"])
+    def test_bk12_gets_the_outlet_switches(self) -> None:
+        """Recorded on a Stream Pro (#761)."""
+        assert supports_stream_outlet_switches("BK12TEST00000001")
+        assert supports_stream_outlet_switches("bk12test00000001")
+
+    @pytest.mark.parametrize("prefix", ["BK01", "BK41", "BK51"])
     def test_other_streams_do_not(self, prefix: str) -> None:
         assert not supports_stream_outlet_switches(f"{prefix}TEST00000001")
 
     def test_empty_serial_is_closed(self) -> None:
         assert not supports_stream_outlet_switches("")
 
-    @pytest.mark.parametrize("prefix", ["BK11", "BK61"])
+    @pytest.mark.parametrize("prefix", ["BK11", "BK61", "BK12"])
     def test_outlet_gate_does_not_open_the_bk31_write_gate(self, prefix: str) -> None:
         """Limits, LED and Backup Reserve stay on the BK31 alone."""
         assert not supports_stream_controls(f"{prefix}TEST00000001")
@@ -252,3 +259,87 @@ class TestBk61AgainstTheRecordings:
             ("device_ack_outlet_2_off", OUTLET_2_OFF),
         ):
             assert _bk61(label).count(tag) == 1, label
+
+
+BK12_FIXTURE = (
+    Path(__file__).parent / "fixtures" / "stream" / "bk12_outlet_toggle_761.json"
+)
+
+
+def _bk12(label: str) -> bytes:
+    frames = json.loads(BK12_FIXTURE.read_text())["frames"]
+    return bytes.fromhex(next(f for f in frames if f["label"] == label)["hex"])
+
+
+class TestBk12AgainstTheRecording:
+    """Real frames of one Stream Pro (#761): the Android app switching outlet 2
+    on, outlet 1 off and outlet 1 on again, the unit's acknowledgement of each
+    write and the telemetry push after the two "on" acknowledgements."""
+
+    @pytest.mark.parametrize(
+        ("label", "turn_on", "outlet", "value_tag", "timestamp"),
+        [
+            ("app_outlet_2_on", True, 2, OUTLET_2_ON, 1795466951),
+            ("app_outlet_1_off", False, 1, OUTLET_1_OFF, 1795466955),
+            ("app_outlet_1_on_repeat", True, 1, OUTLET_1_ON, 1795466957),
+        ],
+    )
+    def test_android_write_carries_the_field_our_builder_writes(
+        self, label: str, turn_on: bool, outlet: int, value_tag: bytes, timestamp: int
+    ) -> None:
+        """The Android app adds a timestamp (field 6) and its own sequence, our
+        builder adds neither; the outlet field and value are the same."""
+        recorded = _bk12(label)
+        built = build_stream_ac_outlet_payload(
+            outlet, turn_on, device_sn=MASKED_SN, seq=1
+        )
+        assert recorded.count(value_tag) == 1
+        assert built.count(value_tag) == 1
+        field_6 = encode_field_varint(6, timestamp)
+        assert recorded.count(field_6) == 1
+        assert field_6 not in built
+
+    @pytest.mark.parametrize(
+        ("label", "tag"),
+        [
+            ("device_ack_outlet_2_on", OUTLET_2_ON),
+            ("device_ack_outlet_2_off", OUTLET_2_OFF),
+            ("device_ack_outlet_1_off", OUTLET_1_OFF),
+            ("device_ack_outlet_1_on", OUTLET_1_ON),
+            ("device_ack_outlet_1_on_repeat", OUTLET_1_ON),
+        ],
+    )
+    def test_acknowledgement_echoes_the_written_field_and_value(
+        self, label: str, tag: bytes
+    ) -> None:
+        assert _bk12(label).count(tag) == 1
+
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "device_ack_outlet_2_on",
+            "device_ack_outlet_2_off",
+            "device_ack_outlet_1_off",
+            "device_ack_outlet_1_on",
+            "device_ack_outlet_1_on_repeat",
+        ],
+    )
+    def test_acknowledgement_is_not_mapped_to_an_outlet_state(self, label: str) -> None:
+        """State comes only from the unit's status reports: an acknowledgement
+        echoes the written field but must not fill either outlet state."""
+        result = parse_stream_proto_message(_bk12(label))
+        assert result is None or (
+            "ac_outlet_1_enabled" not in result and "ac_outlet_2_enabled" not in result
+        )
+
+    def test_outlet_2_push_reports_outlet_2_on_and_not_outlet_1(self) -> None:
+        result = parse_stream_proto_message(_bk12("push_outlet_2_on"))
+        assert result is not None
+        assert result["ac_outlet_2_enabled"] == 1
+        assert "ac_outlet_1_enabled" not in result
+
+    def test_outlet_1_push_reports_outlet_1_on_and_not_outlet_2(self) -> None:
+        result = parse_stream_proto_message(_bk12("push_outlet_1_on"))
+        assert result is not None
+        assert result["ac_outlet_1_enabled"] == 1
+        assert "ac_outlet_2_enabled" not in result
