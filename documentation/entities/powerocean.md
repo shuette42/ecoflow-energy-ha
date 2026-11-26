@@ -45,7 +45,7 @@ A Local (Modbus/TCP) entry for a three-phase PowerOcean creates only these share
 > five readings describe the **current charging session** and reset when the next
 > one starts, so the session energy restarts at 0 each time. It is a
 > `total_increasing` sensor, so Home Assistant books each restart as a new
-> cycle. A PowerPulse 1 also gets four controls, see
+> cycle. A PowerPulse 1 also gets four controls and two buttons, see
 > [Wallbox Controls](#wallbox-controls-powerpulse-1-enhanced-mode).
 >
 > **The PowerPulse 2 is a device of its own** and is not listed here. It
@@ -403,6 +403,10 @@ Created once the PowerOcean reports the settings of a coupled PowerPulse 1, and 
 | Wallbox Plug-and-Play | Switch | As in the EcoFlow app | enabled |
 | Wallbox Continuous Charging | Switch | As in the EcoFlow app | enabled |
 | Wallbox Block Battery Discharge | Switch | On means the home battery does not feed the car ("Disable battery discharge" in the app) | enabled |
+| Wallbox Start Charging | Button | Starts a charging session, as in the EcoFlow app | enabled |
+| Wallbox Stop Charging | Button | Ends the running charging session, as in the EcoFlow app | enabled |
+
+The two buttons are created once the PowerOcean reports the wallbox's charging status. A press is sent only in a matching state: Start while Wallbox Charging Status reads Charging session ended or Vehicle connected, Stop while it reads Charging or Paused by Charger. In any other state Home Assistant shows an error and sends nothing. After a press Home Assistant waits up to 20 seconds for Wallbox Charging Status to follow (Charging or Paused by Charger after a start, Charging session ended or Unplugged after a stop) and shows an error if it does not. The buttons are not counted in the totals above.
 
 ---
 

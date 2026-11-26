@@ -415,12 +415,12 @@ def _mask_anchored_strings(payload: bytes) -> bytes:
 # A wallbox keeps the id the app assigns to a vehicle in the owner's account
 # in the commands that start a charge, set a timer or report the settings:
 # a whole length-delimited string of three or four digits, in a field that
-# differs by command. Across the fixtures this project tracks it sits in 283
-# fields of 15 files, and in 12 more inside hex literals of two test sources;
+# differs by command. Across the fixtures this project tracks it sits in 299
+# fields of 16 files, and in 12 more inside hex literals of two test sources;
 # frames like these reach diagnostics downloads attached to public issues. No
 # pass above sees it: it is too short for the serial shape, and in 251 of the
-# 283 fixture fields no serial sits beside it for the anchored pass to use
-# (2/133: 26, 2/34: 86, 241/3: 75, 241/44: 64; with a serial: 209/8: 22,
+# 299 fixture fields no serial sits beside it for the anchored pass to use
+# (2/133: 26, 2/34: 86, 241/3: 75, 241/44: 64; with a serial: 209/8: 38,
 # 2/37: 10). Both obvious widenings were rejected. Masking any short digit
 # field would hit the readings of every Stream and the bytes of packed varints,
 # and lowering the floor of the anchored pass would still miss those 251 and

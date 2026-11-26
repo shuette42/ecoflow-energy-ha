@@ -10,6 +10,8 @@ every read - never the wallbox's charge state, per decision 6.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
+from functools import partial
 from typing import Literal
 
 from homeassistant.components.button import ButtonEntity
@@ -20,6 +22,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import (
+    DEVICE_TYPE_POWEROCEAN,
     DEVICE_TYPE_POWERPULSE2,
     DOMAIN,
     POWERPULSE2_BUTTONS,
@@ -28,7 +31,7 @@ from .const import (
     supports_powerpulse_controls,
 )
 from .coordinator import EcoFlowDeviceCoordinator
-from .entity import reading_reported
+from .entity import reading_reported, wallbox_control_withheld
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,6 +52,15 @@ def _gate_key(definition: EcoFlowButtonDef, route: Literal["sibling", "own"]) ->
     return definition.state_key
 
 
+def _wallbox_gate_reported(
+    coordinator: EcoFlowDeviceCoordinator,
+    route: Literal["sibling", "own"],
+    definition: EcoFlowButtonDef,
+) -> bool:
+    """Return whether a PowerPulse 2 button's gate reading has been reported."""
+    return reading_reported(coordinator, _gate_key(definition, route))
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -61,6 +73,9 @@ async def async_setup_entry(
     entities: list[EcoFlowButton] = []
 
     for coordinator in coordinators.values():
+        if coordinator.device_type == DEVICE_TYPE_POWEROCEAN:
+            _add_powerocean_buttons(entry, coordinator, entities, async_add_entities)
+            continue
         if coordinator.device_type != DEVICE_TYPE_POWERPULSE2:
             continue
         if not supports_powerpulse_controls(coordinator.device_sn):
@@ -93,34 +108,65 @@ async def async_setup_entry(
             entities.append(EcoFlowButton(coordinator, defn))
 
         if pending:
-            _watch_for_gate(entry, coordinator, route, pending, async_add_entities)
+            _watch_for_gate(
+                entry,
+                coordinator,
+                partial(_wallbox_gate_reported, coordinator, route),
+                pending,
+                async_add_entities,
+            )
 
     async_add_entities(entities)
+
+
+def _add_powerocean_buttons(
+    entry: ConfigEntry,
+    coordinator: EcoFlowDeviceCoordinator,
+    entities: list[EcoFlowButton],
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add Start/Stop Charging for a PowerPulse 1 this PowerOcean reports (#731).
+
+    The wallbox has no channel of its own: the PowerOcean carries its status
+    on 209/8 and takes the writes. Created once the status is reported and
+    the reporting wallbox is not a PowerPulse 2, which has its own pair.
+    """
+    if not coordinator.enhanced_mode:
+        return
+
+    def ready(definition: EcoFlowButtonDef) -> bool:
+        return reading_reported(
+            coordinator, "ev_charge_status"
+        ) and not wallbox_control_withheld(coordinator, definition.key)
+
+    pending: list[EcoFlowButtonDef] = []
+    for defn in filter_defs_for_serial(POWERPULSE2_BUTTONS, coordinator.device_sn):
+        if ready(defn):
+            entities.append(EcoFlowButton(coordinator, defn))
+        else:
+            pending.append(defn)
+    if pending:
+        _watch_for_gate(entry, coordinator, ready, pending, async_add_entities)
 
 
 @callback
 def _watch_for_gate(
     config_entry: ConfigEntry,
     coordinator: EcoFlowDeviceCoordinator,
-    route: Literal["sibling", "own"],
+    ready_for: Callable[[EcoFlowButtonDef], bool],
     pending: list[EcoFlowButtonDef],
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Add the wallbox buttons as soon as their gate reading is first reported.
 
-    Same pattern as switch.py's accessory wait. The route is fixed at setup
-    like every other platform's entity set, so the watcher re-evaluates
-    `_gate_key()` with the route it was created with - it never calls
-    `charge_action_route()` again.
+    Same pattern as switch.py's accessory wait. `ready_for` is fixed at setup
+    like every other platform's entity set: the PowerPulse 2 passes its route's
+    gate key, a PowerOcean its wallbox status and serial check.
     """
 
     @callback
     def _check_for_gate() -> None:
-        ready = [
-            definition
-            for definition in pending
-            if reading_reported(coordinator, _gate_key(definition, route))
-        ]
+        ready = [definition for definition in pending if ready_for(definition)]
         for definition in ready:
             pending.remove(definition)
         if ready:
@@ -161,6 +207,13 @@ class EcoFlowButton(CoordinatorEntity[EcoFlowDeviceCoordinator], ButtonEntity):
         """
         if not (self.coordinator.device_available and super().available):
             return False
+        if self.coordinator.device_type == DEVICE_TYPE_POWEROCEAN:
+            # The PowerOcean carries the wallbox's writes itself: no route.
+            return (
+                self.coordinator.mqtt_client is not None
+                and self.coordinator.mqtt_client.is_connected()
+                and not wallbox_control_withheld(self.coordinator, self._definition.key)
+            )
         route = self.coordinator.charge_action_route()
         if route == "sibling":
             sibling = self.coordinator.powerocean_sibling()
@@ -182,6 +235,11 @@ class EcoFlowButton(CoordinatorEntity[EcoFlowDeviceCoordinator], ButtonEntity):
 
     async def async_press(self) -> None:
         """Send the start or stop command; let a refusal raise to the user."""
+        if self.coordinator.device_type == DEVICE_TYPE_POWEROCEAN:
+            await self.coordinator.async_set_wallbox_charge_action(
+                self._definition.action
+            )
+            return
         await self.coordinator.async_set_powerpulse_charge_action(
             self._definition.action
         )
