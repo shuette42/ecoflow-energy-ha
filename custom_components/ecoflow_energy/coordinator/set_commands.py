@@ -3229,6 +3229,19 @@ class SetCommandsMixin(_Base):
             describe_reported=lambda reported: _describe_display(key, reported),
         )
 
+    @staticmethod
+    def _require_powerpulse1_serial(serial: str) -> None:
+        """Raise unless the reported wallbox is a PowerPulse 1 (#731).
+
+        A control stays once created, and `ev_charger_sn` also has the
+        PowerPulse 2 as a writer: the stored serial decides every write.
+        """
+        if not serial.startswith(POWERPULSE1_SN_PREFIX):
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="wallbox_not_reported",
+            )
+
     def _require_wallbox_action_state(self, action: Literal["start", "stop"]) -> None:
         """Raise unless the wallbox's last reported state allows `action`.
 
@@ -3495,15 +3508,7 @@ class SetCommandsMixin(_Base):
         """
         from ..ecoflow.energy_stream import WALLBOX_WORK_MODES
 
-        def _require_powerpulse1(serial: str) -> None:
-            # A control stays once created, and `ev_charger_sn` also has the
-            # PowerPulse 2 as a writer: the stored serial decides every write.
-            if not serial.startswith(POWERPULSE1_SN_PREFIX):
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="wallbox_not_reported",
-                )
-
+        _require_powerpulse1 = self._require_powerpulse1_serial
         if key == "ev_charge_mode":
             if value not in WALLBOX_WORK_MODES:
                 raise ValueError(f"{value!r} is not a PowerPulse 1 charging mode")
@@ -3541,13 +3546,20 @@ class SetCommandsMixin(_Base):
         if action not in ("start", "stop"):
             raise ValueError(f"{action!r} is not a wallbox charge action")
         typed_action = cast("Literal['start', 'stop']", action)
+
+        def _validate(serial: str) -> None:
+            # The serial first, as every setting write does: the buttons stay
+            # once created and `ev_charger_sn` can later name a PowerPulse 2.
+            self._require_powerpulse1_serial(serial)
+            self._require_wallbox_action_state(typed_action)
+
         await self._async_powerglow_write(
             # The resolver keys the confirming statuses by this action name.
             action,
             "ev_charge_status",
             None,
             {"action": action},
-            lambda _sn: self._require_wallbox_action_state(typed_action),
+            _validate,
             kind="wallbox",
         )
 

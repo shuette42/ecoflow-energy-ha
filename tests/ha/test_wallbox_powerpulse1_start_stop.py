@@ -2,9 +2,11 @@
 
 Reports are the reporter's real frames
 (`tests/fixtures/powerpulse/r372_start_stop_731_20261114.json`, two starts and
-two stops of the app). The button writes the app's `209/100` on the PowerOcean
-topic and returns only once the wallbox's charging status follows: the order
-state report that comes first does not count.
+two stops of the app); the coordinator keeps a dummy PowerPulse 1 serial and
+`_frame` swaps the recording's masked serial for it after parsing. The button
+writes the app's `209/100` on the PowerOcean topic and returns only once the
+wallbox's charging status follows: the order state report that comes first does
+not count.
 """
 
 from __future__ import annotations
@@ -61,10 +63,35 @@ IDS = ("ev_start_charging", "ev_stop_charging")
 
 
 def _frame(ocean: EcoFlowDeviceCoordinator, label: str) -> dict[str, Any]:
+    """A recorded frame as the coordinator parses it, with one replacement.
+
+    The frame bytes are exactly as recorded. The recording masked the wallbox
+    serial as sixteen X; after parsing, that serial is replaced by the dummy
+    PowerPulse 1 serial the coordinator holds, because the press is refused
+    for a serial that is not a PowerPulse 1 and a confirmation must match the
+    serial the write was addressed to.
+    """
     topic = f"/app/user123/{ocean.device_sn}/thing/property"
     parsed = ocean._parse_message(topic, bytes.fromhex(FRAMES[label]["hex"]))
     assert parsed is not None
+    if parsed.get("ev_charger_sn") == MASK:
+        parsed["ev_charger_sn"] = PP1_SN
     return parsed
+
+
+def _assert_addressed(
+    ocean: EcoFlowDeviceCoordinator, sent: bytes, action: str
+) -> dict[str, Any]:
+    """The 209/100 names the wallbox in `pdata` field 1 and the PowerOcean as
+    the device, and the two serials differ, so a swap cannot pass.
+    """
+    (header,), _ = decode_header_message(sent)
+    assert (header["cmd_func"], header["cmd_id"]) == (209, 100)
+    assert ocean.device_sn != PP1_SN
+    control = "02" if action == "start" else "01"
+    assert header["pdata"] == "0a10" + PP1_SN.encode().hex() + "10" + control
+    assert header["device_sn"] == ocean.device_sn
+    return header
 
 
 def _report(ocean: EcoFlowDeviceCoordinator, status: str, serial: str) -> None:
@@ -73,14 +100,21 @@ def _report(ocean: EcoFlowDeviceCoordinator, status: str, serial: str) -> None:
     ocean.set_device_value("ev_charger_sn", serial)
 
 
-async def _buttons(
-    hass: HomeAssistant, ocean: EcoFlowDeviceCoordinator
-) -> dict[str, Any]:
-    """Set the button platform up and return the PowerOcean's buttons by key."""
+async def _collect(hass: HomeAssistant, ocean: EcoFlowDeviceCoordinator) -> list[Any]:
+    """Set the button platform up and return every entity it added (a list, so
+    a duplicate stays visible)."""
     entry = hass.config_entries.async_entries(DOMAIN)[-1]
     found: list[Any] = []
     await button_setup(hass, entry, add_entities_collector(found))
     await hass.async_block_till_done()
+    return found
+
+
+async def _buttons(
+    hass: HomeAssistant, ocean: EcoFlowDeviceCoordinator
+) -> dict[str, Any]:
+    """Set the button platform up and return the PowerOcean's buttons by key."""
+    found = await _collect(hass, ocean)
     return {e._definition.key: e for e in found if e.coordinator is ocean}
 
 
@@ -89,13 +123,12 @@ async def _pressed(
 ) -> tuple[EcoFlowDeviceCoordinator, Any, asyncio.Task[None]]:
     """A PowerOcean whose PowerPulse 1 reports `status`, and the press of `action`.
 
-    The buttons exist for the PowerPulse 1 serial; the store then carries the
-    recording's serial, the one its frames name and a confirmation must match.
+    The store keeps the dummy PowerPulse 1 serial throughout, the one the
+    frames carry after `_frame` and a confirmation must match.
     """
     ocean = _ocean(hass)
     _report(ocean, status, PP1_SN)
     buttons = await _buttons(hass, ocean)
-    ocean.set_device_value("ev_charger_sn", MASK)
     button = buttons[f"ev_{action}_charging"]
     task = asyncio.create_task(button.async_press())
     await asyncio.sleep(0.05)
@@ -126,15 +159,16 @@ async def test_no_buttons_for_a_powerpulse2_reported_by_the_powerocean(
 async def test_a_powerpulse1_gets_exactly_the_two_buttons(hass: HomeAssistant) -> None:
     ocean = _ocean(hass)
     _report(ocean, "finishing", PP1_SN)
-    buttons = await _buttons(hass, ocean)
-    assert set(buttons) == set(IDS)
-    assert [b.unique_id for b in buttons.values()] == [
-        f"{ocean.device_sn}_{key}" for key in buttons
-    ]
-    assert {b.unique_id for b in buttons.values()} == {
+    found = await _collect(hass, ocean)
+    # A second report must not add a second pair.
+    ocean.async_set_updated_data(dict(ocean.device_data))
+    await hass.async_block_till_done()
+    mine = [e for e in found if e.coordinator is ocean]
+    assert sorted(e._definition.key for e in mine) == sorted(IDS)
+    assert sorted(e.unique_id for e in mine) == [
         f"{POWEROCEAN_DEVICE['sn']}_ev_start_charging",
         f"{POWEROCEAN_DEVICE['sn']}_ev_stop_charging",
-    }
+    ]
 
 
 async def test_the_buttons_follow_the_first_report(hass: HomeAssistant) -> None:
@@ -147,7 +181,11 @@ async def test_the_buttons_follow_the_first_report(hass: HomeAssistant) -> None:
     _report(ocean, "finishing", PP1_SN)
     ocean.async_set_updated_data(dict(ocean.device_data))
     await hass.async_block_till_done()
-    assert {e._definition.key for e in found} == set(IDS)
+    assert sorted(e._definition.key for e in found) == sorted(IDS)
+    # The next report finds both created and adds nothing.
+    ocean.async_set_updated_data(dict(ocean.device_data))
+    await hass.async_block_till_done()
+    assert sorted(e._definition.key for e in found) == sorted(IDS)
 
 
 async def test_standard_mode_gets_no_buttons(hass: HomeAssistant) -> None:
@@ -212,10 +250,9 @@ async def test_start_returns_on_the_status_not_the_order_state(
     ocean, _, task = await _pressed(hass, "finishing", "start")
     assert _mqtt(ocean).send_proto_set.call_count == 1
     sent = _mqtt(ocean).send_proto_set.call_args.args[0]
-    (header,), _ = decode_header_message(sent)
-    assert (header["cmd_func"], header["cmd_id"]) == (209, 100)
+    header = _assert_addressed(ocean, sent, "start")
     assert sent == build_wallbox_charge_action_payload(
-        MASK, ocean.device_sn, action="start", seq=header["seq"]
+        PP1_SN, ocean.device_sn, action="start", seq=header["seq"]
     )
 
     ocean._apply_data(_frame(ocean, "report_order_state_1_after_start_1"))
@@ -242,10 +279,9 @@ async def test_stop_returns_on_the_status_not_the_order_state(
     """
     ocean, _, task = await _pressed(hass, "suspended_charger", "stop")
     sent = _mqtt(ocean).send_proto_set.call_args.args[0]
-    (header,), _ = decode_header_message(sent)
-    assert (header["cmd_func"], header["cmd_id"]) == (209, 100)
+    header = _assert_addressed(ocean, sent, "stop")
     assert sent == build_wallbox_charge_action_payload(
-        MASK, ocean.device_sn, action="stop", seq=header["seq"]
+        PP1_SN, ocean.device_sn, action="stop", seq=header["seq"]
     )
 
     ocean._apply_data(_frame(ocean, "report_order_state_3_after_stop_1"))
@@ -309,3 +345,102 @@ async def test_a_report_of_another_wallbox_does_not_confirm(
         with pytest.raises(HomeAssistantError) as err:
             await task
     assert err.value.translation_key == "powerpulse_action_not_confirmed"
+
+
+@pytest.mark.parametrize("action", ["start", "stop"])
+async def test_a_press_without_a_reported_status_sends_nothing(
+    hass: HomeAssistant, action: str
+) -> None:
+    """The button exists, then the status reads None: refused up front.
+
+    Mutation probe: letting a missing status pass the precondition sends both.
+    """
+    ocean = _ocean(hass)
+    _report(ocean, "finishing", PP1_SN)
+    button = (await _buttons(hass, ocean))[f"ev_{action}_charging"]
+    ocean._device_data["ev_charge_status"] = None
+    with pytest.raises(HomeAssistantError) as err:
+        await button.async_press()
+    assert err.value.translation_key == "powerpulse_action_state"
+    assert _mqtt(ocean).send_proto_set.call_count == 0
+    assert ocean._pending_write is None
+
+
+async def test_the_buttons_refuse_once_the_reported_wallbox_is_a_powerpulse2(
+    hass: HomeAssistant,
+) -> None:
+    """Buttons made for a PowerPulse 1 stay when `ev_charger_sn` later names a
+    PowerPulse 2: they go unavailable and a direct press publishes nothing.
+
+    Mutation probes: removing the serial check from the press validator makes
+    the press publish; dropping `not wallbox_control_withheld` from `available`
+    keeps them available.
+    """
+    ocean = _ocean(hass)
+    _report(ocean, "finishing", PP1_SN)
+    buttons = await _buttons(hass, ocean)
+    assert all(b.available for b in buttons.values())
+    ocean.set_device_value("ev_charger_sn", PP2_SN)
+    assert not any(b.available for b in buttons.values())
+    for button in buttons.values():
+        with pytest.raises(HomeAssistantError) as err:
+            await button.async_press()
+        assert err.value.translation_key == "wallbox_not_reported"
+    assert _mqtt(ocean).send_proto_set.call_count == 0
+    assert ocean._pending_write is None
+
+
+async def test_a_second_press_while_one_is_pending_is_refused(
+    hass: HomeAssistant,
+) -> None:
+    """Mutation probe: dropping the pending-write check sends a second 209/100."""
+    ocean, button, task = await _pressed(hass, "finishing", "start")
+    with pytest.raises(HomeAssistantError) as err:
+        await button.async_press()
+    assert err.value.translation_key == "accessory_write_in_progress"
+    assert _mqtt(ocean).send_proto_set.call_count == 1
+    ocean._apply_data(_frame(ocean, "report_status_4_after_start_1"))
+    await task
+    assert _mqtt(ocean).send_proto_set.call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("status", "action", "confirmed"),
+    [("preparing", "start", "charging"), ("charging", "stop", "available")],
+)
+async def test_the_other_valid_pairs_are_sent_and_confirmed(
+    hass: HomeAssistant, status: str, action: str, confirmed: str
+) -> None:
+    """Start from `preparing` ends on `charging`, stop from `charging` on
+    `available`. No recorded frame shows these statuses: the status values are
+    set by hand on a recorded status report, the serial and the rest are the
+    recording's.
+
+    Mutation probe: removing `preparing` from the start precondition refuses
+    the first case; removing `available` from the stop confirmations leaves the
+    second press unconfirmed.
+    """
+    ocean, _, task = await _pressed(hass, status, action)
+    assert _mqtt(ocean).send_proto_set.call_count == 1
+    _assert_addressed(ocean, _mqtt(ocean).send_proto_set.call_args.args[0], action)
+    assert not task.done()
+    report = _frame(ocean, "report_status_4_after_start_1")
+    report["ev_charge_status"] = confirmed
+    ocean._apply_data(report)
+    await task
+    assert ocean.device_data["ev_charge_status"] == confirmed
+    assert ocean._pending_write is None
+
+
+async def test_a_status_action_is_not_a_powerglow_write(hass: HomeAssistant) -> None:
+    """The shared write body refuses `expected_value=None` for the heating rod.
+
+    Mutation probe: dropping the `kind` check lets the rod path build a
+    wallbox-shaped write.
+    """
+    ocean = _ocean(hass)
+    with pytest.raises(ValueError, match="status action"):
+        await ocean._async_powerglow_write(
+            "start", "ev_charge_status", None, {"action": "start"}, kind="powerglow"
+        )
+    assert _mqtt(ocean).send_proto_set.call_count == 0

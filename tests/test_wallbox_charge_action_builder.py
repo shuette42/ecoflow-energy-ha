@@ -72,10 +72,36 @@ def test_builder_refuses_any_other_action(action: Any) -> None:
         build_wallbox_charge_action_payload(SERIAL, SERIAL, action=action)
 
 
-def test_builder_refuses_a_malformed_serial() -> None:
-    """Mutation probe: drop the serial validation -> the short serial is sent."""
-    with pytest.raises(ValueError):
-        build_wallbox_charge_action_payload("X" * 15, SERIAL, action="start")
+def test_builder_addresses_the_wallbox_and_the_powerocean_apart() -> None:
+    """Field 1 of `pdata` is the wallbox serial, the header's device serial the
+    PowerOcean's; with two different serials a swap cannot pass.
+
+    Mutation probe: swapping the two serials in the builder call fails both
+    asserts.
+    """
+    wallbox, ocean = "AC31" + "0" * 12, "R372" + "1" * 12
+    built = build_wallbox_charge_action_payload(wallbox, ocean, action="stop", seq=7)
+    (header,), _ = decode_header_message(built)
+    assert header["device_sn"] == ocean
+    assert header["pdata"] == "0a10" + wallbox.encode().hex() + "10" + "01"
+
+
+@pytest.mark.parametrize("field", ["ev_sn", "device_sn"])
+@pytest.mark.parametrize(
+    "bad",
+    ["X" * 15, "X" * 17, "X" * 15 + "-", "É" + "X" * 15],
+    ids=["short", "long", "not-alphanumeric", "not-ascii"],
+)
+def test_builder_refuses_a_malformed_serial(field: str, bad: str) -> None:
+    """Each serial is checked on its own: length, ASCII and alphanumeric.
+
+    Mutation probe: dropping the validation of one serial lets that parameter's
+    cases through.
+    """
+    ev_sn = bad if field == "ev_sn" else SERIAL
+    device_sn = bad if field == "device_sn" else SERIAL
+    with pytest.raises(ValueError, match=field):
+        build_wallbox_charge_action_payload(ev_sn, device_sn, action="start")
 
 
 def _report(label: str) -> dict[str, Any]:
