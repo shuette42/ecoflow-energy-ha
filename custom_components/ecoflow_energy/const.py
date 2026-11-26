@@ -2936,6 +2936,15 @@ POWERPULSE1_SWITCH_KEYS: frozenset[str] = frozenset(
     {"ev_plug_and_play", "ev_continuous_charging", "ev_battery_discharge_block"}
 )
 
+# Every PowerOcean control that belongs to a PowerPulse 1: the switches, the
+# charging mode and the Start/Stop Charging buttons. A PowerOcean coupled to a
+# PowerPulse 2 withholds all of them (`wallbox_control_withheld`).
+POWERPULSE1_CONTROL_KEYS: frozenset[str] = POWERPULSE1_SWITCH_KEYS | {
+    "ev_charge_mode",
+    "ev_start_charging",
+    "ev_stop_charging",
+}
+
 
 # --- Scheduled charge task controls ---
 #
@@ -10498,7 +10507,8 @@ POWERPULSE2_BINARY_SENSORS: list[EcoFlowBinarySensorDef] = [
 # same accessory gate as the cable lock binary sensor above, and send through
 # that PowerOcean; without one they are created on the first heartbeat and
 # send on the wallbox's own topic (PLAN-140). Two or more PowerOceans get no
-# buttons. The platform setup decides the route, not this list.
+# buttons. The platform setup decides the route, not this list. A PowerOcean
+# that reports a PowerPulse 1 gets the same two buttons from this list (#731).
 POWERPULSE2_BUTTONS: list[EcoFlowButtonDef] = [
     EcoFlowButtonDef(
         "ev_start_charging",

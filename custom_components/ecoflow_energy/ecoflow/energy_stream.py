@@ -960,6 +960,45 @@ def build_wallbox_param_set_payload(
     )
 
 
+def build_wallbox_charge_action_payload(
+    ev_sn: str,
+    device_sn: str,
+    *,
+    action: Literal["start", "stop"],
+    seq: int = 0,
+) -> bytes:
+    """Build EVChargingAppCtrl (209/100): start or stop a PowerPulse 1 session.
+
+    Sent on the PowerOcean's own set topic, the same way the app writes it
+    (#731, four app writes of one recording). `pdata` is field 1 the wallbox's
+    16-character serial and field 2 the control: 2 starts charging, 1 stops
+    it. The envelope is the one of the setting writes (`cmd_id` aside). The
+    parameter write the app sends after it is not part of this command.
+
+    Raises:
+        ValueError: if `action` is not "start" or "stop", or a serial is not
+            16 alphanumeric ASCII characters.
+    """
+    if action not in ("start", "stop"):
+        raise ValueError(f"action must be 'start' or 'stop', got {action!r}")
+    _validate_powerpulse_serial("ev_sn", ev_sn)
+    _validate_powerpulse_serial("device_sn", device_sn)
+    pdata = encode_field_bytes(1, ev_sn.encode("ascii")) + encode_field_varint(
+        2, 2 if action == "start" else 1
+    )
+    return _build_powerocean_set_envelope(
+        pdata,
+        cmd_id=100,
+        seq=seq,
+        device_sn=device_sn,
+        check_type=None,
+        product_id=1,
+        version=19,
+        source="android",
+        cmd_func=209,
+    )
+
+
 def build_work_mode_set_payload(work_mode: int, seq: int = 0) -> bytes:
     """Build SysWorkModeSet (cmd_id=98) for PowerOcean work mode selection.
 
