@@ -379,6 +379,7 @@ async def test_the_buttons_refuse_once_the_reported_wallbox_is_a_powerpulse2(
     ocean = _ocean(hass)
     _report(ocean, "finishing", PP1_SN)
     buttons = await _buttons(hass, ocean)
+    assert set(buttons) == {"ev_start_charging", "ev_stop_charging"}
     assert all(b.available for b in buttons.values())
     ocean.set_device_value("ev_charger_sn", PP2_SN)
     assert not any(b.available for b in buttons.values())
@@ -413,8 +414,9 @@ async def test_the_other_valid_pairs_are_sent_and_confirmed(
 ) -> None:
     """Start from `preparing` ends on `charging`, stop from `charging` on
     `available`. No recorded frame shows these statuses: the status values are
-    set by hand on a recorded status report, the serial and the rest are the
-    recording's.
+    set by hand on a recorded status report, and so is the serial, because
+    `_frame` replaces the recording's masked serial with the dummy PowerPulse 1
+    serial. Only the rest of the frame is the recording's.
 
     Mutation probe: removing `preparing` from the start precondition refuses
     the first case; removing `available` from the stop confirmations leaves the
