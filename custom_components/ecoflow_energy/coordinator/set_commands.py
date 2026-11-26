@@ -3289,6 +3289,21 @@ class SetCommandsMixin(_Base):
         tied to the rod it was addressed to (`require`): a report carrying
         another rod's serial does not confirm it.
 
+        A report that confirms the write while the publish still waits for the
+        broker's acknowledgement settles it, whatever the publish returns.
+        The confirmation window counts from the end of the publish wait, so a
+        write fails at most the publish acknowledgement timeout
+        (`PUBLISH_ACK_TIMEOUT_S`, 5 s) plus `POWERGLOW_WRITE_WINDOW_S` after it
+        was sent, the same as the PowerPulse 2 writes. A call cancelled while
+        its command is being sent clears its record at once, so a later write
+        is checked against the state reported before the cancelled one took
+        effect (the same choice as the PowerPulse 2 bodies: a record that
+        outlived a cancelled call would refuse every later write). The
+        messages of one frame are merged key by key before the resolver sees
+        them, so the serial and the value are only known to belong together
+        while a frame carries one accessory of a kind; one per kind is all
+        that is on record.
+
         Preconditions run in this order, each with its own translated error:
         shutdown, Enhanced Mode with a live MQTT connection, the rod's serial
         as reported, `validate(serial)` (the caller's range check, which needs
@@ -3375,13 +3390,17 @@ class SetCommandsMixin(_Base):
                 require=(serial_key, sn),
             )
             # The record lives exactly as long as this call and is cleared on
-            # every exit in the `finally` below.
+            # every exit, in the `except` and `finally` below.
             self._pending_write = record
             try:
                 delivered = await self.async_send_proto_set_command(
                     payload, f"{kind}_{action}"
                 )
-                if not delivered:
+                # A report that already confirmed the write outranks whatever
+                # the publish returned (not connected, a failed send, a late
+                # acknowledgement timeout). A future cancelled at shutdown is
+                # not a confirmation.
+                if not delivered and not (future.done() and not future.cancelled()):
                     self._log_event(f"{kind}_{action}_not_delivered", "")
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
@@ -3502,9 +3521,10 @@ class SetCommandsMixin(_Base):
 
         `key` is the entity key: `ev_charge_mode` with the option `fast` or
         `solar`, or one of the three switches with on/off. Confirmed on the
-        next `209/8` report from the same wallbox; the ack is not waited for
-        (the first recorded write got none, its report still arrived). Lock,
-        record and wait: `_async_powerglow_write`.
+        next `209/8` report from the same wallbox; the device's own
+        acknowledgement is not waited for (the first recorded write got none,
+        its report still arrived), the broker's is (the command is published
+        with `wait=True`). Lock, record and wait: `_async_powerglow_write`.
         """
         from ..ecoflow.energy_stream import WALLBOX_WORK_MODES
 

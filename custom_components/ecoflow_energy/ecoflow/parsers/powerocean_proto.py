@@ -910,7 +910,9 @@ def remap_ev_charging_keys(raw: dict[str, Any]) -> dict[str, Any]:
         if sensor_key == "ev_charge_status":
             mapped = _EV_CHARGE_STATUS_MAP.get(str(value))
             # An unknown state would crash the enum sensor with "not in list
-            # of options", so it is dropped rather than passed through.
+            # of options", so it is dropped rather than passed through. The
+            # last known status therefore stays in place for every later
+            # reader of it.
             if mapped is not None:
                 result[sensor_key] = mapped
             continue
