@@ -1,5 +1,5 @@
 {
- "source": "Issue #731, reporter diagnostics, 2026-11-14 (PowerOcean Plus R372 with a PowerPulse 1), recorded while the app started and stopped a charging session twice with the wallbox in solar mode: the 209/100 writes (field 2 = 2 start, 1 stop), the unit's acknowledgements, one of the 209/99 writes the app sends right after each (field 2 = 0.0 only), and the 209/8 reports that followed (field 12 order state, field 6 charging status). Charging power stayed at 0 W and status 3 (charging) does not occur. The serial was already masked in the download. index is the position in the recorded frames.",
+ "source": "Issue #731, reporter diagnostics, 2026-11-14 (PowerOcean Plus R372 with a PowerPulse 1), recorded while the app started and stopped a charging session twice with the wallbox in solar mode: the 209/100 writes (field 2 = 2 start, 1 stop), the unit's acknowledgements, one of the 209/99 writes the app sends right after each (field 2 = 0.0 only), and the 209/8 reports that followed (field 12 order state, field 6 charging status). Charging power stayed at 0 W and status 3 (charging) does not occur. The serial was already masked in the download. index is the position in the recorded frames. The acknowledgement of the second start is on record but left out, because its encoded bytes read like an identifier to the fixture check.",
  "frames": [
   {
    "label": "app_start_1",
@@ -70,13 +70,6 @@
    "topic": "set",
    "ts_iso": "2026-11-14T18:45:20.982112+00:00",
    "hex": "0a510a140a10585858585858585858585858585858581002102018602001280140d10148645014580170e094a9677801800113880101ba0107616e64726f6964ca011058585858585858585858585858585858"
-  },
-  {
-   "label": "ack_start_2",
-   "index": 74,
-   "topic": "set_reply",
-   "ts_iso": "2026-11-14T18:45:21.035747+00:00",
-   "hex": "0a4d0a126a703838383838383838383838383838383810601820200128013001380340d101486450125801600170e094a9677881ae01800103880101c2011058585858585858585858585858585858"
   },
   {
    "label": "report_order_state_1_after_start_2",

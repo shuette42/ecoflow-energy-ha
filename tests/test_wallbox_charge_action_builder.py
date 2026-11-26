@@ -14,18 +14,17 @@ from pathlib import Path
 from typing import Any, Literal
 
 import pytest
-
-from custom_components.ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
-from custom_components.ecoflow_energy.ecoflow.energy_stream import (
+from ecoflow_energy.ecoflow.const import DEVICE_TYPE_POWEROCEAN
+from ecoflow_energy.ecoflow.energy_stream import (
     build_wallbox_charge_action_payload,
 )
-from custom_components.ecoflow_energy.ecoflow.parsers.powerocean_proto import (
+from ecoflow_energy.ecoflow.parsers.powerocean_proto import (
     remap_ev_charging_keys,
 )
-from custom_components.ecoflow_energy.ecoflow.proto.decoder import (
+from ecoflow_energy.ecoflow.proto.decoder import (
     decode_header_message,
 )
-from custom_components.ecoflow_energy.ecoflow.proto.runtime import (
+from ecoflow_energy.ecoflow.proto.runtime import (
     decode_proto_runtime_headers,
 )
 
