@@ -412,6 +412,154 @@ def _mask_anchored_strings(payload: bytes) -> bytes:
     return bytes(out)
 
 
+# A wallbox keeps the id the app assigns to a vehicle in the owner's account
+# in the commands that start a charge, set a timer or report the settings:
+# a whole length-delimited string of three or four digits, in a field that
+# differs by command. Across the fixtures this project tracks it sits in 283
+# fields of 15 files, and in 12 more inside hex literals of two test sources;
+# frames like these reach diagnostics downloads attached to public issues. No
+# pass above sees it: it is too short for the serial shape, and in 251 of the
+# 283 fixture fields no serial sits beside it for the anchored pass to use
+# (2/133: 26, 2/34: 86, 241/3: 75, 241/44: 64; with a serial: 209/8: 22,
+# 2/37: 10). Both obvious widenings were rejected. Masking any short digit
+# field would hit the readings of every Stream and the bytes of packed varints,
+# and lowering the floor of the anchored pass would still miss those 251 and
+# start to hit strings such as `ios` that name a platform and nobody.
+#
+# So the rule goes by place. `_VEHICLE_ID_PATHS` names, per command, the
+# fields (counted from the start of the command's own payload) that hold an
+# id, and a field qualifies only when all of it is digits. There is no upper
+# bound on the length, because a cap would leave part of a long value in
+# clear. A device sends `-1` where no vehicle is set, and that is not digits.
+# The fixture gate imports `_vehicle_id_fields` so it sees what the product
+# sees.
+#
+# Two limits are accepted. A header that declares the XOR key with a `seq` but
+# sends plain bytes is not walked on the wire, because ciphertext read as
+# fields can match a path by chance and the splice would keep that damage, and
+# its region is walked under the key, where plain bytes are noise. Its id stays
+# readable there. And a bundle of several headers with empty `pdata` and one
+# shared field-2 payload gets no span at all, the same reading
+# `_encrypted_regions` has of it, so an id in that payload stays readable too.
+# The corpus holds neither frame. A header that declares the key but names no
+# `seq` is not one of these: it is read as key 0, because a `seq` of zero is
+# not sent on the wire, and is walked as plain. No such frame is on file, and
+# the parse path returns nothing for such a header.
+#
+# Every row below was measured on recorded frames except (209, 103): no frame
+# of it is on file. It is the command that writes the id to the wallbox, taken
+# from that command's layout as the vendor's web client uses it.
+_VEHICLE_ID_PATHS: dict[tuple[int, int], tuple[tuple[int, ...], ...]] = {
+    (209, 8): ((13,), (14,)),
+    (209, 103): ((2,), (3,)),
+    (241, 3): ((4, 7, 1), (4, 7, 2)),
+    (241, 44): ((1, 4, 8, 5, 1), (1, 4, 8, 5, 2)),
+    (2, 34): ((7,), (8,)),
+    (2, 133): ((4,),),
+    (2, 37): ((1, 7),),
+}
+_VEHICLE_ID = re.compile(rb"[0-9]+")
+# Stands for "a plaintext whose command is unknown" so that a region without a
+# command is never read as a whole frame.
+_NO_COMMAND = (-1, -1)
+
+
+def _vehicle_id_spans(
+    payload: bytes, start: int, end: int, paths: tuple[tuple[int, ...], ...]
+) -> list[tuple[int, int]]:
+    """Spans of every all-digit field at one of `paths` inside one message.
+
+    Repeated fields are walked at every occurrence. The walk follows only the
+    prefixes of `paths`, stops at the first field it cannot read and keeps
+    what it found.
+    """
+    from .proto.decoder import _read_varint
+
+    found: list[tuple[int, int]] = []
+    mv = memoryview(payload)
+
+    def walk(first: int, last: int, prefix: tuple[int, ...]) -> None:
+        i = first
+        while i < last:
+            key, i = _read_varint(mv, i)
+            if key is None:
+                return
+            fn, wt = key >> 3, key & 0x07
+            if wt == 0:
+                val, i = _read_varint(mv, i)
+                if val is None:
+                    return
+            elif wt == 2:
+                length, i = _read_varint(mv, i)
+                if length is None or i + length > last:
+                    return
+                here = prefix + (fn,)
+                if here in paths:
+                    if _VEHICLE_ID.fullmatch(payload, i, i + length):
+                        found.append((i, i + length))
+                elif any(p[: len(here)] == here for p in paths):
+                    walk(i, i + length, here)
+                i += length
+            elif wt == 1:
+                i += 8
+            elif wt == 5:
+                i += 4
+            else:
+                return
+
+    walk(start, end, ())
+    return found
+
+
+def _vehicle_id_fields(
+    payload: bytes, cmd: tuple[int, int] | None = None
+) -> list[tuple[int, int]]:
+    """Spans of every wallbox vehicle id in `payload`.
+
+    With `cmd` set, `payload` is the plaintext payload of that command. With
+    none, it is a frame: each header's `pdata` (or the frame's field-2 payload
+    when the frame has one header, as `_encrypted_regions` reads it) is walked
+    under the command that header names, and a header with `enc_type == 1` and
+    a `seq` is skipped, since its bytes are ciphertext until `sanitize_frame`
+    has undone the mask. Without a `seq` the key is 0 and the bytes are plain.
+    Never raises: a capture path never affects ingest.
+    """
+    try:
+        if cmd is not None:
+            paths = _VEHICLE_ID_PATHS.get(cmd, ())
+            return _vehicle_id_spans(payload, 0, len(payload), paths) if paths else []
+        found: list[tuple[int, int]] = []
+        headers, payload_span = _walk_headers(payload)
+        for fields in headers:
+            if fields.get("enc_type") == _ENC_TYPE_XOR and isinstance(
+                fields.get("seq"), int
+            ):
+                continue
+            func, ident = fields.get("cmd_func"), fields.get("cmd_id")
+            if func is None or ident is None:
+                continue
+            paths = _VEHICLE_ID_PATHS.get((func, ident), ())
+            span = fields.get("pdata_span")
+            if span is None or span[1] <= span[0]:
+                span = payload_span if len(headers) == 1 else None
+            if paths and span is not None:
+                found.extend(_vehicle_id_spans(payload, span[0], span[1], paths))
+        return found
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _mask_vehicle_ids(payload: bytes, cmd: tuple[int, int] | None) -> bytes:
+    """Mask every span `_vehicle_id_fields` finds, length preserved."""
+    spans = _vehicle_id_fields(payload, cmd)
+    if not spans:
+        return payload
+    out = bytearray(payload)
+    for start, end in spans:
+        out[start:end] = _MASK_BYTE * (end - start)
+    return bytes(out)
+
+
 # A Smart Home Panel 2 (`HD31`) reports where it is installed as one text
 # field of its plain settings frame: a country, a town, an empty part, then
 # longitude and latitude with fourteen decimals, e.g.
@@ -642,17 +790,22 @@ def _mask_serial_run(match: re.Match[bytes]) -> bytes:
     return _MASK_BYTE * len(run)
 
 
-def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
+def _plain_passes(
+    payload: bytes, secrets: list[str], cmd: tuple[int, int] | None = None
+) -> bytes:
     """Every mask this module applies, over bytes that are already plain.
 
     Named identifiers are masked first, then anything written as a MAC
     address, then any string that shares a protobuf message with a serial,
-    then anything else shaped like a serial, then anything written as a UUID,
-    then a lower-case hex run a hyphen joins to a serial-shaped run, then the
-    city half of any time zone the device reports, then anything a device
-    presents as a whole length-delimited field of identifier-shaped
-    characters, and last every span `_coordinate_spans` found. The MAC pass
-    sits ahead of the anchored one because the `X` run it writes is itself
+    then the wallbox vehicle id by its place in the command (`cmd` names the
+    command when `payload` is the plaintext of one region, else the frame's own
+    headers say), then anything else shaped like a serial, then anything
+    written as a UUID, then a lower-case hex run a hyphen joins to a
+    serial-shaped run, then the city half of any time zone the device
+    reports, then anything a device presents as a whole length-delimited
+    field of identifier-shaped characters, and last every span
+    `_coordinate_spans` found. The MAC pass sits ahead of the anchored one
+    because the `X` run it writes is itself
     serial-shaped and anchors its message: run after the anchored pass, it
     left a neighbouring string for a second `sanitize_frame` to mask. Hex
     digits and separators never carry a length or a tag byte, so masking them
@@ -698,6 +851,9 @@ def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
     # neighbour for the second `sanitize_frame` to mask.
     sanitized = _MAC_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
     sanitized = _mask_anchored_strings(sanitized)
+    # The serial pass is greedy and can take a tag byte beside a digit string,
+    # which would blind the walk that finds the id by its place.
+    sanitized = _mask_vehicle_ids(sanitized, cmd)
     sanitized = _SERIAL_RUN.sub(_mask_serial_run, sanitized)
     sanitized = _UUID_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
     sanitized = _JOINED_HEX_RUN.sub(lambda m: _MASK_BYTE * len(m.group()), sanitized)
@@ -719,6 +875,8 @@ def _plain_passes(payload: bytes, secrets: list[str]) -> bytes:
 _ENC_TYPE_XOR = 1
 _HDR_FIELD_PDATA = 1
 _HDR_FIELD_ENC_TYPE = 6
+_HDR_FIELD_CMD_FUNC = 8
+_HDR_FIELD_CMD_ID = 9
 _HDR_FIELD_SEQ = 14
 
 
@@ -727,12 +885,15 @@ class _EncRegion(NamedTuple):
 
     ``key`` is ``None`` when the header set ``enc_type`` but named no
     ``seq`` - the span exists but there is nothing to derive a key from, so
-    the region is walked and then left alone rather than guessed at.
+    the region is walked and then left alone rather than guessed at. ``cmd``
+    is the ``(cmd_func, cmd_id)`` the header names, ``None`` when it names
+    neither.
     """
 
     start: int
     end: int
     key: int | None
+    cmd: tuple[int, int] | None = None
 
 
 def _header_fields(mv: memoryview, start: int, end: int) -> dict[str, Any]:
@@ -759,6 +920,10 @@ def _header_fields(mv: memoryview, start: int, end: int) -> dict[str, Any]:
                 out["enc_type"] = val
             elif fn == _HDR_FIELD_SEQ:
                 out["seq"] = val
+            elif fn == _HDR_FIELD_CMD_FUNC:
+                out["cmd_func"] = val
+            elif fn == _HDR_FIELD_CMD_ID:
+                out["cmd_id"] = val
         elif wt == 2:
             length, i = _read_varint(mv, i)
             if length is None:
@@ -776,6 +941,66 @@ def _header_fields(mv: memoryview, start: int, end: int) -> dict[str, Any]:
         else:
             break
     return out
+
+
+def _walk_headers(
+    payload: bytes,
+) -> tuple[list[dict[str, Any]], tuple[int, int] | None]:
+    """Fields of every header of a frame, and the span of its field-2 payload.
+
+    The outer walk `_encrypted_regions` and `_vehicle_id_fields` share: field 1
+    (wire type 2) is a repeatable header submessage, field 2 (wire type 2) is
+    the payload, everything else is skipped by wire type. Each header's dict is
+    what `_header_fields` read. Stops at the first field it cannot read and
+    keeps what it read; callers wrap it so a malformed frame never raises.
+    """
+    from .proto.decoder import _read_varint
+
+    mv = memoryview(payload)
+    n = len(mv)
+    i = 0
+    header_spans: list[tuple[int, int]] = []
+    payload_span: tuple[int, int] | None = None
+    while i < n:
+        field_key, i = _read_varint(mv, i)
+        if field_key is None:
+            break
+        fn, wt = field_key >> 3, field_key & 0x07
+        if fn == 1 and wt == 2:
+            length, i = _read_varint(mv, i)
+            if length is None:
+                break
+            end = i + length
+            if end > n:
+                break
+            header_spans.append((i, end))
+            i = end
+        elif fn == 2 and wt == 2:
+            length, i = _read_varint(mv, i)
+            if length is None:
+                break
+            end = i + length
+            if end > n:
+                break
+            payload_span = (i, end)
+            i = end
+        elif wt == 0:
+            val, i = _read_varint(mv, i)
+            if val is None:
+                break
+        elif wt == 1:
+            i += 8
+        elif wt == 2:
+            length, i = _read_varint(mv, i)
+            if length is None:
+                break
+            i += length
+        elif wt == 5:
+            i += 4
+        else:
+            break
+    headers = [_header_fields(mv, start, end) for start, end in header_spans]
+    return headers, payload_span
 
 
 def _encrypted_regions(payload: bytes) -> list[_EncRegion]:
@@ -801,64 +1026,24 @@ def _encrypted_regions(payload: bytes) -> list[_EncRegion]:
     path must never affect ingest.
     """
     try:
-        from .proto.decoder import _read_varint
-
-        mv = memoryview(payload)
-        n = len(mv)
-        i = 0
-        header_spans: list[tuple[int, int]] = []
-        payload_span: tuple[int, int] | None = None
-        while i < n:
-            field_key, i = _read_varint(mv, i)
-            if field_key is None:
-                break
-            fn, wt = field_key >> 3, field_key & 0x07
-            if fn == 1 and wt == 2:
-                length, i = _read_varint(mv, i)
-                if length is None:
-                    break
-                end = i + length
-                if end > n:
-                    break
-                header_spans.append((i, end))
-                i = end
-            elif fn == 2 and wt == 2:
-                length, i = _read_varint(mv, i)
-                if length is None:
-                    break
-                end = i + length
-                if end > n:
-                    break
-                payload_span = (i, end)
-                i = end
-            elif wt == 0:
-                val, i = _read_varint(mv, i)
-                if val is None:
-                    break
-            elif wt == 1:
-                i += 8
-            elif wt == 2:
-                length, i = _read_varint(mv, i)
-                if length is None:
-                    break
-                i += length
-            elif wt == 5:
-                i += 4
-            else:
-                break
-
+        headers, payload_span = _walk_headers(payload)
         regions: list[_EncRegion] = []
-        for start, end in header_spans:
-            fields = _header_fields(mv, start, end)
+        for fields in headers:
             if fields.get("enc_type") != _ENC_TYPE_XOR:
                 continue
             seq = fields.get("seq")
             region_key = (seq & 0xFF) if isinstance(seq, int) else None
+            func, ident = fields.get("cmd_func"), fields.get("cmd_id")
+            cmd = (func, ident) if func is not None and ident is not None else None
             pdata_span = fields.get("pdata_span")
             if pdata_span is not None and pdata_span[1] > pdata_span[0]:
-                regions.append(_EncRegion(pdata_span[0], pdata_span[1], region_key))
-            elif len(header_spans) == 1 and payload_span is not None:
-                regions.append(_EncRegion(payload_span[0], payload_span[1], region_key))
+                regions.append(
+                    _EncRegion(pdata_span[0], pdata_span[1], region_key, cmd)
+                )
+            elif len(headers) == 1 and payload_span is not None:
+                regions.append(
+                    _EncRegion(payload_span[0], payload_span[1], region_key, cmd)
+                )
         return regions
     except Exception:  # noqa: BLE001
         return []
@@ -1026,7 +1211,7 @@ def sanitize_frame(payload: bytes, secrets: list[str]) -> bytes:
             continue
         ciphertext = payload[region.start : region.end]
         inner = _xor(ciphertext, region.key)
-        cleaned = _plain_passes(inner, secrets)
+        cleaned = _plain_passes(inner, secrets, region.cmd or _NO_COMMAND)
         on_the_wire = sanitized[region.start : region.end]
         if cleaned == inner and on_the_wire == ciphertext:
             continue

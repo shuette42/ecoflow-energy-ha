@@ -39,7 +39,7 @@ FRAME_IDLE = bytes.fromhex(
 # header decode and the command routing as well as the field mapping.
 FRAME_CHARGING = bytes.fromhex(
     "0a8d010a600a10585858585858585858585858585858582001280130033a0800000000000000"
-    "0045009075454d0080e043500258d00560026a0336353372033635337d82af7c6a850152b27c"
+    "0045009075454d0080e043500258d00560026a0358585872035858587d82af7c6a850152b27c"
     "6a880101900105f00100f8013c800200880200900203980202106018202001 40d10148085060"
     "580178d101800103880101c20110585858585858585858585858585858580a00".replace(" ", "")
 )
@@ -94,7 +94,7 @@ class TestChargingFrame:
         result = _from_frame(FRAME_CHARGING)
 
         assert result["ev_charge_status"] == "charging"
-        assert result["ev_vehicle_id"] == "653"
+        assert result["ev_vehicle_id"] == "XXX"
 
 
 class TestIdleFrame:

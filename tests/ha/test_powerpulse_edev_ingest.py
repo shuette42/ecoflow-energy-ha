@@ -116,7 +116,7 @@ def _ev_charging_pdata(
     power_w: float = 1355.0,
     energy_wh: float = 364.0,
     duration_s: int = 1080,
-    vehicle_id: bytes = b"5274",
+    vehicle_id: bytes = b"1234",
 ) -> bytes:
     """A minimal, valid `EVChargingParamReport` payload (cmd_func 209, cmd_id
     8): only the fields `remap_ev_charging_keys` reads, built from the
@@ -305,4 +305,4 @@ async def test_a_real_209_8_frame_creates_and_fills_the_powerocean_wallbox_senso
     assert wallbox["ev_session_energy_wh"] == 364
     assert wallbox["ev_session_duration_s"] == 1080
     assert wallbox["ev_charge_status"] == "charging"
-    assert wallbox["ev_vehicle_id"] == "5274"
+    assert wallbox["ev_vehicle_id"] == "1234"

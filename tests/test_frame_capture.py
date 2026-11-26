@@ -1,5 +1,6 @@
 """Tests for the shared raw-frame capture helpers."""
 
+import contextlib
 import json
 import re
 import signal
@@ -462,10 +463,10 @@ class TestAnchoredStringMasking:
         assert result[offset : offset + 12] == b"X" * 12
 
     def test_a_string_without_a_serial_beside_it_survives(self) -> None:
-        """`653` is not serial-shaped, so the message has no anchor at all."""
+        """`123` is not serial-shaped, so the message has no anchor at all."""
         record = encode_field_varint(1, 1)
         record += encode_field_bytes(2, self.FIELD2)
-        record += encode_field_bytes(3, b"653")
+        record += encode_field_bytes(3, b"123")
         record += encode_field_bytes(7, b"plug_and_play")
         frame = self._wrap(3, record)
 
@@ -3365,3 +3366,392 @@ class TestMacAddressMasking:
     def test_a_time_a_date_and_a_mixed_window_stay_readable(self, text: bytes) -> None:
         framed = b"\x00" + text + b"\x00"
         assert _plain_passes(framed, []) == framed
+
+
+# --- Wallbox vehicle id ------------------------------------------------------
+#
+# The oracle below reads a frame with its own few lines of wire walking, so a
+# fault in the product's helper cannot hide in the check that is meant to find
+# it. The path table is a second copy of the spec on purpose.
+
+_ORACLE_PATHS: dict[tuple[int, int], list[tuple[int, ...]]] = {
+    (209, 8): [(13,), (14,)],
+    (209, 103): [(2,), (3,)],
+    (241, 3): [(4, 7, 1), (4, 7, 2)],
+    (241, 44): [(1, 4, 8, 5, 1), (1, 4, 8, 5, 2)],
+    (2, 34): [(7,), (8,)],
+    (2, 133): [(4,)],
+    (2, 37): [(1, 7)],
+}
+
+
+def _wire_varint(buf: bytes, i: int) -> tuple[int, int]:
+    value = shift = 0
+    while True:
+        byte = buf[i]
+        i += 1
+        value |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return value, i
+        shift += 7
+
+
+def _wire_fields(
+    buf: bytes, start: int, end: int
+) -> list[tuple[int, int, int, int, int]]:
+    """(field, wire type, tag start, value start, value end) of one message."""
+    out = []
+    i = start
+    while i < end:
+        tag_start = i
+        key, i = _wire_varint(buf, i)
+        fn, wt = key >> 3, key & 7
+        if wt == 0:
+            _, j = _wire_varint(buf, i)
+            out.append((fn, wt, tag_start, i, j))
+            i = j
+        elif wt == 2:
+            length, i = _wire_varint(buf, i)
+            out.append((fn, wt, tag_start, i, i + length))
+            i += length
+        elif wt in (1, 5):
+            width = 8 if wt == 1 else 4
+            out.append((fn, wt, tag_start, i, i + width))
+            i += width
+        else:
+            raise ValueError("wire type")
+    if i != end:
+        raise ValueError("overrun")
+    return out
+
+
+def _oracle_regions(frame: bytes) -> list[dict[str, Any]]:
+    """Every header of a frame with its cmd, key and pdata span."""
+    outer = _wire_fields(frame, 0, len(frame))
+    headers = [f for f in outer if f[0] == 1 and f[1] == 2]
+    payload = next((f for f in outer if f[0] == 2 and f[1] == 2), None)
+    regions = []
+    for _, _, _, hs, he in headers:
+        info: dict[str, Any] = {"cmd_func": None, "cmd_id": None, "enc": 0, "seq": 0}
+        span = None
+        for fn, wt, _, vs, ve in _wire_fields(frame, hs, he):
+            if fn == 1 and wt == 2:
+                span = (vs, ve)
+            elif wt == 0:
+                val, _ = _wire_varint(frame, vs)
+                name = {6: "enc", 8: "cmd_func", 9: "cmd_id", 14: "seq"}.get(fn)
+                if name:
+                    info[name] = val
+        if (span is None or span[0] == span[1]) and len(headers) == 1 and payload:
+            span = (payload[3], payload[4])
+        if span is None:
+            continue
+        info["span"] = span
+        info["key"] = (info["seq"] & 0xFF) if info["enc"] == 1 else 0
+        regions.append(info)
+    return regions
+
+
+def _leaves(
+    frame: bytes, table: dict[tuple[int, int], list[tuple[int, ...]]]
+) -> list[tuple[int, int, int]]:
+    """(start, end, key) of every field at a path of `table`, in frame offsets.
+
+    The walk runs over the plaintext of each region, and a span in plaintext
+    coordinates is the same span in the frame because the mask keeps length.
+    """
+    found: list[tuple[int, int, int]] = []
+    for region in _oracle_regions(frame):
+        paths = table.get((region["cmd_func"], region["cmd_id"]))
+        if not paths:
+            continue
+        start, end = region["span"]
+        plain = _xor(frame[start:end], region["key"])
+        for first, last in _walk_paths(plain, 0, len(plain), (), paths):
+            found.append((start + first, start + last, region["key"]))
+    return found
+
+
+def _walk_paths(
+    plain: bytes,
+    start: int,
+    end: int,
+    prefix: tuple[int, ...],
+    paths: list[tuple[int, ...]],
+) -> list[tuple[int, int]]:
+    """Spans of the length-delimited fields at `paths`, at every occurrence."""
+    found: list[tuple[int, int]] = []
+    for fn, wt, _, vs, ve in _wire_fields(plain, start, end):
+        if wt != 2:
+            continue
+        here = prefix + (fn,)
+        if here in paths:
+            found.append((vs, ve))
+        elif any(p[: len(here)] == here for p in paths):
+            with contextlib.suppress(ValueError, IndexError):
+                found.extend(_walk_paths(plain, vs, ve, here, paths))
+    return found
+
+
+def _fixture_frame(name: str, index: int) -> bytes:
+    path = next((Path(__file__).parent / "fixtures").rglob(f"{name}.json"))
+    return bytes.fromhex(json.loads(path.read_text())["frames"][index]["hex"])
+
+
+def _with_digit_ids(frame: bytes) -> tuple[bytes, int]:
+    """The frame with every id leaf rewritten to digits, and how many there are.
+
+    A fixture may hold the id as it was recorded or already masked, and the
+    test has to mean the same thing under both, so each leaf that is digits or
+    mask is replaced by digits of its own length. A leaf that is neither (the
+    `-1` a device sends for no vehicle) stays. Everything else in the frame is
+    sanitized first, so a serial a fixture still holds cannot be mistaken for a
+    change the id rule made.
+    """
+    frame = sanitize_frame(frame, [])
+    out = bytearray(frame)
+    count = 0
+    for start, end, key in _leaves(frame, _ORACLE_PATHS):
+        plain = _xor(frame[start:end], key)
+        if plain.isdigit() or set(plain) == {ord("X")}:
+            out[start:end] = _xor((b"7351" * 40)[: end - start], key)
+            count += 1
+    return bytes(out), count
+
+
+_VEHICLE_ID_CASES = [
+    ("r372_settings_731_20261113", 0),
+    ("r372_settings_731_20261113", 2),
+    ("r372_settings_731_20261113", 5),
+    ("r372_settings_731_20261113", 8),
+    ("r372_settings_731_20261113", 11),
+    ("r372_timer_task_731_20261112", 4),
+    ("c376_display_block_553_20261014", 0),
+    ("c376_display_block_553_20261014", 1),
+    ("c376_relayed_settings_553_20261014", 0),
+    ("c376_relayed_settings_553_20261014", 1),
+    ("c371_param_writes_20261113", 3),
+    ("c371_param_writes_20261113", 4),
+    ("c376_run_data_sync_20260824", 0),
+    ("c376_param_set_echo_20260824", 9),
+    ("c376_charging_mode_echo_20260913", 0),
+]
+_VEHICLE_ID_XOR = {
+    ("r372_settings_731_20261113", 2),
+    ("r372_settings_731_20261113", 5),
+    ("r372_settings_731_20261113", 8),
+    ("r372_settings_731_20261113", 11),
+    ("c371_param_writes_20261113", 3),
+    ("c376_run_data_sync_20260824", 0),
+    ("c376_param_set_echo_20260824", 9),
+}
+
+
+def _rekeyed(frame: bytes, key: int) -> bytes:
+    """The same frame with every XOR header re-keyed to `key` (1 to 255)."""
+    out = bytearray()
+    outer = _wire_fields(frame, 0, len(frame))
+    for fn, wt, tag_start, vs, ve in outer:
+        if not (fn == 1 and wt == 2):
+            out += frame[tag_start:ve]
+            continue
+        region = next(
+            r for r in _oracle_regions(frame) if r["span"] and vs <= r["span"][0] < ve
+        )
+        if region["enc"] != 1:
+            out += frame[tag_start:ve]
+            continue
+        header = bytearray()
+        for hfn, hwt, htag, hvs, hve in _wire_fields(frame, vs, ve):
+            if hfn == 14:
+                header += encode_field_varint(14, key)
+            elif hfn == 1 and hwt == 2:
+                plain = _xor(frame[hvs:hve], region["key"])
+                header += encode_field_bytes(1, _xor(plain, key))
+            else:
+                header += frame[htag:hve]
+        out += encode_field_bytes(1, bytes(header))
+    return bytes(out)
+
+
+class TestWallboxVehicleIdMasking:
+    """The id the app assigns a wallbox vehicle is a whole string of digits.
+
+    No existing pass sees it: it is too short for the serial shape and it has
+    no serial beside it. It is masked by its place in a named command.
+    """
+
+    @staticmethod
+    def _check(frame: bytes, out: bytes) -> None:
+        assert len(out) == len(frame)
+        leaves = _leaves(frame, _ORACLE_PATHS)
+        assert leaves
+        covered: set[int] = set()
+        for start, end, key in leaves:
+            covered.update(range(start, end))
+            before = _xor(frame[start:end], key)
+            after = _xor(out[start:end], key)
+            if before.isdigit():
+                assert after == b"X" * len(before)
+            else:
+                assert after == before
+        changed = {i for i in range(len(frame)) if frame[i] != out[i]}
+        assert changed <= covered
+        assert sanitize_frame(out, []) == out
+
+    @pytest.mark.parametrize(("name", "index"), _VEHICLE_ID_CASES)
+    def test_real_frame_masks_the_id_and_nothing_else(
+        self, name: str, index: int
+    ) -> None:
+        frame, count = _with_digit_ids(_fixture_frame(name, index))
+        assert count >= 1
+        is_xor = any(r["key"] for r in _oracle_regions(frame))
+        assert is_xor == ((name, index) in _VEHICLE_ID_XOR)
+        self._check(frame, sanitize_frame(frame, []))
+
+    @pytest.mark.parametrize(("name", "index"), sorted(_VEHICLE_ID_XOR))
+    def test_masked_under_every_key(self, name: str, index: int) -> None:
+        base, _ = _with_digit_ids(_fixture_frame(name, index))
+        for key in range(1, 256):
+            frame = _rekeyed(base, key)
+            assert any(r["key"] == key for r in _oracle_regions(frame))
+            self._check(frame, sanitize_frame(frame, []))
+
+    def test_the_no_vehicle_sentinel_survives(self) -> None:
+        frame = _fixture_frame("c376_relayed_settings_553_20261014", 1)
+        out = sanitize_frame(frame, [])
+        kept = [
+            out[s:e]
+            for s, e, k in _leaves(out, _ORACLE_PATHS)
+            if _xor(out[s:e], k) == b"-1"
+        ]
+        assert kept
+
+    def test_paths_match_the_table(self) -> None:
+        from ecoflow_energy.ecoflow.frame_capture import _VEHICLE_ID_PATHS
+
+        assert {k: [tuple(p) for p in v] for k, v in _VEHICLE_ID_PATHS.items()} == (
+            _ORACLE_PATHS
+        )
+
+    @pytest.mark.parametrize(
+        ("name", "index", "cmd", "path"),
+        [
+            ("bk_pv34_voltage_current", 0, (254, 22), (1300, 1, 1)),
+            ("p351_frames_masked", 0, (32, 50), (58,)),
+        ],
+    )
+    def test_a_digit_field_of_another_device_is_left_alone(
+        self, name: str, index: int, cmd: tuple[int, int], path: tuple[int, ...]
+    ) -> None:
+        seen = 0
+        root = Path(__file__).parent / "fixtures"
+        data = json.loads(next(root.rglob(f"{name}.json")).read_text())
+        for entry in data["frames"]:
+            frame = bytes.fromhex(entry["hex"])
+            for s, e, k in _leaves(frame, {cmd: [path]}):
+                if _xor(frame[s:e], k).isdigit():
+                    seen += 1
+                    assert sanitize_frame(frame, [])[s:e] == frame[s:e]
+        assert seen
+
+    def test_synthetic_frames(self) -> None:
+        def frame(cmd: tuple[int, int], field: int, value: bytes) -> bytes:
+            return _header(cmd[0], cmd[1], encode_field_bytes(field, value))
+
+        plain = frame((209, 8), 13, b"7351")
+        assert sanitize_frame(plain, []) == plain.replace(b"7351", b"XXXX")
+        for same in (
+            frame((209, 8), 15, b"7351"),  # path nobody registered
+            frame((1, 1), 13, b"7351"),  # command nobody registered
+            frame((209, 8), 13, b"abcd"),  # registered, but not digits
+        ):
+            assert sanitize_frame(same, []) == same
+        no_cmd = encode_field_bytes(
+            1, encode_field_bytes(1, encode_field_bytes(13, b"7351"))
+        )
+        assert sanitize_frame(no_cmd, []) == no_cmd
+
+    def test_the_helper_reads_plaintext_under_a_command_and_skips_ciphertext(
+        self,
+    ) -> None:
+        from ecoflow_energy.ecoflow.frame_capture import _vehicle_id_fields
+
+        wire = encode_field_bytes(13, b"7351") + encode_field_bytes(14, b"-1")
+        assert _vehicle_id_fields(wire, (209, 8)) == [(2, 6)]
+        assert _vehicle_id_fields(wire, (209, 9)) == []
+        # A header that declares the key but sends these bytes plain: read as
+        # ciphertext they would be fields of a path by chance, and the helper
+        # does not walk them. The id stays on the wire, the one accepted limit.
+        declared = _enc_header(209, 8, pdata_plain=_xor(wire, 7), seq=7)
+        assert _vehicle_id_fields(declared) == []
+        undeclared = _header(209, 8, wire)
+        assert len(_vehicle_id_fields(undeclared)) == 1
+
+    @pytest.mark.parametrize(
+        "junk", [b"", b"\xff" * 12, b"\x0a\x05\x08", bytes(range(64))]
+    )
+    def test_the_helper_never_raises(self, junk: bytes) -> None:
+        from ecoflow_energy.ecoflow.frame_capture import _vehicle_id_fields
+
+        assert isinstance(_vehicle_id_fields(junk), list)
+        assert isinstance(_vehicle_id_fields(junk, (241, 3)), list)
+
+    def test_a_long_id_is_masked_whole_and_its_neighbour_tag_survives(self) -> None:
+        # Sixteen digits fit the serial shape, and the tag of a varint field 6
+        # is `0`: a serial pass that ran first would take the tag with the id.
+        # No cap on the length either, or the tail of a long value stays.
+        digits = b"7351" * 4
+        tail = encode_field_varint(6, 5)
+        plain = _header(209, 8, encode_field_bytes(13, digits) + tail)
+        assert sanitize_frame(plain, []) == plain.replace(digits, b"X" * 16)
+
+    def test_a_field_that_claims_more_than_its_message_holds_is_left_alone(
+        self,
+    ) -> None:
+        # Field 1 of the inner message claims four bytes and has two; the two
+        # bytes after the whole field are digits too and are not its own.
+        inner = b"\x0a\x04" + b"73"
+        message = encode_field_bytes(4, encode_field_bytes(7, inner)) + b"51"
+        frame = _header(241, 3, message)
+        assert sanitize_frame(frame, []) == frame
+
+    @pytest.mark.parametrize("seq", [None, 256, 512])
+    def test_a_declared_key_that_is_zero_leaves_the_bytes_plain(
+        self, seq: int | None
+    ) -> None:
+        # The device leaves `seq` out when it is 0 and the key is then 0; a
+        # `seq` of 256 has a low byte of 0 too. Either way the id is plain on
+        # the wire, and the frame walk must read it and not skip the header.
+        field = encode_field_bytes(13, b"7351")
+        frame = _enc_header(209, 8, pdata_plain=field, seq=seq)
+        out = sanitize_frame(frame, [])
+        assert out == frame.replace(b"7351", b"XXXX")
+        assert len(out) == len(frame)
+        assert sanitize_frame(out, []) == out
+
+    def test_a_header_without_a_seq_is_read_by_the_frame_walk(self) -> None:
+        from ecoflow_energy.ecoflow.frame_capture import _vehicle_id_fields
+
+        field = encode_field_bytes(13, b"7351")
+        assert (
+            len(_vehicle_id_fields(_enc_header(209, 8, pdata_plain=field, seq=None)))
+            == 1
+        )
+        # With a `seq` the same bytes are ciphertext until the key is undone.
+        assert _vehicle_id_fields(_enc_header(209, 8, pdata_plain=field, seq=7)) == []
+
+    def test_a_keyed_region_without_a_command_is_not_read_as_a_frame(self) -> None:
+        # The header names no command, so its plaintext has no command to be
+        # read under. The plaintext is itself a frame with a 209/8 header
+        # carrying digits: read as a whole frame it would be masked, and it
+        # is not a vehicle command, so it must stay as it is.
+        inner = _header(209, 8, encode_field_bytes(13, b"7351"))
+        key = 7
+        header = (
+            encode_field_varint(6, 1)
+            + encode_field_varint(14, key)
+            + encode_field_bytes(1, _xor(inner, key))
+        )
+        frame = encode_field_bytes(1, header)
+        assert sanitize_frame(frame, []) == frame

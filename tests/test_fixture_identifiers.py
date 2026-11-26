@@ -14,14 +14,18 @@ and a fixture added tomorrow is covered without anyone remembering to add it.
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from pathlib import Path
 
 import pytest
+from ecoflow_energy.ecoflow import frame_capture
 from ecoflow_energy.ecoflow.frame_capture import (
+    _NO_COMMAND,
     _anchored_string_fields,
     _encrypted_regions,
+    _vehicle_id_fields,
     _xor,
     sanitize_frame,
 )
@@ -151,6 +155,28 @@ def test_the_fixture_tree_is_not_empty() -> None:
     assert len(files) >= 6, [str(p) for p in files]
 
 
+def _vehicle_id_findings(raw: bytes) -> list[str]:
+    """Unmasked wallbox vehicle ids in a frame, on the wire and under the mask.
+
+    The product's own walker decides what an id is (a digits-only string at a
+    registered command path), so the gate and the sanitizer cannot disagree.
+    A finding names the length, never the value.
+    """
+    findings = [
+        f"unmasked vehicle id, len {end - start}"
+        for start, end in _vehicle_id_fields(raw)
+    ]
+    for region in _encrypted_regions(raw):
+        if region.key is None:
+            continue
+        inner = _xor(raw[region.start : region.end], region.key)
+        findings.extend(
+            f"unmasked vehicle id under the mask, len {end - start}"
+            for start, end in _vehicle_id_fields(inner, region.cmd or _NO_COMMAND)
+        )
+    return findings
+
+
 def _leaks(raw: bytes) -> list[str]:
     """Every identifier a masked frame should no longer carry, as messages.
 
@@ -160,7 +186,8 @@ def _leaks(raw: bytes) -> list[str]:
     the frame text, an unmasked identifier run, the same three checks again on
     every region an `enc_type == 1` header XOR-hides (PLAN-128), and a
     neighbour's name or short id sitting beside its own serial
-    (`_anchored_string_fields`, PLAN-133, ADR-025).
+    (`_anchored_string_fields`, PLAN-133, ADR-025), and a wallbox vehicle id
+    (`_vehicle_id_findings`).
     """
     findings: list[str] = []
     text = raw.decode("latin1")
@@ -253,6 +280,7 @@ def _leaks(raw: bytes) -> list[str]:
                 f"unmasked string beside a serial under the mask {decoded!r}"
             )
 
+    findings.extend(_vehicle_id_findings(raw))
     return findings
 
 
@@ -610,3 +638,221 @@ def test_the_mask_tolerates_a_tail_below_the_identifier_threshold() -> None:
     assert not _is_masked(mask + "ABCDEFGHIJKL")
     assert not _is_masked("ABCDEFGHIJKL" + mask)
     assert not _is_masked("ABCDEF" + mask + "GHIJKL")
+
+
+def _fixture_frames(*parts: str) -> list[bytes]:
+    path = FIXTURE_ROOT.joinpath(*parts)
+    return [
+        bytes.fromhex(frame.get("hex") or frame["frame_hex"])
+        for frame in _frames(json.loads(path.read_text()))
+        if frame.get("hex") or frame.get("frame_hex")
+    ]
+
+
+def _with_ids_restored(
+    raw: bytes, monkeypatch: pytest.MonkeyPatch
+) -> tuple[bytes, int]:
+    """A masked fixture frame with made-up digits where its vehicle ids were.
+
+    The mask `X` is not a digit, so the product walker is pointed at `X` runs
+    for this one call. XOR is bytewise: a digit written into a keyed region's
+    plaintext goes on the wire as `digit ^ key`.
+    """
+    out = bytearray(raw)
+    restored = 0
+    with monkeypatch.context() as patch:
+        patch.setattr(frame_capture, "_VEHICLE_ID", re.compile(rb"X+"))
+        for start, end in _vehicle_id_fields(raw):
+            for at in range(start, end):
+                out[at] = ord("1") + at % 9
+            restored += 1
+        for region in _encrypted_regions(raw):
+            if region.key is None:
+                continue
+            inner = _xor(raw[region.start : region.end], region.key)
+            for start, end in _vehicle_id_fields(inner, region.cmd or _NO_COMMAND):
+                for at in range(start, end):
+                    out[region.start + at] = (ord("1") + at % 9) ^ region.key
+                restored += 1
+    return bytes(out), restored
+
+
+def test_the_gate_sees_a_vehicle_id_on_the_wire(monkeypatch) -> None:
+    """Positive control: a plain frame whose id is put back is reported."""
+    frame = _fixture_frames("powerpulse", "r372_settings_731_20261113.json")[0]
+    assert _leaks(frame) == []
+    leaky, restored = _with_ids_restored(frame, monkeypatch)
+    assert restored > 0
+    findings = _leaks(leaky)
+    assert any(f.startswith("unmasked vehicle id, len") for f in findings), findings
+    assert _leaks(sanitize_frame(leaky, [])) == []
+
+
+def test_the_gate_sees_a_vehicle_id_under_the_mask(monkeypatch) -> None:
+    """Positive control for the region branch: the id sits under the XOR key."""
+    frame = _fixture_frames("powerpulse", "r372_settings_731_20261113.json")[2]
+    assert _leaks(frame) == []
+    leaky, restored = _with_ids_restored(frame, monkeypatch)
+    assert restored > 0
+    findings = _leaks(leaky)
+    assert any("unmasked vehicle id under the mask" in f for f in findings), findings
+    assert _leaks(sanitize_frame(leaky, [])) == []
+
+
+def _plain_header_frame(cmd: tuple[int, int], pdata: bytes) -> bytes:
+    """One plain header (no `enc_type`) naming `cmd`, carrying `pdata`."""
+    header = (
+        encode_field_bytes(1, pdata)
+        + encode_field_varint(8, cmd[0])
+        + encode_field_varint(9, cmd[1])
+    )
+    return encode_field_bytes(1, header)
+
+
+def test_the_gate_is_quiet_on_a_digit_leaf_off_the_vehicle_path() -> None:
+    """Negative control: a digits-only leaf at 254/22 is a reading, not an id.
+
+    The leaf must be there, or the control proves nothing: the same path is
+    walked here under a registered table, and every digit leaf it finds is one
+    the real table leaves alone.
+    """
+    frames = _fixture_frames("stream", "bk_pv34_voltage_current.json")
+    assert frames
+    digit_leaves = 0
+    for frame in frames:
+        headers, _ = frame_capture._walk_headers(frame)
+        for fields in headers:
+            if (fields.get("cmd_func"), fields.get("cmd_id")) != (254, 22):
+                continue
+            start, end = fields["pdata_span"]
+            digit_leaves += len(
+                frame_capture._vehicle_id_spans(frame, start, end, ((1300, 1, 1),))
+            )
+        assert _vehicle_id_fields(frame) == []
+        assert _leaks(frame) == []
+    assert digit_leaves > 0
+
+
+def test_the_gate_is_quiet_on_a_registered_path_shape_under_another_command() -> None:
+    """Negative control: field 13 of 209/8 is an id, the same field of 254/22 is not."""
+    on_path = _plain_header_frame((209, 8), encode_field_bytes(13, b"7351"))
+    assert len(_vehicle_id_fields(on_path)) == 1
+    off_path = _plain_header_frame((254, 22), encode_field_bytes(13, b"7351"))
+    assert _vehicle_id_fields(off_path) == []
+    assert _leaks(off_path) == []
+    assert sanitize_frame(off_path, []) == off_path
+
+
+def test_the_gate_sees_a_vehicle_id_in_a_header_that_names_no_seq() -> None:
+    """Positive control: the device omits `seq` when it is 0, so the key is 0.
+
+    A header with `enc_type == 1` and no `seq` carries plain bytes. The wire
+    walk must read it, or an id in it passes the gate and the sanitizer alike.
+    """
+    header = (
+        encode_field_varint(6, 1)
+        + encode_field_varint(8, 209)
+        + encode_field_varint(9, 8)
+        + encode_field_bytes(1, encode_field_bytes(13, b"7351"))
+    )
+    frame = encode_field_bytes(1, header)
+    findings = _vehicle_id_findings(frame)
+    assert findings == ["unmasked vehicle id, len 4"], findings
+    assert _leaks(sanitize_frame(frame, [])) == []
+
+
+def test_the_gate_is_quiet_on_the_no_vehicle_sentinel() -> None:
+    """Negative control: `-1` is the placeholder for "no car" and stays."""
+    frame = _fixture_frames("powerpulse", "c376_relayed_settings_553_20261014.json")[1]
+    assert b"-1" in frame
+    assert _vehicle_id_fields(frame) == []
+    assert _leaks(frame) == []
+
+
+# A frame shorter than this has no room for a header and an id beside it.
+_HEX_LITERAL_FLOOR = 16
+
+
+def _folded(node: ast.AST) -> str | bytes | None:
+    """The value of a str or bytes constant, or of constants joined with `+`."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, (str, bytes)):
+        return node.value
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        left, right = _folded(node.left), _folded(node.right)
+        if isinstance(left, str) and isinstance(right, str):
+            return left + right
+        if isinstance(left, bytes) and isinstance(right, bytes):
+            return left + right
+    return None
+
+
+def _hex_literals_in(source: str, where: str) -> list[tuple[str, bytes]]:
+    """Every frame-sized constant in a source: a hex string, or a bytes value.
+
+    A literal split with `+` is folded before it is read, and a `b"\\x.."`
+    constant is the frame itself.
+    """
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        value = _folded(node)
+        if value is None or not isinstance(node, (ast.Constant, ast.BinOp)):
+            continue
+        if isinstance(value, bytes):
+            raw = value
+        else:
+            text = re.sub(r"\s", "", value)
+            if not re.fullmatch(r"(?:[0-9a-fA-F]{2})+", text):
+                continue
+            raw = bytes.fromhex(text)
+        if len(raw) >= _HEX_LITERAL_FLOOR:
+            found.append((f"{where}:{node.lineno}", raw))
+    return found
+
+
+def _hex_literals() -> list[tuple[str, bytes]]:
+    """Every frame-sized constant in the test sources."""
+    found = []
+    for path in sorted(Path(__file__).parent.rglob("*.py")):
+        found.extend(_hex_literals_in(path.read_text(encoding="utf-8"), path.name))
+    return found
+
+
+def test_the_literal_scan_folds_a_plus_split_hex_string() -> None:
+    source = 'FRAME = "0a0b0c0d0e0f1011" + "1213141516171819"\n'
+    assert _hex_literals_in(source, "t.py") == [
+        ("t.py:1", bytes.fromhex("0a0b0c0d0e0f10111213141516171819"))
+    ]
+    assert _hex_literals_in('FRAME = "0a0b0c0d" + "0e0f1011"\n', "t.py") == []
+
+
+def test_the_literal_scan_reads_a_triple_quoted_hex_string_over_two_lines() -> None:
+    source = 'FRAME = """0a0b0c0d0e0f1011\n1213141516171819"""\n'
+    assert _hex_literals_in(source, "t.py") == [
+        ("t.py:1", bytes.fromhex("0a0b0c0d0e0f10111213141516171819"))
+    ]
+
+
+def test_the_literal_scan_decodes_a_bytes_constant() -> None:
+    source = 'FRAME = b"' + "\\x0a\\x35" * 8 + '"\n'
+    assert _hex_literals_in(source, "t.py") == [("t.py:1", b"\x0a\x35" * 8)]
+    assert _hex_literals_in('FRAME = b"\\x0a\\x35"\n', "t.py") == []
+
+
+def test_the_literal_scan_reaches_down_to_sixteen_bytes() -> None:
+    assert len(_hex_literals_in(f'FRAME = "{"0a" * 16}"\n', "t.py")) == 1
+    assert _hex_literals_in(f'FRAME = "{"0a" * 15}"\n', "t.py") == []
+    assert (
+        _hex_literals_in('FRAME = "not a hex literal at all, just words"\n', "t") == []
+    )
+
+
+def test_no_hex_literal_in_a_test_source_carries_a_vehicle_id() -> None:
+    """The fixture tree is not the only place real frames sit.
+
+    A frame pasted into a test as a hex literal reached this repo with its
+    wallbox vehicle ids unmasked, because only `tests/fixtures` was walked.
+    """
+    literals = _hex_literals()
+    assert len(literals) >= 20, len(literals)
+    dirty = {where: f for where, raw in literals if (f := _vehicle_id_findings(raw))}
+    assert dirty == {}, dirty
