@@ -263,6 +263,35 @@ async def test_publish_not_delivered_clears_the_record(hass: HomeAssistant) -> N
     assert wallbox._pending_write is None
 
 
+async def test_a_report_during_the_publish_confirms_even_if_the_ack_fails(
+    hass: HomeAssistant,
+) -> None:
+    """A device report that lands while the publish is still waiting for its
+    broker acknowledgement settles the write, whatever the publish then
+    returns: the stand-in applies the confirming report and then returns False
+    (the acknowledgement timed out after the report came in). The call returns
+    and the record is cleared.
+
+    Mutation probe: reverting the `_report_confirmed(future)` guard at this
+    site in `set_commands.py` to a bare `if not delivered:` raises
+    `powerpulse_action_not_delivered` here.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 1)
+
+    async def _report_then_ack_timeout(payload: bytes, label: str) -> bool:
+        _apply_frame(wallbox, _fixture_frame_hex(0))  # ev_max_current_a -> 11.0
+        return False
+
+    oceans[0].async_send_proto_set_command = _report_then_ack_timeout
+
+    await wallbox.async_set_powerpulse_max_current(11)
+
+    assert wallbox._pending_write is None
+    assert wallbox._device_data["ev_max_current_a"] == 11.0
+
+
 async def test_timeout_raises_and_names_the_last_reported_value(
     hass: HomeAssistant,
 ) -> None:
@@ -389,3 +418,37 @@ async def test_a_pending_max_current_write_refuses_a_start_press(
 
     assert excinfo.value.translation_key == "powerpulse_action_in_progress"
     assert _mqtt(oceans[0]).send_proto_set.call_count == 0
+
+
+async def test_a_future_cancelled_at_shutdown_is_not_a_confirmation(
+    hass: HomeAssistant,
+) -> None:
+    """The shutdown cancels the pending future while the publish is held and
+    the publish then fails: a cancelled future is not a confirming report, so
+    the call fails as not delivered and does not leak a `CancelledError` out
+    of the read-back wait. The shutdown steps are done by hand, as
+    `async_shutdown` (coordinator/setup.py) does them, because the real one
+    drains in-flight writes and would wait on this publish.
+
+    Mutation probe: changing `_report_confirmed` to `return future.done()`
+    lets the call fall through to the wait on the cancelled future, which
+    raises `CancelledError` instead of `powerpulse_action_not_delivered`.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 1)
+
+    async def _cancelled_at_shutdown(payload: bytes, label: str) -> bool:
+        record = wallbox._pending_write
+        assert record is not None
+        record.future.cancel()
+        wallbox._pending_write = None
+        return False
+
+    oceans[0].async_send_proto_set_command = _cancelled_at_shutdown
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_max_current(11)
+
+    assert excinfo.value.translation_key == "powerpulse_action_not_delivered"
+    assert wallbox._pending_write is None

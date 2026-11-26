@@ -787,3 +787,51 @@ async def test_select_and_sensor_show_the_same_mode_on_every_frame(
         _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 2))
         assert select_entity.current_option == "solar"
         assert sensor_entity.native_value == "solar"
+
+
+async def test_a_report_during_the_publish_confirms_even_if_the_ack_fails(
+    hass: HomeAssistant,
+) -> None:
+    """A device report that lands while the publish is still waiting for its
+    broker acknowledgement settles the write, whatever the publish then
+    returns: the stand-in applies the confirming report and then returns False
+    (the acknowledgement timed out after the report came in). The call returns
+    and the record is cleared.
+
+    Mutation probe: reverting the `_report_confirmed(future)` guard at this
+    site in `set_commands.py` to a bare `if not delivered:` raises
+    `powerpulse_action_not_delivered` here.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 3))  # custom before
+
+    async def _report_then_ack_timeout(payload: bytes, label: str) -> bool:
+        _apply_frame(wallbox, _fixture_frame("2026-09-13T22:49:14"))  # solar
+        return False
+
+    oceans[0].async_send_proto_set_command = _report_then_ack_timeout
+
+    await wallbox.async_set_powerpulse_charge_mode("solar")
+
+    assert wallbox._pending_write is None
+    assert wallbox._device_data["ev_charge_mode"] == "solar"
+
+
+async def test_a_failed_publish_without_a_report_is_not_delivered(
+    hass: HomeAssistant,
+) -> None:
+    """Negative control of the test above: the same failed publish with no
+    report in between still raises `powerpulse_action_not_delivered` and
+    clears the record."""
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _mqtt(oceans[0]).send_proto_set.return_value = False
+    _set_descriptor(wallbox)
+    _apply_frame(wallbox, _heartbeat_frame_with_mode(1, 3))  # custom before
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await wallbox.async_set_powerpulse_charge_mode("solar")
+
+    assert excinfo.value.translation_key == "powerpulse_action_not_delivered"
+    assert _mqtt(oceans[0]).send_proto_set.call_count == 1
+    assert wallbox._pending_write is None

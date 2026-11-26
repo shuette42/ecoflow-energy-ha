@@ -623,3 +623,50 @@ def test_the_above_maximum_message_exists_in_both_languages() -> None:
         ]["message"]
         assert "{requested}" in message
         assert "{maximum}" in message
+
+
+async def test_a_report_during_the_publish_confirms_even_if_the_ack_fails(
+    hass: HomeAssistant,
+) -> None:
+    """A device report that lands while the publish is still waiting for its
+    broker acknowledgement settles the write, whatever the publish then
+    returns: the stand-in applies the confirming report and then returns False
+    (the acknowledgement timed out after the report came in). The call returns
+    and the record is cleared.
+
+    Mutation probe: reverting the `_report_confirmed(future)` guard at this
+    site in `set_commands.py` to a bare `if not delivered:` raises
+    `powerpulse_action_not_delivered` here.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _apply_frame(wallbox, _REPORT_CONTINUOUS_ON)
+
+    async def _report_then_ack_timeout(payload: bytes, label: str) -> bool:
+        _apply_frame(wallbox, _REPORT_CONTINUOUS_OFF)  # switchBits 2 confirms
+        return False
+
+    oceans[0].async_send_proto_set_command = _report_then_ack_timeout
+
+    await _set_continuous(wallbox, False)
+
+    assert wallbox._pending_write is None
+    assert wallbox._device_data["ev_settings_switch_bits"] == 2
+
+
+async def test_a_failed_publish_without_a_report_is_not_delivered(
+    hass: HomeAssistant,
+) -> None:
+    """Negative control of the test above: the same failed publish with no
+    report in between still raises `powerpulse_action_not_delivered` and
+    clears the record."""
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    send = _mqtt(oceans[0]).send_proto_set
+    send.return_value = False
+    _apply_frame(wallbox, _REPORT_CONTINUOUS_ON)
+
+    with pytest.raises(HomeAssistantError) as excinfo:
+        await _set_continuous(wallbox, False)
+
+    assert excinfo.value.translation_key == "powerpulse_action_not_delivered"
+    assert send.call_count == 1
+    assert wallbox._pending_write is None
