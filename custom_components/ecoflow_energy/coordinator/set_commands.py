@@ -3253,7 +3253,7 @@ class SetCommandsMixin(_Base):
         self,
         action: str,
         state_key: str,
-        expected_value: float | str,
+        expected_value: float | str | None,
         setting: dict[str, Any],
         validate: Callable[[str], None] | None = None,
         *,
@@ -3283,16 +3283,31 @@ class SetCommandsMixin(_Base):
         the publish and the pending record happen under
         `self._pending_write_lock`; the confirmation wait happens outside it so
         a second write is refused promptly instead of queueing behind it.
+
+        `expected_value=None` is a status action (a wallbox Start or Stop
+        press): the resolver confirms it on `state_key` reaching one of the
+        statuses of `POWERPULSE2_CHARGE_ACTION_CONFIRMED`, the wallbox builder
+        is the charge-action one and a missing report is
+        `powerpulse_action_not_confirmed`. Only the wallbox has such an action.
         """
         from ..ecoflow.energy_stream import (
             build_powerglow_param_set_payload,
+            build_wallbox_charge_action_payload,
             build_wallbox_param_set_payload,
         )
         from .core import PendingDeviceWrite
 
+        is_status_action = expected_value is None
+        if is_status_action and kind != "wallbox":
+            raise ValueError("only a wallbox write can be a status action")
         builder: Callable[..., bytes]
         if kind == "wallbox":
-            builder, serial_key = build_wallbox_param_set_payload, "ev_charger_sn"
+            builder = (
+                build_wallbox_charge_action_payload
+                if is_status_action
+                else build_wallbox_param_set_payload
+            )
+            serial_key = "ev_charger_sn"
         else:
             builder, serial_key = build_powerglow_param_set_payload, "heating_rod_sn"
 
@@ -3370,7 +3385,9 @@ class SetCommandsMixin(_Base):
             self._log_event(f"{kind}_{action}_unconfirmed", str(last_reported))
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
-                translation_key=f"{kind}_not_confirmed",
+                translation_key="powerpulse_action_not_confirmed"
+                if is_status_action
+                else f"{kind}_not_confirmed",
             ) from None
         else:
             self._log_event(f"{kind}_{action}", str(confirmed_value))
@@ -3509,6 +3526,28 @@ class SetCommandsMixin(_Base):
             float(value),
             {setting: value},
             _require_powerpulse1,
+            kind="wallbox",
+        )
+
+    async def async_set_wallbox_charge_action(self, action: str) -> None:
+        """Start or stop a PowerPulse 1 session through this PowerOcean (#731).
+
+        Written as `209/100` on this PowerOcean's own set topic and confirmed
+        on the wallbox's next `209/8` report whose charging status is in
+        `POWERPULSE2_CHARGE_ACTION_CONFIRMED[action]`. A press in the wrong
+        state is refused before anything is sent. Lock, record and wait:
+        `_async_powerglow_write`.
+        """
+        if action not in ("start", "stop"):
+            raise ValueError(f"{action!r} is not a wallbox charge action")
+        typed_action = cast("Literal['start', 'stop']", action)
+        await self._async_powerglow_write(
+            # The resolver keys the confirming statuses by this action name.
+            action,
+            "ev_charge_status",
+            None,
+            {"action": action},
+            lambda _sn: self._require_wallbox_action_state(typed_action),
             kind="wallbox",
         )
 
