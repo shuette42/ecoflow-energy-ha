@@ -30,6 +30,7 @@ All notable changes to this project will be documented in this file.
 
 - Smart Home Panel 2 (`HD31`): the battery level, remaining energy and the level of each storage channel no longer freeze in Enhanced Mode while grid, home and circuit power stay live. The panel sends these values only in its full state report, and its regular power reports kept the integration from asking for one again as long as the connection stayed up. It now asks the panel for its full state every 5 minutes. Thanks to @mhill556 for the diagnosis from the debug log and for testing the same approach on a live installation. (Ref #754)
 - The diagnostics download no longer contains the MAC address that a Stream sends in its full state report. Frames kept for the diagnostics download are now masked for any text shaped like a MAC address, for every device type, in the same way serial numbers already were. Frames recorded before the update are held in memory only, so they are gone after the restart that installs it.
+- PowerOcean with a PowerGlow heating rod or a PowerPulse 1 (Enhanced Mode): changing a setting no longer ends with "The heating rod command could not be sent." or "The wallbox command could not be sent." when the device had already reported the new value while EcoFlow's server was slow to acknowledge the command. The reported value now settles the change.
 
 ## [1.27.1] - 2026-11-11
 
