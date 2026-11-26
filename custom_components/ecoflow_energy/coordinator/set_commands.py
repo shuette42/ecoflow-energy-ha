@@ -169,6 +169,13 @@ class _SettingsReportNotFresh(HomeAssistantError):
     """
 
 
+def _report_confirmed(future: asyncio.Future[Any]) -> bool:
+    """A device report already settled the write: it outranks whatever the
+    publish returned (not connected, a failed send, a late acknowledgement
+    timeout). A future cancelled at shutdown is not a confirmation."""
+    return future.done() and not future.cancelled()
+
+
 def _describe_amps(value: Any) -> str:
     """A reported current for an exception text, or that none arrived yet."""
     if isinstance(value, (int, float)) and not isinstance(value, bool):
@@ -2161,7 +2168,8 @@ class SetCommandsMixin(_Base):
                 delivered = await sender.async_send_proto_set_command(
                     payload, f"powerpulse_{typed_action}"
                 )
-                if not delivered:
+                # A report during the publish wait settles the write.
+                if not delivered and not _report_confirmed(future):
                     self._log_event(f"powerpulse_{typed_action}_not_delivered", "")
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
@@ -2328,7 +2336,8 @@ class SetCommandsMixin(_Base):
                 delivered = await sibling.async_send_proto_set_command(
                     payload, "powerpulse_max_current"
                 )
-                if not delivered:
+                # A report during the publish wait settles the write.
+                if not delivered and not _report_confirmed(future):
                     self._log_event("powerpulse_max_current_not_delivered", "")
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
@@ -2448,7 +2457,8 @@ class SetCommandsMixin(_Base):
                 delivered = await self.async_send_proto_set_command(
                     payload, "powerpulse_charge_current"
                 )
-                if not delivered:
+                # A report during the publish wait settles the write.
+                if not delivered and not _report_confirmed(future):
                     self._log_event("powerpulse_charge_current_not_delivered", "")
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
@@ -2611,7 +2621,8 @@ class SetCommandsMixin(_Base):
                 delivered = await sibling.async_send_proto_set_command(
                     payload, "powerpulse_charge_mode"
                 )
-                if not delivered:
+                # A report during the publish wait settles the write.
+                if not delivered and not _report_confirmed(future):
                     self._log_event("powerpulse_charge_mode_not_delivered", "")
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,
@@ -2882,7 +2893,8 @@ class SetCommandsMixin(_Base):
                                 delivered = await sibling.async_send_proto_set_command(
                                     payload, f"powerpulse_{action}"
                                 )
-                                if not delivered:
+                                # A report during the publish wait settles the write.
+                                if not delivered and not _report_confirmed(future):
                                     self._log_event(
                                         f"powerpulse_{action}_not_delivered", ""
                                     )
@@ -3396,11 +3408,8 @@ class SetCommandsMixin(_Base):
                 delivered = await self.async_send_proto_set_command(
                     payload, f"{kind}_{action}"
                 )
-                # A report that already confirmed the write outranks whatever
-                # the publish returned (not connected, a failed send, a late
-                # acknowledgement timeout). A future cancelled at shutdown is
-                # not a confirmation.
-                if not delivered and not (future.done() and not future.cancelled()):
+                # A report during the publish wait settles the write.
+                if not delivered and not _report_confirmed(future):
                     self._log_event(f"{kind}_{action}_not_delivered", "")
                     raise HomeAssistantError(
                         translation_domain=DOMAIN,

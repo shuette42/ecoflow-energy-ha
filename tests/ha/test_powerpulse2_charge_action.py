@@ -905,6 +905,35 @@ async def test_sibling_publish_not_delivered_clears_the_record(
     assert wallbox._pending_write is None
 
 
+async def test_a_report_during_the_publish_confirms_even_if_the_ack_fails(
+    hass: HomeAssistant,
+) -> None:
+    """A device report that lands while the publish is still waiting for its
+    broker acknowledgement settles the write, whatever the publish then
+    returns: the stand-in applies the confirming report and then returns False
+    (the acknowledgement timed out after the report came in). The call returns
+    and the record is cleared.
+
+    Mutation probe: reverting the `_report_confirmed(future)` guard at this
+    site in `set_commands.py` to a bare `if not delivered:` raises
+    `powerpulse_action_not_delivered` here.
+    """
+    _entry_obj, oceans, wallbox = _wire_entry(hass, [POWEROCEAN_DEVICE])
+    _set_descriptor(wallbox)
+    _apply_status(wallbox, 3)  # charging
+
+    async def _report_then_ack_timeout(payload: bytes, label: str) -> bool:
+        _apply_status(wallbox, 6)  # finishing, arrives during the publish wait
+        return False
+
+    oceans[0].async_send_proto_set_command = _report_then_ack_timeout
+
+    await wallbox.async_set_powerpulse_charge_action("stop")
+
+    assert wallbox._pending_write is None
+    assert wallbox._device_data["ev_charge_status"] == "finishing"
+
+
 async def test_confirming_frame_during_the_publish_is_not_missed(
     hass: HomeAssistant,
 ) -> None:
