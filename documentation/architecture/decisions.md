@@ -1318,6 +1318,8 @@ Three structural numbers decide the shape. 535 frames carry more than one header
 
 *Addendum 2026-11-20 (ADR-035):* the MAC-address pass joins the list in `_plain_passes`, after the named secrets and before the anchored pass, so a MAC inside an XOR-masked region is masked by the same route.
 
+*Addendum 2026-11-26 (ADR-036):* the wallbox vehicle id pass joins the list in `_plain_passes`, right after the anchored pass and before the serial pass. It is the one pass that needs to know which command a payload belongs to, so the region loop in `sanitize_frame` hands it the command the header names (`_EncRegion.cmd`).
+
 ---
 
 ### Addendum 2026-09-11: a masked region survives a second pass unchanged
@@ -1984,3 +1986,35 @@ Home Assistant 2026.9 added a shared Modbus connection to its `modbus` integrati
 1. Keep the separators and mask only the octets. Rejected: not idempotent under XOR keys such as 0x0a (decision 2).
 2. Mask only the field 1643 of 254/22 by position. Rejected: another command or another device family can carry the same string, and a position rule needs the parser's field map on the capture path.
 3. Widen `_redact_serials` to the same shape. Rejected: 0 hits on the text path and a false-positive risk on times and dates.
+
+---
+
+## ADR-036: A wallbox vehicle id in a recorded frame is masked by its place, a table of command and field path; only a digits-only value qualifies; frames only
+
+**Status:** Accepted. Amends ADR-023 (the pass joins the list and the region carries its command) and departs from alternative 2 of ADR-035 for this one value, for the reason given under Context.
+**Date:** 2026-11-26
+
+**Context:** A PowerPulse wallbox reports the id of the vehicle it charges and of the owner's default vehicle. The id is the one the vendor's service gives a vehicle the owner added in the app: the app writes it to the wallbox and the wallbox reports it back with its settings and its charging state. It is a record key on the vendor's side, the same in every download of one household, and nothing a reader of a diagnostics download needs. It reached diagnostics downloads attached to public issues (three downloads on #731) and, with the frames taken from such downloads, the tracked fixtures. Measured with a field walker over the tracked fixtures before this change: 299 id fields in 16 fixture files, every one a whole length-delimited string of three or four ASCII digits, in six commands; a further 12 in recorded frames written into two test sources as hex. No pass saw it. Three or four digits are below every shape floor, and in 251 of the 299 fields the message holds no serial for the anchored pass (ADR-025) to use (counted on the fixtures as they were tracked, where a masked serial still anchors its message). A shape cannot carry the rule here: a short digits-only string is also what a Stream sends in a field of its full state report (5 fields on file), and a packed run of small numbers reads as digits too. That is the difference to the MAC address of ADR-035, whose shape is its own boundary.
+
+**Decision:**
+1. One table, `_VEHICLE_ID_PATHS`, keyed by the command a header names (`cmd_func`, `cmd_id`), holding the field paths counted from the start of that command's payload: 209/8 fields 13 and 14 (PowerPulse 1 on a PowerOcean), 209/103 fields 2 and 3 (the write that sets the id), 241/3 path 4.7.1 and 4.7.2 and 241/44 path 1.4.8.5.1 and 1.4.8.5.2 (PowerPulse 2 on a PowerOcean), 2/34 fields 7 and 8, 2/133 field 4 and 2/37 path 1.7 (standalone PowerPulse 2). Six of the seven rows were measured on recorded frames. The 209/103 row has no frame on file and follows that command's layout as the vendor's web client uses it; it is kept because a miss publishes the id and a false hit can only mask a digits-only string in a write.
+2. A field at a registered path is masked only when its whole value is digits, with no upper bound on the length (a cap would leave the front of a long value standing, the partial mask ADR-016 warns against). The wallbox sends `-1` where no vehicle is set; that is not digits and stays, so a reading of "no vehicle" survives the mask. Repeated fields are walked at every occurrence.
+3. A plain frame is walked header by header, each payload under the command its header names. A header that declares the XOR mask is not walked on the wire: ciphertext read as fields can match a path by chance, and the splice of ADR-023 would keep that damage. Its payload is walked after the mask is undone, and `_EncRegion` carries the command for that (`cmd`). A header that declares the mask but carries no `seq` is read as key 0, because a `seq` of zero is not sent on the wire, and is walked as plain. No such frame is on file, and the parse path returns nothing for such a header. A region whose header names no command is handed a stand-in command, so its plaintext is never read as a whole frame.
+4. The pass runs right after the anchored pass and before the serial pass in `_plain_passes`. The serial pass is greedy and can take the tag byte after a serial, which would blind a walk that reads fields (the same reason ADR-025 gives for the anchored pass).
+5. Frames only. The download's data section carries the key name `ev_vehicle_id` and no value, and the Wallbox Vehicle sensor is untouched: `sanitize_frame` runs on the capture copy, never on the path that parses a frame.
+6. The fixture gate imports `_vehicle_id_fields`, so it sees what the product sees, in a plain frame and under the mask, and reports the length of a finding, never the value. It also reads the hex literals of the test sources, because a recorded frame pasted into a test is tracked like a fixture and the gate did not look there. The 16 fixtures and the two test sources were regenerated through `sanitize_frame`, with only the bytes of the id fields written back; nothing was edited by hand.
+
+**Measured:** every byte that changed in the 16 fixtures lies inside an id field of the frame as it was before (118 frames, 1112 bytes, no other value in any file moved). The corpus sweep of ADR-016 before and after, over the tracked fixtures (82 files, 1001 frames at the time) and the local captures (97 files, 8324 frames): length mismatches 0, non-string header fields changed 0, readings changed 0 for every parser, including the PowerOcean wallbox parser and the PowerPulse parser that joined the sweep with this change (125 and 495 frames parsed in the two corpora); every other count line is identical. Repeated after the sixteenth fixture joined (83 files, 1017 frames): length mismatches 0, readings changed 0. The one expected difference is the id itself: 18 of the 19 frames of the local captures that the PowerOcean wallbox parser reads now yield the mask where they yielded the id. A real frame of each XOR-masked kind, re-keyed under every key from 1 to 255, is masked, changes nowhere else and is stable under a second pass.
+
+**Trade-offs:**
+- (+) The id leaves no download, for a PowerPulse 1 and a PowerPulse 2, relayed by a PowerOcean or standalone, plain or under any XOR key
+- (+) No reading moves: the rule can only reach a digits-only string at a named place in a named command
+- (-) A command that carries the id and is not in the table is not masked. The table is one registration, and a new row needs a frame or the command's layout
+- (-) Two frame shapes keep their id, neither on file: a header that declares the XOR mask with a non-zero key but sends plain bytes, and a bundle of several headers that share one payload outside the headers. Both are read here exactly as `_encrypted_regions` already reads them
+- (-) Frames recorded before the update are not re-masked: they live in memory only and are gone with the restart that installs it. Downloads and fixtures already published keep what they held
+
+**Alternatives considered:**
+1. Mask any whole field of three or four digits. Rejected: it hits a Stream's state report (5 fields on file) and any packed run of small numbers, so it would corrupt readings.
+2. Lower the floor of the anchored pass (ADR-025) from eight characters. Rejected: it reaches 48 of the 299 fields, and at a floor of three it also masks 85 other short strings on file.
+3. Mark the field in the parser's routing table. Rejected: the capture also records commands no parser is registered for, and a second registration of the same distinction would drift.
+4. Decode with the generated message classes and blank the two fields. Rejected: not every one of the seven commands has a message definition in the integration, and a frame is most worth keeping when it does not decode.
