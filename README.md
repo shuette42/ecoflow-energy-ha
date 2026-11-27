@@ -45,7 +45,7 @@
 | **PowerOcean** | `HJ31` `HJ32` `HJ35` `HJ36` `HJ37` `J32B` `J329` `J327`\* `J32D`\* `J32E`\* `HC31` | Standard, Enhanced, Local† | 302 + 69 binary | 67 switches · 68 numbers · 3 selects (Enhanced) | 6 | ~30 s / ~3 s / ~2 s (Local) |
 | **PowerOcean Plus** | `R371` `R372` `R373` `R374` `HJ3C` | Enhanced only (no Local yet) | 302 + 69 binary | 67 switches · 68 numbers · 3 selects | 6 | ~3 s |
 | **Delta 2 Max** | `R351` `R331` | Standard, MQTT push | 94 + 4 binary | 7 switches · 8 numbers | 4 | ~30 s |
-| **Delta 3** | `D3M1` `D3N1` `P321` `P231` `P351` | Standard, Enhanced | 47 (`D3M`: + 1 binary) | 7 switches · 4 numbers · 5 selects (`D3M`: 10 · 7 · 5) | 4 | ~30 s / ~2 s |
+| **Delta 3** | `D3M1` `D3N1` `P321` `P231` `P322` `P351` | Standard, Enhanced | 47 (`D3M`: + 1 binary) | 7 switches · 4 numbers · 5 selects (`D3M`: 10 · 7 · 5) | 4 | ~30 s / ~2 s |
 | **Smart Plug** | `HW52` | Standard, Enhanced | 11 + 1 binary | 1 switch · 2 numbers | 1 | ~30 s / ~3 s |
 | **Stream** | `BK31` `BK11` `BK41` `BK51` `BK61` | Standard, Enhanced | 65 + 2 binary | 0 numbers (`BK31`: 2 switches · 4 numbers; `BK11`: 2 switches; `BK61`: 1 switch in Standard Mode, 2 in Enhanced Mode) | 2 + 6 optional | ~30 s / ~3 s |
 | **Stream Pro** | `BK12` | Enhanced (Standard untested) | not counted yet | 2 switches (Enhanced Mode) | not counted yet | ~3 s |

@@ -263,6 +263,11 @@ class TestDeviceTypeRouting:
     def test_delta3_classic_by_p321_sn_prefix(self) -> None:
         assert get_device_type("", "P321TEST00000001") == "delta3"
 
+    def test_p322_delta3_with_empty_product_name(self) -> None:
+        """The app API leaves the product name empty on this DELTA 3."""
+        assert get_device_type("", "P322TEST00000001") == "delta3"
+        assert get_device_name("", "P322TEST00000001") == "DELTA 3 (0001)"
+
     def test_base_delta3_by_p231_sn_prefix(self) -> None:
         """#182: the base DELTA 3 pushes the same frames as a Max Plus and
         decodes through the same binding, so it shares the device type."""
